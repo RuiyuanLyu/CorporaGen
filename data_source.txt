@@ -1,0 +1,5 @@
+/mnt/petrelfs/share_data/maoxiaohan/data0809/xxxx
+/mnt/petrelfs/share_data/maoxiaohan/ScanNet_v2/posed_images/xxxx
+/mnt/petrelfs/share_data/maoxiaohan/ScanNet_v2/rendered_images/xxxx
+
+xxxx stands for scene0000_00
