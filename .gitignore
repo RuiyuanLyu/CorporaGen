@@ -6,3 +6,6 @@ openai_api_key.txt
 **.png
 **.jpg
 **.jpeg
+**.pyc
+
+**testing**
