@@ -3,7 +3,41 @@ import numpy as np
 import json
 import open3d as o3d
 
-def map_sam_id_to_bboxes(sam_img_path, depth_img_path, sam_json_path, intrinsic_path, depth_intrinsic_path, extrinsic_path, extra_extrinsic_path, bbox_json_path, return_sam_id_to_bbox_idx=False):
+
+def visualize_object_types_on_sam_image(sam_img_path, sam_json_path, object_json_path, id_mapping, out_sam_img_path):
+    """
+        Render object types on SAM image, and save the result to a new SAM image.
+        Args:
+            sam_img_path: path to SAM image
+            sam_json_path: path to SAM json
+            object_json_path: path to object json, containing bboxes, object ids, and object types
+            id_mapping: dict, mapping from SAM ids to object ids
+            out_sam_img_path: path to save the new SAM image with object types
+        Returns:
+            None
+    """
+    sam_img = cv2.imread(sam_img_path) # shape 480, 640, 3
+    with open(sam_json_path, 'r') as f:
+        sam_id_json = json.load(f)
+    sam_id_array = np.array(sam_id_json, dtype=int)
+    bboxes, object_ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
+    for sam_id, object_id in id_mapping.items():
+        list_idx = np.where(object_ids == object_id)[0][0]
+        object_type = object_types[list_idx]
+        text_to_show = str(object_id) + object_type
+        us, vs = np.where(sam_id_array == sam_id)
+        maxu, maxv, minu, minv = np.max(us), np.max(vs), np.min(us), np.min(vs)
+        caption_center = (int((maxv + minv) / 2), int((maxu + minu) / 2)) # u coresponding to y, v coresponding to x
+        text_scale = min((maxu - minu), (maxv - minv)) / 200
+        text_scale = max(text_scale, 0.3)
+        cv2.putText(sam_img, text_to_show, caption_center, cv2.FONT_HERSHEY_SIMPLEX, text_scale, (0, 0, 255), 2)
+        if text_scale > 1:
+            cv2.rectangle(sam_img, (minv, minu), (maxv, maxu), (0, 0, 255), 2)
+    cv2.imwrite(out_sam_img_path, sam_img)
+    print("Texted image saved to  %s" % out_sam_img_path)
+
+
+def get_mapping_sam_id_to_object_id(sam_img_path, depth_img_path, sam_json_path, intrinsic_path, depth_intrinsic_path, extrinsic_path, extra_extrinsic_path, object_json_path, return_sam_id_to_bbox_idx=False):
     """
         Derives SAM point cloud, then matche SAM ids with bboxes, and returns the idx mapping
         Args:
@@ -13,7 +47,7 @@ def map_sam_id_to_bboxes(sam_img_path, depth_img_path, sam_json_path, intrinsic_
             intrinsic_path: path to intrinsic
             depth_intrinsic_path: path to depth intrinsic
             extrinsic_path: path to extrinsic
-            bbox_json_path: path to bbox json
+            object_json_path: path to object json, containing bboxes, object ids, and object types
         Returns:
             sam_id_to_object_id: dict, mapping from SAM ids to object ids
             sam_id_to_bbox_idx: (optional) dict, mapping from SAM ids to bbox indices
@@ -22,7 +56,7 @@ def map_sam_id_to_bboxes(sam_img_path, depth_img_path, sam_json_path, intrinsic_
     sam_id_to_bbox_idx = dict()
     sam_id_to_object_id = dict()
     group_of_sam_pcds, sam_id_to_pcd_idx = generate_sam_pointcloud(sam_img_path, depth_img_path, sam_json_path, intrinsic_path, depth_intrinsic_path, extrinsic_path, extra_extrinsic_path, return_idx_mapping=True)
-    bboxes, object_ids, object_types = read_bboxes_json(bbox_json_path, return_id=True, return_type=True)
+    bboxes, object_ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
     sam_pcd_to_bbox_idx = match_grouped_points_with_bboxes(group_of_sam_pcds, bboxes)
     for sam_id, pcd_idx in sam_id_to_pcd_idx.items():
         if pcd_idx == -1:
@@ -66,8 +100,7 @@ def generate_sam_pointcloud(sam_img_path, depth_img_path, sam_json_path, intrins
     depth = depth.astype(np.float32) / 1000.0
     with open(sam_json_path, 'r') as f:
         sam_id_json = json.load(f)
-    sam_id = np.array(sam_id_json, dtype=int)
-    print("sam_id.shape:{}".format(sam_id.shape)) # shape 480, 640
+    sam_id = np.array(sam_id_json, dtype=int)  # shape 480, 640
 
     group_id = np.unique(sam_id)
     group_of_points = []
@@ -301,13 +334,16 @@ def match_grouped_points_with_bboxes(groups_of_points, bboxes):
 
 
 if __name__ == '__main__':
-    sam_img_path = "./example_data/sam_2dmask/02300.jpg"
-    depth_img_path = "./example_data/posed_images/02300.png"
-    sam_json_path = "./example_data/sam_2dmask/02300.json"
+    img_id = "05365"
+    sam_img_path = f"./example_data/sam_2dmask/{img_id}.jpg"
+    depth_img_path = f"./example_data/posed_images/{img_id}.png"
+    sam_json_path = f"./example_data/sam_2dmask/{img_id}.json"
     intrinsic_path = "./example_data/posed_images/intrinsic.txt"
     depth_intrinsic_path = "./example_data/posed_images/depth_intrinsic.txt"
-    extrinsic_path = "./example_data/posed_images/02300.txt"
+    extrinsic_path = f"./example_data/posed_images/{img_id}.txt"
     extra_extrinsic_path = "./example_data/label/rot_matrix.npy"
-    bbox_json_path = "./example_data/label/main_MDJH13.json"
-    sam_id_to_object_id = map_sam_id_to_bboxes(sam_img_path, depth_img_path, sam_json_path, intrinsic_path, depth_intrinsic_path, extrinsic_path, extra_extrinsic_path, bbox_json_path)
-    print(sam_id_to_object_id)
+    object_json_path = "./example_data/label/main_MDJH13.json"
+    output_sam_img_path = f"./{img_id}_obj_types.jpg"
+    sam_id_to_object_id = get_mapping_sam_id_to_object_id(sam_img_path, depth_img_path, sam_json_path, intrinsic_path, depth_intrinsic_path, extrinsic_path, extra_extrinsic_path, object_json_path)
+    # print(sam_id_to_object_id)
+    visualize_object_types_on_sam_image(sam_img_path, sam_json_path, object_json_path, sam_id_to_object_id, output_sam_img_path)
