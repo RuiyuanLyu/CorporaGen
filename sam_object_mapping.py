@@ -2,39 +2,7 @@ import cv2
 import numpy as np
 import json
 import open3d as o3d
-
-
-def visualize_object_types_on_sam_image(sam_img_path, sam_json_path, object_json_path, id_mapping, out_sam_img_path):
-    """
-        Render object types on SAM image, and save the result to a new SAM image.
-        Args:
-            sam_img_path: path to SAM image
-            sam_json_path: path to SAM json
-            object_json_path: path to object json, containing bboxes, object ids, and object types
-            id_mapping: dict, mapping from SAM ids to object ids
-            out_sam_img_path: path to save the new SAM image with object types
-        Returns:
-            None
-    """
-    sam_img = cv2.imread(sam_img_path) # shape 480, 640, 3
-    with open(sam_json_path, 'r') as f:
-        sam_id_json = json.load(f)
-    sam_id_array = np.array(sam_id_json, dtype=int)
-    bboxes, object_ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
-    for sam_id, object_id in id_mapping.items():
-        list_idx = np.where(object_ids == object_id)[0][0]
-        object_type = object_types[list_idx]
-        text_to_show = str(object_id) + object_type
-        us, vs = np.where(sam_id_array == sam_id)
-        maxu, maxv, minu, minv = np.max(us), np.max(vs), np.min(us), np.min(vs)
-        caption_center = (int((maxv + minv) / 2), int((maxu + minu) / 2)) # u coresponding to y, v coresponding to x
-        text_scale = min((maxu - minu), (maxv - minv)) / 200
-        text_scale = max(text_scale, 0.3)
-        cv2.putText(sam_img, text_to_show, caption_center, cv2.FONT_HERSHEY_SIMPLEX, text_scale, (0, 0, 255), 2)
-        if text_scale > 1:
-            cv2.rectangle(sam_img, (minv, minu), (maxv, maxu), (0, 0, 255), 2)
-    cv2.imwrite(out_sam_img_path, sam_img)
-    print("Texted image saved to  %s" % out_sam_img_path)
+from visualization import visualize_object_types_on_sam_image, read_bboxes_json, read_intrinsic
 
 
 def get_mapping_sam_id_to_object_id(sam_img_path, depth_img_path, sam_json_path, intrinsic_path, depth_intrinsic_path, extrinsic_path, extra_extrinsic_path, object_json_path, return_sam_id_to_bbox_idx=False):
@@ -46,7 +14,8 @@ def get_mapping_sam_id_to_object_id(sam_img_path, depth_img_path, sam_json_path,
             sam_json_path: path to SAM json
             intrinsic_path: path to intrinsic
             depth_intrinsic_path: path to depth intrinsic
-            extrinsic_path: path to extrinsic
+            extrinsic_path: path to extrinsic, camera to world'
+            extra_extrinsic_path: path to extra extrinsic, world' to world
             object_json_path: path to object json, containing bboxes, object ids, and object types
         Returns:
             sam_id_to_object_id: dict, mapping from SAM ids to object ids
@@ -80,8 +49,8 @@ def generate_sam_pointcloud(sam_img_path, depth_img_path, sam_json_path, intrins
             sam_json_path: path to SAM json
             intrinsic_path: path to intrinsic
             depth_intrinsic_path: path to depth intrinsic
-            extrinsic_path: path to extrinsic
-            extra_extrinsic_path: path to extra extrinsic
+            extrinsic_path: path to extrinsic, camera to world'
+            extra_extrinsic_path: path to extra extrinsic, world' to world
             return_idx_mapping: bool, whether to return the mapping from SAM ids to indices in group_of_points
         Returns:
             group_of_points: list of SAM point clouds, each point cloud is a numpy array of shape (N_i, 3)
@@ -138,66 +107,6 @@ def generate_sam_pointcloud(sam_img_path, depth_img_path, sam_json_path, intrins
     return group_of_points, idx_mapping
 
 
-def read_mp3d_intrinsic(path):
-    a = np.loadtxt(path)
-    intrinsic = np.identity(4, dtype=float)
-    intrinsic[0][0] = a[2]  # fx
-    intrinsic[1][1] = a[3]  # fy
-    intrinsic[0][2] = a[4]  # cx
-    intrinsic[1][2] = a[5]  # cy
-    # a[0], a[1] are the width and height of the image
-    return intrinsic
-
-
-def read_scannet_intrinsic(path):
-    intrinsic =  np.loadtxt(path)
-    return intrinsic
-
-
-def read_intrinsic(path, mode='scannet'):
-    """
-        Reads intrinsic matrix from file.
-        Returns:
-            extended intrinsic of shape (4, 4)
-    """
-    if mode =='scannet':
-        return read_scannet_intrinsic(path)
-    elif mode =='mp3d':
-        return read_mp3d_intrinsic(path)
-    else:
-        raise ValueError('Invalid mode.')
-
-
-def read_bboxes_json(path, return_id=False, return_type=False):
-    """
-        Returns:
-            boxes: numpy array of bounding boxes, shape (M, 9): xyz, lwh, ypr
-            ids: (optional) numpy array of obj ids, shape (M,)
-            types: (optional) list of strings, each string is a type of object
-    """
-    with open(path, 'r') as f:
-        bboxes_json = json.load(f)
-    boxes = []
-    ids = []
-    types = []
-    for i in range(len(bboxes_json)):
-        box = bboxes_json[i]["psr"]
-        position = np.array([box['position']['x'], box['position']['y'], box['position']['z']])
-        size =  np.array([box['scale']['x'], box['scale']['y'], box['scale']['z']])
-        euler_angles = np.array([box['rotation']['x'], box['rotation']['y'], box['rotation']['z']])
-        boxes.append(np.concatenate([position, size, euler_angles]))
-        ids.append(bboxes_json[i]['obj_id'])
-        types.append(bboxes_json[i]['obj_type'])
-    boxes = np.array(boxes)
-    if return_id and return_type:
-        ids = np.array(ids)
-        return boxes, ids, types
-    if return_id:
-        ids = np.array(ids)
-        return boxes, ids
-    if return_type:
-        return boxes, types
-    return boxes    
 
 
 def _axis_angle_rotation(axis: str, angle: np.ndarray) -> np.ndarray:
@@ -334,7 +243,7 @@ def match_grouped_points_with_bboxes(groups_of_points, bboxes):
 
 
 if __name__ == '__main__':
-    img_id = "05365"
+    img_id = "02300"
     sam_img_path = f"./example_data/sam_2dmask/{img_id}.jpg"
     depth_img_path = f"./example_data/posed_images/{img_id}.png"
     sam_json_path = f"./example_data/sam_2dmask/{img_id}.json"

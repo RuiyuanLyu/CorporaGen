@@ -2,27 +2,141 @@ import open3d as o3d
 import numpy as np
 import cv2
 import matplotlib
-from .linemesh import LineMesh
-
+import json
+from linemesh import LineMesh
 EPS = 1e-4
-ALPHA = 0.25
+ALPHA = 0.15
 
 
-def draw_box3d_on_img(img, box, color, label, extrinsic, intrinsic, alpha=None):
+def annotate_image_with_single_3dbbox(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path, object_id):
+    """
+        Annotate an image with 3D bounding boxes, and also object types and ids.
+        Args:
+            img_path: path to the image to be annotated
+            object_json_path: path to the json file containing all the 3D bounding boxes in the scene
+            intrinsic_path: path to the intrinsic matrix
+            extrinsic_path: path to the extrinsic matrix, camera to world'
+            extra_extrinsic_path: path to the extra extrinsic, world' to world
+            out_img_path: path to save the annotated image
+        Returns:
+            None
+    """
+    img = cv2.imread(img_path)
+    intrinsic = read_intrinsic(intrinsic_path)
+    extrinsic = np.loadtxt(extrinsic_path) # camera to world'
+    extra_extrinsic = np.load(extra_extrinsic_path) # world' to world
+    extrinsic = extra_extrinsic @ extrinsic # camera to world
+    bboxes, object_ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
+    index = np.where(object_ids == object_id)[0][0]
+    bboxes = get_9dof_boxes(bboxes, 'xyz', (0, 0, 192))
+    color = (0, 0, 192)
+    label = str(object_ids[index]) + ' ' + object_types[index]
+    img, occupency_map = draw_box3d_on_img(img, bboxes[index], color, label, extrinsic, intrinsic, occupency_map=None)
+    cv2.imwrite(out_img_path, img)
+    print("Annotated image saved to  %s" % out_img_path)
+
+
+def annotate_image_with_3dbboxes(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path):
+    """
+        Annotate an image with 3D bounding boxes, and also object types and ids.
+        Args:
+            img_path: path to the image to be annotated
+            object_json_path: path to the json file containing all the 3D bounding boxes in the scene
+            intrinsic_path: path to the intrinsic matrix
+            extrinsic_path: path to the extrinsic matrix, camera to world'
+            extra_extrinsic_path: path to the extra extrinsic, world' to world
+            out_img_path: path to save the annotated image
+        Returns:
+            None
+    """
+    img = cv2.imread(img_path)
+    intrinsic = read_intrinsic(intrinsic_path)
+    extrinsic = np.loadtxt(extrinsic_path) # camera to world'
+    extra_extrinsic = np.load(extra_extrinsic_path) # world' to world
+    extrinsic = extra_extrinsic @ extrinsic # camera to world
+    bboxes, object_ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
+    indices, distances = sort_objects_by_projection_distance(bboxes, extrinsic)
+    bboxes = bboxes[indices]
+    object_ids = [object_ids[i] for i in indices]
+    object_types = [object_types[i] for i in indices]
+    bboxes = get_9dof_boxes(bboxes, 'xyz', (0, 0, 192))
+    occupency_map = np.zeros_like(img[:, :, 0], dtype=bool)
+    for i, bbox in enumerate(bboxes):
+        if distances[i] > 100 or distances[i] < 0:
+            continue
+        color = (0, 0, 192)
+        label = str(object_ids[i]) + ' ' + object_types[i]
+        img, occupency_map = draw_box3d_on_img(img, bbox, color, label, extrinsic, intrinsic, occupency_map=occupency_map)
+    cv2.imwrite(out_img_path, img)
+    print("Annotated image saved to  %s" % out_img_path)
+
+
+def sort_objects_by_projection_distance(bboxes, extrinsic):
+    """
+        Sort objects by distance from the camera.
+        Args:
+            bboxes (numpy.ndarray): Nx9 bboxes of the N objects.
+            extrinsic (numpy.ndarray): 4x4 extrinsic, camera to world.
+        Returns:
+            sorted_indices (numpy.ndarray): a permutation of the indices of the input boxxes
+    """
+    centers = bboxes[:, :3]
+    centers = np.concatenate([centers, np.ones((centers.shape[0], 1))], axis=1) # shape (N, 4)
+    centers_in_camera = extrinsic @ centers.transpose() # shape (4, N)
+    distance = centers_in_camera[2, :] # shape (N,)
+    sorted_indices = np.argsort(-distance)
+    return sorted_indices, distance[sorted_indices]
+    
+
+def visualize_object_types_on_sam_image(sam_img_path, sam_json_path, object_json_path, id_mapping, out_sam_img_path):
+    """
+        Render object types on SAM image, and save the result to a new SAM image.
+        Args:
+            sam_img_path: path to SAM image
+            sam_json_path: path to SAM json
+            object_json_path: path to object json, containing bboxes, object ids, and object types
+            id_mapping: dict, mapping from SAM ids to object ids
+            out_sam_img_path: path to save the new SAM image with object types
+        Returns:
+            None
+    """
+    sam_img = cv2.imread(sam_img_path) # shape 480, 640, 3
+    with open(sam_json_path, 'r') as f:
+        sam_id_json = json.load(f)
+    sam_id_array = np.array(sam_id_json, dtype=int)
+    bboxes, object_ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
+    for sam_id, object_id in id_mapping.items():
+        list_idx = np.where(object_ids == object_id)[0][0]
+        object_type = object_types[list_idx]
+        text_to_show = str(object_id) + object_type
+        us, vs = np.where(sam_id_array == sam_id)
+        maxu, maxv, minu, minv = np.max(us), np.max(vs), np.min(us), np.min(vs)
+        caption_center = (int((maxv + minv) / 2), int((maxu + minu) / 2)) # u coresponding to y, v coresponding to x
+        text_scale = min((maxu - minu), (maxv - minv)) / 200
+        text_scale = max(text_scale, 0.3)
+        cv2.putText(sam_img, text_to_show, caption_center, cv2.FONT_HERSHEY_SIMPLEX, text_scale, (0, 0, 255), 2)
+        if text_scale > 1:
+            cv2.rectangle(sam_img, (minv, minu), (maxv, maxu), (0, 0, 255), 2)
+    cv2.imwrite(out_sam_img_path, sam_img)
+    print("Texted image saved to  %s" % out_sam_img_path)
+
+
+def draw_box3d_on_img(img, box, color, label, extrinsic, intrinsic, alpha=None, occupency_map=None):
     """
         Draw a 3D box on an image.
         Args:
-            img (numpy.ndarray): An image.
-            box (open3d.geometry.OrientedBoundingBox): A box.
+            img (numpy.ndarray): shape (h, w, 3)
+            box (open3d.geometry.OrientedBoundingBox): A 3D box.
             color (tuple): RGB color of the box.
             label (str): Label of the box.
-            extrinsic (numpy.ndarray): 4x4 matrix camera to world.
-            intrinsic (numpy.ndarray): Intrinsic matrix of the camera.
+            extrinsic (numpy.ndarray): 4x4 extrinsic, camera to world.
+            intrinsic (numpy.ndarray): 4x4 (extended) intrinsic.
             alpha (float): Alpha value of the drawn faces.
+            occupency_map (numpy.ndarray): boolean array, occupency map of the image.
         Returns:
-            numpy.ndarray: An image with the box drawn on it.
+            img (numpy.ndarray): Updated image with the box drawn on it.
+            occupency_map (numpy.ndarray): updated occupency map 
     """
-    global occupied
     extrinsic_w2c = np.linalg.inv(extrinsic)
     h, w, _ = img.shape
     x, y = np.meshgrid(np.arange(w), np.arange(h))
@@ -31,14 +145,16 @@ def draw_box3d_on_img(img, box, color, label, extrinsic, intrinsic, alpha=None):
 
     camera_pos_in_world = (extrinsic @ np.array([0, 0, 0, 1]).reshape(4,1)).transpose()
     if is_inside_box(box, camera_pos_in_world):
-        return
+        return img, occupency_map
 
-    corners = np.asarray(box.get_box_points())
-    corners = corners[[0,1,7,2,3,6,4,5]]
-    corners = np.concatenate([corners, np.ones((corners.shape[0], 1))], axis=1)
-    corners_img = intrinsic @ extrinsic_w2c @ corners.transpose()
-    corners_img = corners_img.transpose()
-    corners_pixel = np.zeros((corners_img.shape[0], 2))
+    corners = np.asarray(box.get_box_points()) # shape (8, 3)
+    corners = corners[[0,1,7,2,3,6,4,5]] # shape (8, 3)
+    corners = np.concatenate([corners, np.ones((corners.shape[0], 1))], axis=1) # shape (8, 4)
+    corners_img = intrinsic @ extrinsic_w2c @ corners.transpose() # shape (4, 8)
+    corners_img = corners_img.transpose() # shape (8, 4)
+    if (corners_img[:, 2] < EPS).any():
+        return img, occupency_map
+    corners_pixel = np.zeros((corners_img.shape[0], 2)) # shape (8, 2)
     for i in range(corners_img.shape[0]):
         corners_pixel[i] = corners_img[i][:2] / np.abs(corners_img[i][2])
     lines = [[0,1], [1,2],[2,3], [3,0], [4,5], [5,6], [6,7], [7,4], [0,4], [1,5], [2,6], [3,7]]
@@ -60,16 +176,76 @@ def draw_box3d_on_img(img, box, color, label, extrinsic, intrinsic, alpha=None):
         all_mask = np.logical_or(all_mask, mask)
     if alpha is None:
         alpha = ALPHA
-    img[all_mask] = img[all_mask] * alpha + (1 - alpha) * np.array(color)
+    img[all_mask] = img[all_mask] * (1 - alpha) + alpha * np.array(color)
 
     if (all_mask.any()):
         textpos = np.min(corners_pixel, axis=0).astype(np.int32)
         textpos[0] = np.clip(textpos[0], a_min=0, a_max=w)
         textpos[1] = np.clip(textpos[1], a_min=0, a_max=h)
-        draw_text(img, label, pos=textpos, bound = (w, h), text_color=(255, 255, 255), text_color_bg=color)
-    return img
+        occupency_map = draw_text(img, label, pos=textpos, bound = (w, h), text_color=(255, 255, 255), text_color_bg=color, occupency_map=occupency_map)
+    return img, occupency_map
 
 
+def read_mp3d_intrinsic(path):
+    a = np.loadtxt(path)
+    intrinsic = np.identity(4, dtype=float)
+    intrinsic[0][0] = a[2]  # fx
+    intrinsic[1][1] = a[3]  # fy
+    intrinsic[0][2] = a[4]  # cx
+    intrinsic[1][2] = a[5]  # cy
+    # a[0], a[1] are the width and height of the image
+    return intrinsic
+
+
+def read_scannet_intrinsic(path):
+    intrinsic =  np.loadtxt(path)
+    return intrinsic
+
+
+def read_intrinsic(path, mode='scannet'):
+    """
+        Reads intrinsic matrix from file.
+        Returns:
+            extended intrinsic of shape (4, 4)
+    """
+    if mode =='scannet':
+        return read_scannet_intrinsic(path)
+    elif mode =='mp3d':
+        return read_mp3d_intrinsic(path)
+    else:
+        raise ValueError('Invalid mode.')
+
+
+def read_bboxes_json(path, return_id=False, return_type=False):
+    """
+        Returns:
+            boxes: numpy array of bounding boxes, shape (M, 9): xyz, lwh, ypr
+            ids: (optional) numpy array of obj ids, shape (M,)
+            types: (optional) list of strings, each string is a type of object
+    """
+    with open(path, 'r') as f:
+        bboxes_json = json.load(f)
+    boxes = []
+    ids = []
+    types = []
+    for i in range(len(bboxes_json)):
+        box = bboxes_json[i]["psr"]
+        position = np.array([box['position']['x'], box['position']['y'], box['position']['z']])
+        size =  np.array([box['scale']['x'], box['scale']['y'], box['scale']['z']])
+        euler_angles = np.array([box['rotation']['x'], box['rotation']['y'], box['rotation']['z']])
+        boxes.append(np.concatenate([position, size, euler_angles]))
+        ids.append(int(bboxes_json[i]['obj_id']))
+        types.append(bboxes_json[i]['obj_type'])
+    boxes = np.array(boxes)
+    if return_id and return_type:
+        ids = np.array(ids)
+        return boxes, ids, types
+    if return_id:
+        ids = np.array(ids)
+        return boxes, ids
+    if return_type:
+        return boxes, types
+    return boxes    
 
 
 def is_inside_box(box, point):
@@ -93,7 +269,8 @@ def draw_text(img, text,
           font_scale=1,
           font_thickness=2,
           text_color=(0, 255, 0),
-          text_color_bg=(0, 0, 0)
+          text_color_bg=(0, 0, 0),
+          occupency_map=None
           ):
     """
         Draw text on an image.
@@ -107,11 +284,12 @@ def draw_text(img, text,
             font_thickness (int): Font thickness.
             text_color (tuple): RGB color of the text.
             text_color_bg (tuple): RGB color of the background.
+            occupency_map (numpy.ndarray): boolean array, occupency map of the image.
         Returns:
-            tuple: Size of the text.
+            occupency_map (numpy.ndarray): updated occupency map 
     """
-
-    global occupied
+    if occupency_map is None:
+        occupency_map = np.zeros_like(img[..., 0], dtype=bool)
     x, y = pos
     w, h = bound
     text_size, _ = cv2.getTextSize(text, font, font_scale, font_thickness)
@@ -122,16 +300,16 @@ def draw_text(img, text,
         dy = 10
     
     try:
-        while occupied[y, x] or occupied[y, x+text_w] or occupied[y+text_h, x] or occupied[y + text_h, x + text_w]:
+        while occupency_map[y, x] or occupency_map[y, x+text_w] or occupency_map[y+text_h, x] or occupency_map[y + text_h, x + text_w]:
             y += dy
     except:
         pass
     cv2.rectangle(img, (x, y), (x + text_w, y + text_h), text_color_bg, -1)
     cv2.putText(img, text, (x, y + text_h + font_scale - 1), font, font_scale, text_color, font_thickness)
     
-    occupied[y:y+text_h, x:x+text_w] = True
+    occupency_map[y:y+text_h, x:x+text_w] = True
     
-    return text_size
+    return occupency_map
 
 
 def get_boxes_with_thickness(boxes, line_width=0.02):
@@ -157,11 +335,16 @@ def get_9dof_boxes(bbox, mode, colors):
         Args:
             bbox (numpy.ndarray): (N, 9) array of bounding boxes.
             mode (str): 'xyz' or 'zxy' for the rotation mode.
-            colors (numpy.ndarray): (N, 3) array of RGB colors.
+            colors (numpy.ndarray): (N, 3) array of RGB colors, or a single RGB color for all boxes.
         Returns:
             list: A list of open3d.geometry.OrientedBoundingBox objects.
     """
     n = bbox.shape[0]
+    if isinstance(colors, tuple):
+        colors = np.tile(colors, (n, 1))
+    elif len(colors.shape) == 1:
+        colors = np.tile(colors.reshape(1, 3), (n, 1))
+    assert colors.shape[0] == n and colors.shape[1] == 3
     geo_list = []
     for i in range(n):
         center = bbox[i][:3].reshape(3,1)
@@ -178,3 +361,27 @@ def get_9dof_boxes(bbox, mode, colors):
         geo.color = (color[0] / 255.0, color[1] / 255.0, color[2] / 255.0)
         geo_list.append(geo)
     return geo_list
+
+
+    # img_id = "02300"
+    # sam_img_path = f"./example_data/sam_2dmask/{img_id}.jpg"
+    # depth_img_path = f"./example_data/posed_images/{img_id}.png"
+    # sam_json_path = f"./example_data/sam_2dmask/{img_id}.json"
+    # intrinsic_path = "./example_data/posed_images/intrinsic.txt"
+    # depth_intrinsic_path = "./example_data/posed_images/depth_intrinsic.txt"
+    # extrinsic_path = f"./example_data/posed_images/{img_id}.txt"
+    # extra_extrinsic_path = "./example_data/label/rot_matrix.npy"
+    # object_json_path = "./example_data/label/main_MDJH13.json"
+    # output_sam_img_path = f"./{img_id}_obj_types.jpg"
+
+
+if __name__ == '__main__':
+    img_id = "02300"
+    img_path = f"./example_data/posed_images/{img_id}.jpg"
+    object_json_path = f"./example_data/label/main_MDJH13.json"
+    intrinsic_path = f"./example_data/posed_images/intrinsic.txt"
+    extrinsic_path = f"./example_data/posed_images/{img_id}.txt"
+    extra_extrinsic_path = "./example_data/label/rot_matrix.npy"
+    out_img_path = f"./{img_id}_annotated.jpg"
+    annotate_image_with_3dbboxes(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path)
+    # annotate_image_with_single_3dbbox(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path, object_id=60)
