@@ -6,7 +6,7 @@ import json
 from linemesh import LineMesh
 EPS = 1e-4
 ALPHA = 0.15
-
+EXCLUDED_OBJECTS = ['wall', 'ceiling', 'floor']
 
 def annotate_image_with_single_3dbbox(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path, object_id):
     """
@@ -28,8 +28,9 @@ def annotate_image_with_single_3dbbox(img_path, object_json_path, intrinsic_path
     extrinsic = extra_extrinsic @ extrinsic # camera to world
     bboxes, object_ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
     index = np.where(object_ids == object_id)[0][0]
-    bboxes = get_9dof_boxes(bboxes, 'xyz', (0, 0, 192))
-    color = (0, 0, 192)
+    color_dict = get_color_map('color_map.txt')
+    color = color_dict.get(object_types[index], (0, 0, 192))
+    bboxes = get_9dof_boxes(bboxes, 'xyz', color)
     label = str(object_ids[index]) + ' ' + object_types[index]
     img, occupency_map = draw_box3d_on_img(img, bboxes[index], color, label, extrinsic, intrinsic, occupency_map=None)
     cv2.imwrite(out_img_path, img)
@@ -59,16 +60,38 @@ def annotate_image_with_3dbboxes(img_path, object_json_path, intrinsic_path, ext
     bboxes = bboxes[indices]
     object_ids = [object_ids[i] for i in indices]
     object_types = [object_types[i] for i in indices]
+    color_dict = get_color_map('color_map.txt')
     bboxes = get_9dof_boxes(bboxes, 'xyz', (0, 0, 192))
     occupency_map = np.zeros_like(img[:, :, 0], dtype=bool)
     for i, bbox in enumerate(bboxes):
         if distances[i] > 100 or distances[i] < 0:
             continue
-        color = (0, 0, 192)
+        color = color_dict.get(object_types[i], (0, 0, 192))
         label = str(object_ids[i]) + ' ' + object_types[i]
         img, occupency_map = draw_box3d_on_img(img, bbox, color, label, extrinsic, intrinsic, occupency_map=occupency_map)
     cv2.imwrite(out_img_path, img)
     print("Annotated image saved to  %s" % out_img_path)
+
+
+def get_color_map(path):
+    """
+        Data structure of the input file:
+        item1 [r, g, b]
+        item2 [r, g, b]
+       ...
+       Returns:
+            item_colors (dict): a dictionary of item to color mapping
+    """
+    with open(path, 'r') as f:
+        txt_content = f.read()
+    item_colors = {}
+    for line in txt_content.strip().split('\n'):
+        item, color = line.split('[')
+        item = item.strip()
+        color = color.strip('] ').split(',')
+        color = tuple(int(c) for c in color)
+        item_colors[item] = color
+    return item_colors
 
 
 def sort_objects_by_projection_distance(bboxes, extrinsic):
@@ -145,6 +168,11 @@ def draw_box3d_on_img(img, box, color, label, extrinsic, intrinsic, alpha=None, 
 
     camera_pos_in_world = (extrinsic @ np.array([0, 0, 0, 1]).reshape(4,1)).transpose()
     if is_inside_box(box, camera_pos_in_world):
+        return img, occupency_map
+    center = box.get_center()
+    center_2d = intrinsic @ extrinsic_w2c @ np.array([center[0], center[1], center[2], 1]).reshape(4,1)
+    center_2d = center_2d[:2] / center_2d[2]
+    if (center_2d[0] < 0 or center_2d[0] > w or center_2d[1] < 0 or center_2d[1] > h):
         return img, occupency_map
 
     corners = np.asarray(box.get_box_points()) # shape (8, 3)
@@ -229,6 +257,8 @@ def read_bboxes_json(path, return_id=False, return_type=False):
     ids = []
     types = []
     for i in range(len(bboxes_json)):
+        if bboxes_json[i]['obj_type'] in EXCLUDED_OBJECTS:
+            continue
         box = bboxes_json[i]["psr"]
         position = np.array([box['position']['x'], box['position']['y'], box['position']['z']])
         size =  np.array([box['scale']['x'], box['scale']['y'], box['scale']['z']])
@@ -384,4 +414,4 @@ if __name__ == '__main__':
     extra_extrinsic_path = "./example_data/label/rot_matrix.npy"
     out_img_path = f"./{img_id}_annotated.jpg"
     annotate_image_with_3dbboxes(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path)
-    # annotate_image_with_single_3dbbox(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path, object_id=60)
+    # annotate_image_with_single_3dbbox(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path, object_id=50)
