@@ -52,7 +52,7 @@ def render_3d_top_down_view(point_cloud_path="example_data/lidar/main.pcd"):
     visualizer.destroy_window()
     
 
-def render_2d_top_down_view(point_cloud_path="example_data/lidar/main.pcd"):
+def render_2d_top_down_view(point_cloud_path="example_data/lidar/main.pcd", output_path='point_cloud_top_view.png'):
     point_cloud = o3d.io.read_point_cloud(point_cloud_path)
 
     points = np.asarray(point_cloud.points)
@@ -74,13 +74,16 @@ def render_2d_top_down_view(point_cloud_path="example_data/lidar/main.pcd"):
         pixel_x = int((x - min_x) * 20)
         pixel_y = int((y - min_y) * 20)
         projection_image[pixel_y, pixel_x] = (color * 255).astype(np.uint8)
-
-    plt.imshow(projection_image)
+    
+    plt.imshow(projection_image, origin='lower')
     plt.axis('off')  # hide axis ticks and labels
-    plt.savefig('point_cloud_top_down_view.png', bbox_inches='tight', pad_inches=0)
+    plt.savefig(output_path, bbox_inches='tight', pad_inches=0, dpi=200)
+    print("Successfully saved to", output_path)
     plt.show()
     
     
 if __name__ == '__main__':
     # render_3d_top_down_view()
-    render_2d_top_down_view()
+    point_cloud_path="example_data/lidar/main.pcd"
+    output_path='example_data/anno_lang/point_cloud_top_view.png'
+    render_2d_top_down_view(point_cloud_path, output_path)
