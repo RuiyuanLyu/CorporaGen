@@ -1,5 +1,6 @@
 import open3d as o3d
 import numpy as np
+import matplotlib.pyplot as plt
 
 def compute_extrinsic_matrix(lookat_point, camera_coords):
     """
@@ -25,32 +26,61 @@ def compute_extrinsic_matrix(lookat_point, camera_coords):
     return extrinsic
 
 
-# Load the point cloud from the .pcd file
-point_cloud = o3d.io.read_point_cloud("example_data/lidar/main.pcd")
+def render_3d_top_down_view(point_cloud_path="example_data/lidar/main.pcd"):
+    point_cloud = o3d.io.read_point_cloud(point_cloud_path)
 
-# Create a visualizer object
-visualizer = o3d.visualization.Visualizer()
+    # Create a visualizer object
+    visualizer = o3d.visualization.Visualizer()
 
-# Add the point cloud to the visualizer
-visualizer.create_window(visible=False, width=1024, height=768)
-visualizer.add_geometry(point_cloud)
+    # Add the point cloud to the visualizer
+    visualizer.create_window(visible=False, width=1024, height=768)
+    visualizer.add_geometry(point_cloud)
 
-# View the point cloud
-# visualizer.run()
+    # Set the camera view point
+    view_control = visualizer.get_view_control()
+    pinhole_camera_param = view_control.convert_to_pinhole_camera_parameters()
+    camera_position = np.array([0, 0, 8])
+    lookat_point = np.array([0, 0, 0])
+    extrinsic_matrix = compute_extrinsic_matrix(lookat_point, camera_position)
+    pinhole_camera_param.extrinsic = extrinsic_matrix
+    view_control.convert_from_pinhole_camera_parameters(pinhole_camera_param)
+    visualizer.poll_events()
+    visualizer.update_renderer()
 
-# Set the camera view point
-view_control = visualizer.get_view_control()
-pinhole_camera_param = view_control.convert_to_pinhole_camera_parameters()
-camera_position = np.array([0, 0, 8])
-lookat_point = np.array([0, 0, 0])
-extrinsic_matrix = compute_extrinsic_matrix(lookat_point, camera_position)
-pinhole_camera_param.extrinsic = extrinsic_matrix
-view_control.convert_from_pinhole_camera_parameters(pinhole_camera_param)
-visualizer.poll_events()
-visualizer.update_renderer()
+    visualizer.capture_screen_image("rendered.png")
+    print("Image saved!")
+    visualizer.destroy_window()
+    
 
-# Render the image
-visualizer.capture_screen_image("rendered.png")
-print("Image saved!")
-# Close the visualizer window
-visualizer.destroy_window()
+def render_2d_top_down_view(point_cloud_path="example_data/lidar/main.pcd"):
+    point_cloud = o3d.io.read_point_cloud(point_cloud_path)
+
+    points = np.asarray(point_cloud.points)
+    colors = np.asarray(point_cloud.colors)
+    sorted_indices = np.argsort(points[:, 2])
+    points = points[sorted_indices]
+    colors = colors[sorted_indices]
+
+    min_x, min_y, _ = np.min(points, axis=0)
+    max_x, max_y, _ = np.max(points, axis=0)
+
+    image_width = int((max_x - min_x) * 20) + 1
+    image_height = int((max_y - min_y) * 20) + 1
+
+    projection_image = np.zeros((image_height, image_width, 3), dtype=np.uint8)
+
+    for point, color in zip(points, colors):
+        x, y, _ = point
+        pixel_x = int((x - min_x) * 20)
+        pixel_y = int((y - min_y) * 20)
+        projection_image[pixel_y, pixel_x] = (color * 255).astype(np.uint8)
+
+    plt.imshow(projection_image)
+    plt.axis('off')  # hide axis ticks and labels
+    plt.savefig('point_cloud_top_down_view.png', bbox_inches='tight', pad_inches=0)
+    plt.show()
+    
+    
+if __name__ == '__main__':
+    # render_3d_top_down_view()
+    render_2d_top_down_view()
