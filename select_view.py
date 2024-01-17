@@ -7,14 +7,14 @@ from utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_
 from visualization import get_9dof_boxes, draw_box3d_on_img, get_color_map
 
 
-def paint_object_pictures(object_json_path, extrinsic_dir, extra_extrinsic_path, intrinsic_path, image_dir, output_dir, image_size):
+def paint_object_pictures(object_json_path, extrinsic_dir, axis_align_matrix_path, intrinsic_path, image_dir, output_dir, image_size):
     """
         Select the best views for all 3d objects (bboxs) from a set of camera positions (extrinsics) in a scene.
         Then paint the 3d bbox in each view and save the painted images to the output directory.
         Args:
             object_json_path: path to the json file containing the 3d bboxs of the objects in the scene
             extrinsic_dir: path to the directory containing the extrinsic matrices, c2w' 
-            extra_extrinsic_path: path to the extra extrinsic matrix, w'2w
+            axis_align_matrix_path: path to the extra extrinsic matrix, w'2w
             intrinsic_path: path to the intrinsic matrix for the scene
             image_dir: path to the directory containing the images for each view
             output_dir: path to the directory to save the painted images to
@@ -23,8 +23,8 @@ def paint_object_pictures(object_json_path, extrinsic_dir, extra_extrinsic_path,
     bboxes, ids, types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
     bboxes = get_9dof_boxes(bboxes, 'xyz', (0, 0, 192)) # convert to o3d format
     extrinsics, extrinsic_paths = read_extrinsic_dir(extrinsic_dir) # c2w', shape N, 4, 4
-    extra_extrinsic = read_extrinsic(extra_extrinsic_path) # w'2w, shape 4, 4
-    extrinsics = np.matmul(extra_extrinsic, extrinsics) # c2w
+    axis_align_matrix = read_extrinsic(axis_align_matrix_path) # w'2w, shape 4, 4
+    extrinsics = np.matmul(axis_align_matrix, extrinsics) # c2w
     intrinsic = read_intrinsic(intrinsic_path) # shape 4, 4
     color_map = get_color_map()
     for bbox, id, type in zip(bboxes, ids, types):
@@ -126,9 +126,9 @@ def compute_visible_area(points, image_size):
 if __name__ == '__main__':
     object_json_path = f"./example_data/label/main_MDJH13.json"
     extrinsic_dir = "./example_data/posed_images"
-    extra_extrinsic_path = "./example_data/label/rot_matrix.npy"
+    axis_align_matrix_path = "./example_data/label/rot_matrix.npy"
     intrinsic_path = f"./example_data/posed_images/intrinsic.txt"
     image_dir = "./example_data/posed_images"
     output_dir = "./example_data/anno_lang/painted_images"
     image_size = (1296, 968)
-    paint_object_pictures(object_json_path, extrinsic_dir, extra_extrinsic_path, intrinsic_path, image_dir, output_dir, image_size)
+    paint_object_pictures(object_json_path, extrinsic_dir, axis_align_matrix_path, intrinsic_path, image_dir, output_dir, image_size)

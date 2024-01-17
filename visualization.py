@@ -9,7 +9,7 @@ EPS = 1e-4
 ALPHA = 0.15
 
 
-def annotate_image_with_single_3dbbox_path_mode(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path, object_id):
+def annotate_image_with_single_3dbbox_path_mode(img_path, object_json_path, intrinsic_path, extrinsic_path, axis_align_matrix_path, out_img_path, object_id):
     """
         Annotate an image with a single 3D bounding box, and also object type and id.
         Args:
@@ -17,7 +17,7 @@ def annotate_image_with_single_3dbbox_path_mode(img_path, object_json_path, intr
             object_json_path: path to the json file containing all the 3D bounding boxes in the scene
             intrinsic_path: path to the intrinsic matrix
             extrinsic_path: path to the extrinsic matrix, camera to world'
-            extra_extrinsic_path: path to the extra extrinsic, world' to world
+            axis_align_matrix_path: path to the extra extrinsic, world' to world
             out_img_path: path to save the annotated image
         Returns:
             None
@@ -25,8 +25,8 @@ def annotate_image_with_single_3dbbox_path_mode(img_path, object_json_path, intr
     img = cv2.imread(img_path)
     intrinsic = read_intrinsic(intrinsic_path)
     extrinsic = read_extrinsic(extrinsic_path) # camera to world'
-    extra_extrinsic = read_extrinsic(extra_extrinsic_path) # world' to world
-    extrinsic = extra_extrinsic @ extrinsic # camera to world
+    axis_align_matrix = read_extrinsic(axis_align_matrix_path) # world' to world
+    extrinsic = axis_align_matrix @ extrinsic # camera to world
     bboxes, object_ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
     index = np.where(object_ids == object_id)[0][0]
     color_dict = get_color_map('color_map.txt')
@@ -38,7 +38,7 @@ def annotate_image_with_single_3dbbox_path_mode(img_path, object_json_path, intr
     print("Annotated image saved to  %s" % out_img_path)
 
 
-def annotate_image_with_3dbboxes_path_mode(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path):
+def annotate_image_with_3dbboxes_path_mode(img_path, object_json_path, intrinsic_path, extrinsic_path, axis_align_matrix_path, out_img_path):
     """
         Annotate an image with 3D bounding boxes, and also object types and ids.
         Args:
@@ -46,7 +46,7 @@ def annotate_image_with_3dbboxes_path_mode(img_path, object_json_path, intrinsic
             object_json_path: path to the json file containing all the 3D bounding boxes in the scene
             intrinsic_path: path to the intrinsic matrix
             extrinsic_path: path to the extrinsic matrix, camera to world'
-            extra_extrinsic_path: path to the extra extrinsic, world' to world
+            axis_align_matrix_path: path to the extra extrinsic, world' to world
             out_img_path: path to save the annotated image
         Returns:
             None
@@ -54,8 +54,8 @@ def annotate_image_with_3dbboxes_path_mode(img_path, object_json_path, intrinsic
     img = cv2.imread(img_path)
     intrinsic = read_intrinsic(intrinsic_path)
     extrinsic = read_extrinsic(extrinsic_path) # camera to world'
-    extra_extrinsic = read_extrinsic(extra_extrinsic_path) # world' to world
-    extrinsic = extra_extrinsic @ extrinsic # camera to world
+    axis_align_matrix = read_extrinsic(axis_align_matrix_path) # world' to world
+    extrinsic = axis_align_matrix @ extrinsic # camera to world
     bboxes, object_ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
     indices, distances = sort_objects_by_projection_distance(bboxes, extrinsic)
     bboxes = bboxes[indices]
@@ -334,7 +334,7 @@ if __name__ == '__main__':
     object_json_path = f"./example_data/label/main_MDJH13.json"
     intrinsic_path = f"./example_data/posed_images/intrinsic.txt"
     extrinsic_path = f"./example_data/posed_images/{img_id}.txt"
-    extra_extrinsic_path = "./example_data/label/rot_matrix.npy"
+    axis_align_matrix_path = "./example_data/label/rot_matrix.npy"
     out_img_path = f"./{img_id}_annotated.jpg"
-    annotate_image_with_3dbboxes_path_mode(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path)
-    # annotate_image_with_single_3dbbox_path_mode(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path, object_id=50)
+    annotate_image_with_3dbboxes_path_mode(img_path, object_json_path, intrinsic_path, extrinsic_path, axis_align_matrix_path, out_img_path)
+    # annotate_image_with_single_3dbbox_path_mode(img_path, object_json_path, intrinsic_path, extrinsic_path, axis_align_matrix_path, out_img_path, object_id=50)

@@ -7,7 +7,7 @@ from utils_read import read_bboxes_json, read_intrinsic
 from visualization import visualize_object_types_on_sam_image
 
 
-def get_mapping_sam_id_to_object_id(sam_img_path, depth_img_path, sam_json_path, intrinsic_path, depth_intrinsic_path, extrinsic_path, extra_extrinsic_path, object_json_path, return_sam_id_to_bbox_idx=False):
+def get_mapping_sam_id_to_object_id(sam_img_path, depth_img_path, sam_json_path, intrinsic_path, depth_intrinsic_path, extrinsic_path, axis_align_matrix_path, object_json_path, return_sam_id_to_bbox_idx=False):
     """
         Derives SAM point cloud, then matche SAM ids with bboxes, and returns the idx mapping
         Args:
@@ -17,7 +17,7 @@ def get_mapping_sam_id_to_object_id(sam_img_path, depth_img_path, sam_json_path,
             intrinsic_path: path to intrinsic
             depth_intrinsic_path: path to depth intrinsic
             extrinsic_path: path to extrinsic, camera to world'
-            extra_extrinsic_path: path to extra extrinsic, world' to world
+            axis_align_matrix_path: path to extra extrinsic, world' to world
             object_json_path: path to object json, containing bboxes, object ids, and object types
         Returns:
             sam_id_to_object_id: dict, mapping from SAM ids to object ids
@@ -26,7 +26,7 @@ def get_mapping_sam_id_to_object_id(sam_img_path, depth_img_path, sam_json_path,
     """
     sam_id_to_bbox_idx = dict()
     sam_id_to_object_id = dict()
-    group_of_sam_pcds, sam_id_to_pcd_idx = generate_sam_pointcloud(sam_img_path, depth_img_path, sam_json_path, intrinsic_path, depth_intrinsic_path, extrinsic_path, extra_extrinsic_path, return_idx_mapping=True)
+    group_of_sam_pcds, sam_id_to_pcd_idx = generate_sam_pointcloud(sam_img_path, depth_img_path, sam_json_path, intrinsic_path, depth_intrinsic_path, extrinsic_path, axis_align_matrix_path, return_idx_mapping=True)
     bboxes, object_ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
     sam_pcd_to_bbox_idx = match_grouped_points_with_bboxes(group_of_sam_pcds, bboxes)
     for sam_id, pcd_idx in sam_id_to_pcd_idx.items():
@@ -42,7 +42,7 @@ def get_mapping_sam_id_to_object_id(sam_img_path, depth_img_path, sam_json_path,
     return sam_id_to_object_id
 
 
-def generate_sam_pointcloud(sam_img_path, depth_img_path, sam_json_path, intrinsic_path, depth_intrinsic_path, extrinsic_path, extra_extrinsic_path, return_idx_mapping=False):
+def generate_sam_pointcloud(sam_img_path, depth_img_path, sam_json_path, intrinsic_path, depth_intrinsic_path, extrinsic_path, axis_align_matrix_path, return_idx_mapping=False):
     """
         Derives SAM point cloud from SAM image, depth image, SAM json, intrinsic, extrinsic.
         Args:
@@ -52,7 +52,7 @@ def generate_sam_pointcloud(sam_img_path, depth_img_path, sam_json_path, intrins
             intrinsic_path: path to intrinsic
             depth_intrinsic_path: path to depth intrinsic
             extrinsic_path: path to extrinsic, camera to world'
-            extra_extrinsic_path: path to extra extrinsic, world' to world
+            axis_align_matrix_path: path to extra extrinsic, world' to world
             return_idx_mapping: bool, whether to return the mapping from SAM ids to indices in group_of_points
         Returns:
             group_of_points: list of SAM point clouds, each point cloud is a numpy array of shape (N_i, 3)
@@ -63,11 +63,11 @@ def generate_sam_pointcloud(sam_img_path, depth_img_path, sam_json_path, intrins
     depth_intrinsic = read_intrinsic(depth_intrinsic_path) # camera to image
     depth_cx, depth_cy, depth_fx, depth_fy = depth_intrinsic[0][2], depth_intrinsic[1][2], depth_intrinsic[0][0], depth_intrinsic[1][1]
     extrinsic = np.loadtxt(extrinsic_path) # camera to world'
-    extra_extrinsic = np.load(extra_extrinsic_path) # world' to world
-    extrinsic = np.matmul(extra_extrinsic, extrinsic) # camera to world
+    axis_align_matrix = np.load(axis_align_matrix_path) # world' to world
+    extrinsic = np.matmul(axis_align_matrix, extrinsic) # camera to world
     # print("camera to world extrinsic:\n", extrinsic)
     depth = cv2.imread(depth_img_path, cv2.IMREAD_UNCHANGED) # shape 480, 640
-    assert depth is not None, "Failed to read depth image. Check path."
+    assert depth is not None, "Failed to read depth image. Check path {}.".format(depth_img_path)
     depth = depth.astype(np.float32) / 1000.0
     with open(sam_json_path, 'r') as f:
         sam_id_json = json.load(f)
@@ -196,9 +196,9 @@ if __name__ == '__main__':
     intrinsic_path = "./example_data/posed_images/intrinsic.txt"
     depth_intrinsic_path = "./example_data/posed_images/depth_intrinsic.txt"
     extrinsic_path = f"./example_data/posed_images/{img_id}.txt"
-    extra_extrinsic_path = "./example_data/label/rot_matrix.npy"
+    axis_align_matrix_path = "./example_data/label/rot_matrix.npy"
     object_json_path = "./example_data/label/main_MDJH13.json"
     output_sam_img_path = f"./{img_id}_obj_types.jpg"
-    sam_id_to_object_id = get_mapping_sam_id_to_object_id(sam_img_path, depth_img_path, sam_json_path, intrinsic_path, depth_intrinsic_path, extrinsic_path, extra_extrinsic_path, object_json_path)
+    sam_id_to_object_id = get_mapping_sam_id_to_object_id(sam_img_path, depth_img_path, sam_json_path, intrinsic_path, depth_intrinsic_path, extrinsic_path, axis_align_matrix_path, object_json_path)
     # print(sam_id_to_object_id)
     visualize_object_types_on_sam_image(sam_img_path, sam_json_path, object_json_path, sam_id_to_object_id, output_sam_img_path)
