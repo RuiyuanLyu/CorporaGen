@@ -7,17 +7,17 @@ from utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_
 from visualization import get_9dof_boxes, draw_box3d_on_img, get_color_map
 
 
-def render_object_pictures(object_json_path, extrinsic_dir, extra_extrinsic_path, intrinsic_path, image_dir, output_dir, image_size):
+def paint_object_pictures(object_json_path, extrinsic_dir, extra_extrinsic_path, intrinsic_path, image_dir, output_dir, image_size):
     """
         Select the best views for all 3d objects (bboxs) from a set of camera positions (extrinsics) in a scene.
-        Then Render the 3d bbox in each view and save the rendered images to the output directory.
+        Then paint the 3d bbox in each view and save the painted images to the output directory.
         Args:
             object_json_path: path to the json file containing the 3d bboxs of the objects in the scene
             extrinsic_dir: path to the directory containing the extrinsic matrices, c2w' 
             extra_extrinsic_path: path to the extra extrinsic matrix, w'2w
             intrinsic_path: path to the intrinsic matrix for the scene
             image_dir: path to the directory containing the images for each view
-            output_dir: path to the directory to save the rendered images to
+            output_dir: path to the directory to save the painted images to
         Returns: None
     """
     bboxes, ids, types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
@@ -33,13 +33,14 @@ def render_object_pictures(object_json_path, extrinsic_dir, extra_extrinsic_path
         img_out_path = os.path.join(output_dir, str(id).zfill(3) + '_' + type + '.jpg')
         img = cv2.imread(img_in_path)
         if img is None:
+            print(f"best_view_index: {best_view_index}, extrinsic_path: {extrinsic_paths[best_view_index]}")
             print(f"Image {img_in_path} not found, skipping object {id}: {type}")
             continue
         color = color_map.get(type, (0, 0, 192))
         label = str(id) + ' ' + type
-        rendered_img, _ = draw_box3d_on_img(img, bbox, color, label, best_view, intrinsic)
-        cv2.imwrite(img_out_path, rendered_img)
-        print(f"Rendered image {img_out_path} for object {id}: {type}")
+        painted_img, _ = draw_box3d_on_img(img, bbox, color, label, best_view, intrinsic)
+        cv2.imwrite(img_out_path, painted_img)
+        print(f"painted image {img_out_path} for object {id}: {type}")
 
 
 def get_best_view(o3d_bbox, extrinsics, intrinsic, image_size):
@@ -57,22 +58,47 @@ def get_best_view(o3d_bbox, extrinsics, intrinsic, image_size):
     corners = np.array(o3d_bbox.get_box_points()) # shape (8, 3)
     corners = np.concatenate([corners, np.ones((8, 1))], axis=1) # shape (8, 4)
     areas = []
+    num_insides = []
     for extrinsic in extrinsics:
         projected_corners = intrinsic @ np.linalg.inv(extrinsic) @ corners.T # shape (4, 8)
+        if projected_corners[2, :].min() < 0: # check if the object is behind the camera
+            num_insides.append(0)
+            continue
         projected_corners = (projected_corners[:2, :] / projected_corners[2, :]).T # shape (8, 2)
-        if np.all(projected_corners[:, 0] >= 0) and np.all(projected_corners[:, 0] < image_size[0]) and \
-            np.all(projected_corners[:, 1] >= 0) and np.all(projected_corners[:, 1] < image_size[1]):
-                areas.append(compute_visible_area(projected_corners, image_size))
-        else:
-            areas.append(0)
-    best_view_index = np.argmax(areas)
+        num_inside = np.sum(is_inside_2d_box(projected_corners, image_size))
+        num_insides.append(num_inside)
+    num_insides = np.array(num_insides)
+    good_indices = np.where(num_insides==np.max(num_insides))[0]
+    for i in good_indices:
+        extrinsic = extrinsics[i]
+        projected_corners = intrinsic @ np.linalg.inv(extrinsic) @ corners.T # shape (4, 8)
+        projected_corners = (projected_corners[:2, :] / projected_corners[2, :]).T # shape (8, 2)
+        areas.append(compute_visible_area(projected_corners, image_size))
+    areas = np.array(areas)
+    _best_view_index = np.argmax(areas)
+    best_view_index = good_indices[_best_view_index]
     best_view = extrinsics[best_view_index]
-    best_area = areas[best_view_index]
+    best_area = areas[_best_view_index]
+    # print(f"Best view index: {best_view_index}, best area: {best_area}")
     # if best_area > 0:
     #     best_projection = intrinsic @ np.linalg.inv(best_view) @ corners.T # shape (4, 8)
     #     best_projection = (best_projection[:2, :] / best_projection[2, :]).T # shape (8, 2)
     #     print(best_projection)
     return best_view, best_view_index
+
+def is_inside_2d_box(points, box_size):
+    """
+        Check if a set of points are inside a 2d box
+        Args:
+            points: a numpy array of shape (n,2) representing the points in the plane
+            box_size: a tuple of (width, height) of the box
+        Returns: a boolean array of shape (n,) indicating if each point is inside the box
+    """
+    width, height = box_size
+    x_min, y_min = 0, 0
+    x_max, y_max = width - 1, height - 1
+    inside = (points[:, 0] >= x_min) & (points[:, 0] <= x_max) & (points[:, 1] >= y_min) & (points[:, 1] <= y_max)
+    return inside
 
 def get_convex_hull_points(points):
     """
@@ -84,9 +110,10 @@ def get_convex_hull_points(points):
 
 def compute_visible_area(points, image_size):
     """
-        Computes the area of the area of the convex hull of a set of points (there might be interior points).
+        Computes the visible area of the convex hull of a set of points (there might be interior points).
         Args:
             points: a numpy array of shape (n,2) representing the points in the plane
+            image_size: tuple of (width, height) of the image
         Returns: float, the area of the area of the convex hull
     """
     image_coords = np.array([[0, 0], [image_size[0], 0], [image_size[0], image_size[1]], [0, image_size[1]]])
@@ -102,6 +129,6 @@ if __name__ == '__main__':
     extra_extrinsic_path = "./example_data/label/rot_matrix.npy"
     intrinsic_path = f"./example_data/posed_images/intrinsic.txt"
     image_dir = "./example_data/posed_images"
-    output_dir = "./example_data/anno_lang/rendered_images"
+    output_dir = "./example_data/anno_lang/painted_images"
     image_size = (1296, 968)
-    render_object_pictures(object_json_path, extrinsic_dir, extra_extrinsic_path, intrinsic_path, image_dir, output_dir, image_size)
+    paint_object_pictures(object_json_path, extrinsic_dir, extra_extrinsic_path, intrinsic_path, image_dir, output_dir, image_size)

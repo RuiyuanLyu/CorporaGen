@@ -13,6 +13,8 @@ def read_extrinsic_dir(directory):
     paths = []
     for file in os.listdir(directory):
         if file.endswith('.txt') or file.endswith('.npy'):
+            if file.startswith('depth_intrinsic') or file.startswith('intrinsic'):
+                continue
             path = os.path.join(directory, file)
             extrinsics.append(read_extrinsic(path))
             path = path.replace("\\", "/")
