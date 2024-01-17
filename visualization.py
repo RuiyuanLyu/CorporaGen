@@ -4,13 +4,14 @@ import cv2
 import matplotlib
 import json
 from linemesh import LineMesh
+from utils_read import read_bboxes_json, read_intrinsic, read_extrinsic
 EPS = 1e-4
 ALPHA = 0.15
-EXCLUDED_OBJECTS = ['wall', 'ceiling', 'floor']
 
-def annotate_image_with_single_3dbbox(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path, object_id):
+
+def annotate_image_with_single_3dbbox_path_mode(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path, object_id):
     """
-        Annotate an image with 3D bounding boxes, and also object types and ids.
+        Annotate an image with a single 3D bounding box, and also object type and id.
         Args:
             img_path: path to the image to be annotated
             object_json_path: path to the json file containing all the 3D bounding boxes in the scene
@@ -23,8 +24,8 @@ def annotate_image_with_single_3dbbox(img_path, object_json_path, intrinsic_path
     """
     img = cv2.imread(img_path)
     intrinsic = read_intrinsic(intrinsic_path)
-    extrinsic = np.loadtxt(extrinsic_path) # camera to world'
-    extra_extrinsic = np.load(extra_extrinsic_path) # world' to world
+    extrinsic = read_extrinsic(extrinsic_path) # camera to world'
+    extra_extrinsic = read_extrinsic(extra_extrinsic_path) # world' to world
     extrinsic = extra_extrinsic @ extrinsic # camera to world
     bboxes, object_ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
     index = np.where(object_ids == object_id)[0][0]
@@ -37,7 +38,7 @@ def annotate_image_with_single_3dbbox(img_path, object_json_path, intrinsic_path
     print("Annotated image saved to  %s" % out_img_path)
 
 
-def annotate_image_with_3dbboxes(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path):
+def annotate_image_with_3dbboxes_path_mode(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path):
     """
         Annotate an image with 3D bounding boxes, and also object types and ids.
         Args:
@@ -52,8 +53,8 @@ def annotate_image_with_3dbboxes(img_path, object_json_path, intrinsic_path, ext
     """
     img = cv2.imread(img_path)
     intrinsic = read_intrinsic(intrinsic_path)
-    extrinsic = np.loadtxt(extrinsic_path) # camera to world'
-    extra_extrinsic = np.load(extra_extrinsic_path) # world' to world
+    extrinsic = read_extrinsic(extrinsic_path) # camera to world'
+    extra_extrinsic = read_extrinsic(extra_extrinsic_path) # world' to world
     extrinsic = extra_extrinsic @ extrinsic # camera to world
     bboxes, object_ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
     indices, distances = sort_objects_by_projection_distance(bboxes, extrinsic)
@@ -73,7 +74,7 @@ def annotate_image_with_3dbboxes(img_path, object_json_path, intrinsic_path, ext
     print("Annotated image saved to  %s" % out_img_path)
 
 
-def get_color_map(path):
+def get_color_map(path='color_map.txt'):
     """
         Data structure of the input file:
         item1 [r, g, b]
@@ -214,70 +215,6 @@ def draw_box3d_on_img(img, box, color, label, extrinsic, intrinsic, alpha=None, 
     return img, occupency_map
 
 
-def read_mp3d_intrinsic(path):
-    a = np.loadtxt(path)
-    intrinsic = np.identity(4, dtype=float)
-    intrinsic[0][0] = a[2]  # fx
-    intrinsic[1][1] = a[3]  # fy
-    intrinsic[0][2] = a[4]  # cx
-    intrinsic[1][2] = a[5]  # cy
-    # a[0], a[1] are the width and height of the image
-    return intrinsic
-
-
-def read_scannet_intrinsic(path):
-    intrinsic =  np.loadtxt(path)
-    return intrinsic
-
-
-def read_intrinsic(path, mode='scannet'):
-    """
-        Reads intrinsic matrix from file.
-        Returns:
-            extended intrinsic of shape (4, 4)
-    """
-    if mode =='scannet':
-        return read_scannet_intrinsic(path)
-    elif mode =='mp3d':
-        return read_mp3d_intrinsic(path)
-    else:
-        raise ValueError('Invalid mode.')
-
-
-def read_bboxes_json(path, return_id=False, return_type=False):
-    """
-        Returns:
-            boxes: numpy array of bounding boxes, shape (M, 9): xyz, lwh, ypr
-            ids: (optional) numpy array of obj ids, shape (M,)
-            types: (optional) list of strings, each string is a type of object
-    """
-    with open(path, 'r') as f:
-        bboxes_json = json.load(f)
-    boxes = []
-    ids = []
-    types = []
-    for i in range(len(bboxes_json)):
-        if bboxes_json[i]['obj_type'] in EXCLUDED_OBJECTS:
-            continue
-        box = bboxes_json[i]["psr"]
-        position = np.array([box['position']['x'], box['position']['y'], box['position']['z']])
-        size =  np.array([box['scale']['x'], box['scale']['y'], box['scale']['z']])
-        euler_angles = np.array([box['rotation']['x'], box['rotation']['y'], box['rotation']['z']])
-        boxes.append(np.concatenate([position, size, euler_angles]))
-        ids.append(int(bboxes_json[i]['obj_id']))
-        types.append(bboxes_json[i]['obj_type'])
-    boxes = np.array(boxes)
-    if return_id and return_type:
-        ids = np.array(ids)
-        return boxes, ids, types
-    if return_id:
-        ids = np.array(ids)
-        return boxes, ids
-    if return_type:
-        return boxes, types
-    return boxes    
-
-
 def is_inside_box(box, point):
     """
         Check if a point is inside a box.
@@ -341,7 +278,6 @@ def draw_text(img, text,
     
     return occupency_map
 
-
 def get_boxes_with_thickness(boxes, line_width=0.02):
     """
         Convert OrientedBoundingBox objects to LineSet objects with thickness.
@@ -357,7 +293,6 @@ def get_boxes_with_thickness(boxes, line_width=0.02):
         bbox_lines_width = LineMesh(points=bbox_lines.points, lines=bbox_lines.lines, colors=box.color, radius = line_width)
         results += bbox_lines_width.cylinder_segments
     return results
-
 
 def get_9dof_boxes(bbox, mode, colors):
     """
@@ -393,18 +328,6 @@ def get_9dof_boxes(bbox, mode, colors):
     return geo_list
 
 
-    # img_id = "02300"
-    # sam_img_path = f"./example_data/sam_2dmask/{img_id}.jpg"
-    # depth_img_path = f"./example_data/posed_images/{img_id}.png"
-    # sam_json_path = f"./example_data/sam_2dmask/{img_id}.json"
-    # intrinsic_path = "./example_data/posed_images/intrinsic.txt"
-    # depth_intrinsic_path = "./example_data/posed_images/depth_intrinsic.txt"
-    # extrinsic_path = f"./example_data/posed_images/{img_id}.txt"
-    # extra_extrinsic_path = "./example_data/label/rot_matrix.npy"
-    # object_json_path = "./example_data/label/main_MDJH13.json"
-    # output_sam_img_path = f"./{img_id}_obj_types.jpg"
-
-
 if __name__ == '__main__':
     img_id = "02300"
     img_path = f"./example_data/posed_images/{img_id}.jpg"
@@ -413,5 +336,5 @@ if __name__ == '__main__':
     extrinsic_path = f"./example_data/posed_images/{img_id}.txt"
     extra_extrinsic_path = "./example_data/label/rot_matrix.npy"
     out_img_path = f"./{img_id}_annotated.jpg"
-    annotate_image_with_3dbboxes(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path)
-    # annotate_image_with_single_3dbbox(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path, object_id=50)
+    annotate_image_with_3dbboxes_path_mode(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path)
+    # annotate_image_with_single_3dbbox_path_mode(img_path, object_json_path, intrinsic_path, extrinsic_path, extra_extrinsic_path, out_img_path, object_id=50)
