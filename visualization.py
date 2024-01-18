@@ -329,6 +329,12 @@ def get_9dof_boxes(bbox, mode, colors):
         geo_list.append(geo)
     return geo_list
 
+def visualize_distribution_hist(data, num_bins=20):
+    import matplotlib.pyplot as plt
+    plt.hist(data, bins=num_bins)
+    plt.xlabel('Value')
+    plt.ylabel('Frequency')
+    plt.show()
 
 if __name__ == '__main__':
     img_id = "02300"

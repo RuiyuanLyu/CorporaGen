@@ -175,6 +175,53 @@ def compute_visible_area(points, image_size):
     intersection = poly1.intersection(poly2)
     return intersection.area
 
+def get_blurry_image_ids(image_dir, save_path=None, threshold=100):
+    """
+        Returns a list of image ids that are blurry.
+    """
+    blurry_ids = []
+    image_ids = []
+    vars = []
+    paths = []
+    for file_name in os.listdir(image_dir):
+        if file_name.endswith('.jpg'):
+            image_id = file_name[:-4]
+            image_path = os.path.join(image_dir, file_name)
+            paths.append(image_path)
+            image_ids.append(image_id)
+    pbar = tqdm(range(len(paths)))
+    for i in pbar:
+        image_path = paths[i]
+        image_id = image_ids[i]
+        pbar.set_description(f"Checking {image_id}")
+        image = cv2.imread(image_path)
+        blurry, variance = is_blurry(image, threshold, return_variance=True)
+        vars.append(variance)
+        if blurry:
+            blurry_ids.append(image_id)
+    print(f"Found {len(blurry_ids)} blurry images out of {len(image_ids)}")
+    from visualization import visualize_distribution_hist
+    visualize_distribution_hist(vars)
+    if save_path is not None:
+        with open(save_path, 'w') as f:
+            json.dump(blurry_ids, f, indent=4)
+    return blurry_ids
+
+def is_blurry(image, threshold=100, return_variance=False):
+    """
+        Returns True if the image is blurry, False otherwise.
+        The lower the variance of the laplacian, the more blurry the image.
+    """
+    if len(image.shape) == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = image
+    laplacian  = cv2.Laplacian(gray, cv2.CV_64F)
+    variance = laplacian.var()
+    if return_variance:
+        return variance < threshold, variance
+    return variance < threshold
+
 
 if __name__ == '__main__':
     object_json_path = f"./example_data/label/main_MDJH13.json"
@@ -183,8 +230,11 @@ if __name__ == '__main__':
     axis_align_matrix_path = "./example_data/label/rot_matrix.npy"
     intrinsic_path = f"./example_data/posed_images/intrinsic.txt"
     image_dir = "./example_data/posed_images"
+    blurry_image_id_path = "./example_data/anno_lang/blurry_image_ids.json"
     output_dir = "./example_data/anno_lang/painted_images"
     depth_intrinsic_path = f"./example_data/posed_images/depth_intrinsic.txt"
     depth_map_dir = "./example_data/posed_images"
+    get_blurry_image_ids(image_dir, save_path=blurry_image_id_path, threshold=100)
+    exit()
     # get_visible_objects_dict(object_json_path, extrinsic_dir, axis_align_matrix_path, depth_intrinsic_path, depth_map_dir, visibility_json_path)
     paint_object_pictures(object_json_path, visibility_json_path, extrinsic_dir, axis_align_matrix_path, intrinsic_path, image_dir, output_dir)
