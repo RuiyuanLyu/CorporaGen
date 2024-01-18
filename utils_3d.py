@@ -1,25 +1,49 @@
 import numpy as np
 
 
-def get_corners(bbox):
+def check_bboxes_visibility(bboxes, depth_map, depth_intrinsic, extrinsic_w2c):
     """
-        Compute the coordinates of a given bbox.
+        Check the visibility of 3D bounding boxes in a depth map.
+        Args:
+            bboxes: a list of N open3d.geometry.OrientedBoundingBox
+            depth_map: depth map, numpy array of shape (h, w).
+            depth_intrinsic: numpy array of shape (4, 4).
+            extrinsic_w2c: numpy array of shape (4, 4).
+        Returns:
+            Boolean array of shape (N, ) indicating the visibility of each bounding box.
     """
-    pass
+    corners = [box.get_box_points() for box in bboxes]
+    corners = np.concatenate(corners, axis=0) # shape (N*8, 3)
+    assert corners.shape[1] == 3 and len(corners.shape) == 2
+    visibles = check_point_visibility(corners, depth_map, depth_intrinsic, extrinsic_w2c)
+    visibles = visibles.reshape(len(bboxes), 8)
+    visibles = np.sum(visibles, axis=1) >= 1 # at least some corners visible
+    return visibles
 
-def project_to_image_plane(points, intrinsic, extrinsic):
+def check_point_visibility(points, depth_map, depth_intrinsic, extrinsic_w2c):
     """
-        Project 3D points to 2D image plane.
+        Check the visibility of 3D points in a depth map.
         Args:
             points: 3D points, numpy array of shape (n, 3).
-            intrinsic: extended Intrinsic matrix as array of shape (4, 4).
-            extrinsic: w2c Extrinsic matrix as array of shape (4, 4).
+            depth_map: depth map, numpy array of shape (h, w).
+            depth_intrinsic: numpy array of shape (4, 4).
+            extrinsic_w2c: numpy array of shape (4, 4).
+        Returns:
+            Boolean array of shape (n, ) indicating the visibility of each point.
     """
+    # Project 3D points to 2D image plane
+    visibles = np.ones(points.shape[0], dtype=bool)
     points = np.concatenate([points, np.ones_like(points[..., :1])], axis=-1) # shape (n, 4)
-    points = intrinsic @ np.linalg.inv(extrinsic) @ points.T # (4, n)
-    points = points[:2, :] / points[2, :] # (2, n)
-    return points.T # (n, 2)
-
+    points = depth_intrinsic @ extrinsic_w2c @ points.T # (4, n)
+    xs, ys, zs = points[:3, :]
+    visibles &= (zs > 0) # remove points behind the camera
+    xs, ys = xs / zs, ys / zs # normalize to image plane
+    height, width = depth_map.shape
+    visibles &= (0 <= xs) & (xs < width) & (0 <= ys) & (ys < height) # remove points outside the image
+    xs[(xs < 0) | (xs >= width)] = 0 # avoid index out of range in depth_map
+    ys[(ys < 0) | (ys >= height)] = 0
+    visibles &= (depth_map[ys.astype(int), xs.astype(int)] > zs) # remove points occluded by other objects
+    return visibles
 
 def _axis_angle_rotation(axis: str, angle: np.ndarray) -> np.ndarray:
     """
