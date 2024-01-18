@@ -3,14 +3,39 @@ import json
 import os
 EXCLUDED_OBJECTS = ['wall', 'ceiling', 'floor']
 
+def reverse_multi2multi_mapping(mapping):
+    """
+        Args:
+            mapping in format key1:[value1, value2], key2:[value2, value3]
+        Returns:
+            mapping in format value1:[key1], value2:[key1, key2], value3:[key2]
+    """
+    output = {}
+    possible_values = []
+    for key, values in mapping.items():
+        for value in values:
+            possible_values.append(value)
+    possible_values = list(set(possible_values))
+    for value in possible_values:
+        output[value] = []
+    for key, values in mapping.items():
+        for value in values:
+            output[value].append(key)
+    return output
+
+def load_json(path):
+    with open(path, 'r') as f:
+        data = json.load(f)
+    return data
+
 def read_extrinsic_dir(directory):
     """
         Returns:
             extrinsics: numpy array of extrinsic matrices, shape (N, 4, 4)
-            paths: list of paths to extrinsic files
+            ids: list of ids (str) of matrix files.
     """
     extrinsics = []
-    paths = []
+    ids = []
     for file in os.listdir(directory):
         if file.endswith('.txt') or file.endswith('.npy'):
             if file.startswith('depth_intrinsic') or file.startswith('intrinsic'):
@@ -18,9 +43,8 @@ def read_extrinsic_dir(directory):
             path = os.path.join(directory, file)
             extrinsics.append(read_extrinsic(path))
             path = path.replace("\\", "/")
-            paths.append(path)
-    return extrinsics, paths
-
+            ids.append(file.split('.')[0])
+    return extrinsics, ids
 
 def _pad_extrinsic(mat):
     """

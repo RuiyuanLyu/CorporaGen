@@ -145,7 +145,7 @@ def visualize_object_types_on_sam_image(sam_img_path, sam_json_path, object_json
     print("Texted image saved to  %s" % out_sam_img_path)
 
 
-def draw_box3d_on_img(img, box, color, label, extrinsic, intrinsic, alpha=None, occupency_map=None):
+def draw_box3d_on_img(img, box, color, label, extrinsic, intrinsic, alpha=None, occupency_map=None, ignore_outside=True):
     """
         Draw a 3D box on an image.
         Args:
@@ -170,11 +170,13 @@ def draw_box3d_on_img(img, box, color, label, extrinsic, intrinsic, alpha=None, 
     camera_pos_in_world = (extrinsic @ np.array([0, 0, 0, 1]).reshape(4,1)).transpose()
     if is_inside_box(box, camera_pos_in_world):
         return img, occupency_map
-    center = box.get_center()
-    center_2d = intrinsic @ extrinsic_w2c @ np.array([center[0], center[1], center[2], 1]).reshape(4,1)
-    center_2d = center_2d[:2] / center_2d[2]
-    if (center_2d[0] < 0 or center_2d[0] > w or center_2d[1] < 0 or center_2d[1] > h):
-        return img, occupency_map
+    
+    if ignore_outside:
+        center = box.get_center()
+        center_2d = intrinsic @ extrinsic_w2c @ np.array([center[0], center[1], center[2], 1]).reshape(4,1)
+        center_2d = center_2d[:2] / center_2d[2]
+        if (center_2d[0] < 0 or center_2d[0] > w or center_2d[1] < 0 or center_2d[1] > h):
+            return img, occupency_map
 
     corners = np.asarray(box.get_box_points()) # shape (8, 3)
     corners = corners[[0,1,7,2,3,6,4,5]] # shape (8, 3)
