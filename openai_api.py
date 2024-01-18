@@ -8,14 +8,52 @@ from openai import OpenAI
 KEY_ACTIVATED = True
 
 
+def mimic_chat_budget(user_content_groups, system_prompt=None):
+    """
+        budget version of mimic_chat(). The first round of conversation is done by GPT-4 model, and the remaining rounds are done by GPT-3.5-turbo model.
+        NOTE: need to convert into content groups first using get_content_groups_from_source_groups()
+        Args:
+            model (str): The name of the model to use.
+            user_content_groups (list(list)): A list of groups(list), each group of contents is sent 'simutaneously' to the model to generate a response.
+            system_prompt (str): A prompt for the system to keep in mind.
+        Returns:
+            messages (list): The mimic chat with multi-round conversation.
+    """
+    client = OpenAI(api_key=get_api_key())
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    for i, content_group in enumerate(user_content_groups):
+        if i == 0:
+            model = "gpt-4-vision-preview"
+        else:
+            model = "gpt-3.5-turbo"
+            # remove the image urls from the previous rounds
+            for message in messages:
+                for content_component in message["content"]:
+                    if isinstance(content_component, str):
+                        continue
+                    if content_component["type"] == "image_url":
+                        message["content"].remove(content_component)
+        messages.append({"role": "user", "content": content_group})
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=1000,
+        )
+        response = response.choices[0].message.content.strip()
+        messages.append({"role": "assistant", "content": response})
+    return messages
+ 
+
 def mimic_chat(user_content_groups, model=None, system_prompt=None):
     """
         Engage in a conversation with the model by posing a series of predetermined questions, maintaining the conversational flow irrespective of the model's responses, and continue to ask follow-up questions.
         This implementation uses the OpenAI client API.
+        NOTE: need to convert into content groups first using get_content_groups_from_source_groups()
         Args:
             model (str): The name of the model to use.
             user_content_groups (list(list)): A list of groups(list), each group of contents is sent 'simutaneously' to the model to generate a response.
-            NOTE: A group of contents is essentially a list of contents. 
             system_prompt (str): A prompt for the system to keep in mind.
         Returns:
             messages (list): The mimic chat with multi-round conversation.
@@ -174,7 +212,7 @@ if __name__ == "__main__":
     ]
     content_groups = get_content_groups_from_source_groups(source_groups)
     system_prompt = "You are an expert interior designer, who is very sensitive at room furnitures and their placements."
-    conversation = mimic_chat(content_groups, model="gpt-4-vision-preview")
+    conversation = mimic_chat(content_groups, model="gpt-4-vision-preview", system_prompt=system_prompt)
     # conversation = mimic_chat(user_content_groups)
     for message in conversation:
         # skip the image urls
