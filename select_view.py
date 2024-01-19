@@ -207,6 +207,10 @@ def get_blurry_image_ids(image_dir, save_path=None, threshold=200, skip_existing
             image_path = os.path.join(image_dir, file_name)
             paths.append(image_path)
             image_ids.append(image_id)
+    # sort the images by id
+    image_indices = np.argsort([int(i) for i in image_ids])
+    image_ids = [image_ids[i] for i in image_indices]
+    paths = [paths[i] for i in image_indices]
     pbar = tqdm(range(len(paths)))
     for i in pbar:
         image_path = paths[i]
