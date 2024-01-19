@@ -6,6 +6,7 @@ from utils_3d import euler_angles_to_matrix
 from utils_read import read_bboxes_json, read_intrinsic
 from visualization import visualize_object_types_on_sam_image
 
+# WARNING: this file is deprecated and will be removed in the future.
 
 def get_mapping_sam_id_to_object_id(sam_img_path, depth_img_path, sam_json_path, intrinsic_path, depth_intrinsic_path, extrinsic_path, axis_align_matrix_path, object_json_path, return_sam_id_to_bbox_idx=False):
     """
@@ -197,7 +198,7 @@ if __name__ == '__main__':
     depth_intrinsic_path = "./example_data/posed_images/depth_intrinsic.txt"
     extrinsic_path = f"./example_data/posed_images/{img_id}.txt"
     axis_align_matrix_path = "./example_data/label/rot_matrix.npy"
-    object_json_path = "./example_data/label/main_MDJH13.json"
+    object_json_path = "./example_data/label/main_MDJH01.json"
     output_sam_img_path = f"./{img_id}_obj_types.jpg"
     sam_id_to_object_id = get_mapping_sam_id_to_object_id(sam_img_path, depth_img_path, sam_json_path, intrinsic_path, depth_intrinsic_path, extrinsic_path, axis_align_matrix_path, object_json_path)
     # print(sam_id_to_object_id)

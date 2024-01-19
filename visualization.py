@@ -339,7 +339,7 @@ def visualize_distribution_hist(data, num_bins=20):
 if __name__ == '__main__':
     img_id = "02300"
     img_path = f"./example_data/posed_images/{img_id}.jpg"
-    object_json_path = f"./example_data/label/main_MDJH13.json"
+    object_json_path = f"./example_data/label/main_MDJH01.json"
     intrinsic_path = f"./example_data/posed_images/intrinsic.txt"
     extrinsic_path = f"./example_data/posed_images/{img_id}.txt"
     axis_align_matrix_path = "./example_data/label/rot_matrix.npy"
