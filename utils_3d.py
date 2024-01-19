@@ -1,7 +1,28 @@
 import numpy as np
 
 
-def check_bboxes_visibility(bboxes, depth_map, depth_intrinsic, extrinsic_w2c):
+def interpolate_bbox_points(bbox, granularity=5):
+    """
+        Get the surface points of a 3D bounding box.
+        Args:
+            bbox: an open3d.geometry.OrientedBoundingBox object.
+        Returns:
+            M x 3 numpy array of Surface points of the bounding box
+            M = gran^3 - (gran-2)^3 (for a cube with gran=5)
+            8 * 1 for corners, 12 * (gran-2) for edges, 6 * (gran-2)^2 for faces.
+    """
+    assert granularity >= 2
+    coords = np.array(np.meshgrid(np.arange(granularity), np.arange(granularity), np.arange(granularity))).T.reshape(-1, 3)
+    surface_points = coords[np.any((coords == 0) | (coords == granularity-1), axis=1)]
+    surface_points /= granularity-1
+    corners = np.array(bbox.get_box_points())
+    v1, v2, v3 = corners[1]-corners[0], corners[2]-corners[0], corners[3]-corners[0]
+    assert np.allclose(v1.dot(v2), 0) and np.allclose(v2.dot(v3), 0) and np.allclose(v3.dot(v1), 0)
+    transformation_matrix = np.column_stack((v1, v2, v3))
+    mapped_coords = surface_points @ transformation_matrix
+    return mapped_coords.reshape(-1, 3)
+     
+def check_bboxes_visibility(bboxes, depth_map, depth_intrinsic, extrinsic_w2c, granularity=2):
     """
         Check the visibility of 3D bounding boxes in a depth map.
         Args:
@@ -12,12 +33,17 @@ def check_bboxes_visibility(bboxes, depth_map, depth_intrinsic, extrinsic_w2c):
         Returns:
             Boolean array of shape (N, ) indicating the visibility of each bounding box.
     """
-    corners = [box.get_box_points() for box in bboxes]
-    corners = np.concatenate(corners, axis=0) # shape (N*8, 3)
-    assert corners.shape[1] == 3 and len(corners.shape) == 2
-    visibles = check_point_visibility(corners, depth_map, depth_intrinsic, extrinsic_w2c)
-    visibles = visibles.reshape(len(bboxes), 8)
-    visibles = np.sum(visibles, axis=1) >= 1 # at least some corners visible
+    num_points_per_bbox = granularity * granularity * granularity - (granularity-2) * (granularity-2) * (granularity-2)
+    if granularity == 2:
+        points = [box.get_box_points() for box in bboxes]
+        points = np.concatenate(points, axis=0) # shape (N*8, 3)
+    else:
+        points = [interpolate_bbox_points(box, granularity=granularity) for box in bboxes]
+        points = np.concatenate(points, axis=0) # shape (N*M, 3)
+    visibles = check_point_visibility(points, depth_map, depth_intrinsic, extrinsic_w2c)
+    visibles = visibles.reshape(len(bboxes), num_points_per_bbox)
+    visibles = np.sum(visibles, axis=1)
+    visibles = visibles/num_points_per_bbox > 0.3 # threshold for visibility
     return visibles
 
 def check_point_visibility(points, depth_map, depth_intrinsic, extrinsic_w2c):
