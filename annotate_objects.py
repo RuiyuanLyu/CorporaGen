@@ -105,6 +105,8 @@ def check_annotation(annotation):
         return False, "The model may not describe objects accurately or the object we want."
     if len(short_description) > len(long_description):
         return False, "Length error. The shorthand version is longer. Hallucinations are not allowed."
+    if len(short_description) > 1200:
+        return False, "Length error. The shorthand version is too long."
     return True, ""
 
 
