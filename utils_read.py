@@ -147,8 +147,6 @@ def read_annotation_pickle(path):
     """
     with open(path, 'rb') as f:
         data = np.load(f, allow_pickle=True)
-    # bboxes_pickle = bboxes_pickle.item()
-    # import pdb; pdb.set_trace()
     metainfo = data['metainfo']
     object_type_to_int = metainfo['categories']
     object_int_to_type = {v: k for k, v in object_type_to_int.items()}
@@ -195,7 +193,8 @@ def read_annotation_pickle(path):
         pbar.set_description(f"Processing scene {scene_id}")
         output_data[scene_id] = {'bboxes': bboxes, 'object_ids': object_ids, 'object_types': object_types, 'visible_view_object_dict': visible_view_object_dict, 'extrinsics_c2w': extrinsics_c2w, 'axis_align_matrix': axis_align_matrix, 'intrinsics': intrinsics, 'image_paths': image_paths}
     return output_data
-        
+
+
 if __name__ == '__main__':
     pickle_file = './example_data/embodiedscan_infos_val_full.pkl'
     read_annotation_pickle(pickle_file)

@@ -2,6 +2,8 @@ import numpy as np
 import cv2
 import os
 import json
+import shutil
+
 from tqdm import tqdm
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon
@@ -26,7 +28,10 @@ def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_
             output_dir: path to the directory to save the painted images to
         Returns: None
     """
-    bboxes = get_9dof_boxes(np.array(bboxes))
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    bboxes = get_9dof_boxes(np.array(bboxes), mode='zxy', colors=(0,0,192))
     blurry_image_ids = get_blurry_image_ids(image_paths, save_path=blurry_image_ids_path, threshold=200, skip_existing=True)
     for image_id in blurry_image_ids:
         if image_id in visible_view_object_dict:
@@ -35,7 +40,7 @@ def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_
     extrinsic_ids = [os.path.basename(path).split('.')[0] for path in image_paths]
     extrinsics_c2w = np.matmul(axis_align_matrix, extrinsics_c2w)
     color_map = get_color_map()
-    image_dir = os.join(image_paths[0].split(os.sep)[:-1])
+    image_dir = os.path.dirname(image_paths[0])
     height, width = cv2.imread(image_paths[0]).shape[:2]
     image_size = (width, height)
     _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  extrinsic_ids, intrinsics, color_map, image_size, image_dir, output_dir)
@@ -74,9 +79,18 @@ def paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic
     image_size = (width, height)
     _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  extrinsic_ids, intrinsic, color_map, image_size, image_dir, output_dir)
 
-def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, extrinsic_ids, intrinsics, color_map, image_size, image_dir, output_dir):
+def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, extrinsic_ids, intrinsics, color_map, image_size, image_dir, output_dir, skip_existing=True):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+    if skip_existing:
+        files_and_folders = os.listdir(output_dir)
+        files = [f for f in files_and_folders if os.path.isfile(os.path.join(output_dir, f))]
+        num_files = len(files)
+        if num_files > len(bboxes):
+            return
+    shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
+    
     pbar = tqdm(range(len(bboxes)))
     if len(np.array(intrinsics).shape) == 2:
         intrinsics = np.tile(intrinsics, (len(extrinsics_c2w), 1, 1))
@@ -91,7 +105,7 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
             selected_extrinsics_c2w.append(extrinsic_c2w)
             selected_intrinsics.append(intrinsics[extrinsic_index])
         if len(selected_extrinsics_c2w) == 0:
-            print(f"Object {object_id}: {object_type} not visible in any view, skipping")
+            # print(f"Object {object_id}: {object_type} not visible in any view, skipping")
             # create a placeholder txt
             file_name = str(object_id).zfill(3) + '_' + object_type + '_placeholder.txt'
             with open(os.path.join(output_dir, file_name), 'w') as f:
@@ -100,12 +114,12 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
         selected_extrinsics_c2w = np.array(selected_extrinsics_c2w)
         best_view, best_view_index = get_best_view(bbox, selected_extrinsics_c2w, selected_intrinsics, image_size)
         best_view_index = extrinsic_ids.index(visible_views[best_view_index])
+        intrinsic = intrinsics[best_view_index]
         img_in_path = os.path.join(image_dir, extrinsic_ids[best_view_index] + '.jpg')
         img_out_path = os.path.join(output_dir, str(object_id).zfill(3) + '_' + object_type + '_' + extrinsic_ids[best_view_index] + '.jpg')
         img = cv2.imread(img_in_path)
         if img is None:
-            print(f"best_view_index: {best_view_index}, extrinsic_id: {extrinsic_ids[best_view_index]}")
-            print(f"Image {img_in_path} not found, skipping object {object_id}: {object_type}")
+            # print(f"Image {img_in_path} not found, skipping object {object_id}: {object_type}")
             continue
         color = color_map.get(object_type, (0, 0, 192))
         label = str(object_id) + ' ' + object_type
@@ -128,7 +142,7 @@ def get_visible_objects_dict(object_json_path, extrinsic_dir, axis_align_matrix_
             visible_objects_dict: a dictionary of visible objects, where each key is a view index (str) and the value is a list of object ids
     """
     if os.path.exists(output_path) and skip_existing:
-        print(f"Skipping existing file {output_path}")
+        # print(f"Skipping existing file {output_path}")
         return load_json(output_path)
     bboxes, object_ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
     bboxes = get_9dof_boxes(bboxes, 'xyz', (0, 0, 192)) # convert to o3d format
@@ -245,14 +259,13 @@ def get_blurry_image_ids(image_paths, save_path=None, threshold=200, skip_existi
             blurry_ids: a list of image ids that are blurry
     """
     if os.path.exists(save_path) and skip_existing:
-        print(f"Skipping existing file {save_path}")
+        # print(f"Skipping existing file {save_path}")
         return load_json(save_path)
     image_ids = []
-    paths = []
+    paths = image_paths
     for image_path in image_paths:
         image_id = os.path.basename(image_path)[:-4]
         image_ids.append(image_id)
-        paths.append(image_path)
     image_indices = np.argsort([int(i) for i in image_ids])
     image_ids = [image_ids[i] for i in image_indices]
     paths = [paths[i] for i in image_indices]
@@ -306,7 +319,7 @@ def get_blurry_image_ids_dir(image_dir, save_path=None, threshold=200, skip_exis
             blurry_ids: a list of image ids that are blurry
     """
     if os.path.exists(save_path) and skip_existing:
-        print(f"Skipping existing file {save_path}")
+        # print(f"Skipping existing file {save_path}")
         return load_json(save_path)
     paths = []
     for file_name in os.listdir(image_dir):
@@ -337,6 +350,8 @@ def get_local_maxima_indices(data, window_size=3):
         Returns the local maxima indices of a 1D array.
     """
     maxima_indices = []
+    if len(data) < window_size:
+        return maxima_indices
     for i in range(len(data)):
         left_index = max(i - window_size, 0)
         right_index = min(i + window_size, len(data) - 1)
@@ -364,12 +379,15 @@ def single_scene_test():
 def batched_test():
     pickle_file_val = '/mnt/petrelfs/share_data/wangtai/data/full_10_visible/embodiedscan_infos_val_full.pkl'
     pickle_file_train = '/mnt/petrelfs/share_data/wangtai/data/full_10_visible/embodiedscan_infos_train_full.pkl'
+    data_real_dir = '/mnt/petrelfs/share_data/maoxiaohan'
+    out_real_dir = '/mnt/petrelfs/share_data/lvruiyuan'
     anno_dict1 = read_annotation_pickle(pickle_file_val)
     anno_dict2 = read_annotation_pickle(pickle_file_train)
     anno_dict = {**anno_dict1, **anno_dict2}
     keys = sorted(list(anno_dict.keys()))
-    for key in keys:
-        print(key)
+    pbar = tqdm(range(len(keys)))
+    for key_index in pbar:
+        key = keys[key_index]
         anno = anno_dict[key]
         bboxes = anno['bboxes']
         object_ids = anno['object_ids']
@@ -379,8 +397,12 @@ def batched_test():
         axis_align_matrix = anno['axis_align_matrix']
         intrinsics = anno['intrinsics']
         image_paths = anno['image_paths']
-        blurry_image_ids_path = anno['blurry_image_ids_path']
-        output_dir = os.path.join(image_paths[0].split('/')[0, 2], 'painted_images')
+
+        dataset, _, scene_id, _ = image_paths[0].split('.')[0].split('/')
+        pbar.set_description("Painting for {} scene {}".format(dataset, scene_id))
+        image_paths = [os.path.join(data_real_dir, path.replace('matterport3d','matterport3d/matterport3d').replace('scannet','ScanNet_v2')) for path in image_paths] # dirty implementation. The real data is not arranged properly.
+        blurry_image_ids_path = os.path.join(out_real_dir, dataset, scene_id, 'blurry_image_ids.json')
+        output_dir = os.path.join(out_real_dir, dataset, scene_id, 'painted_objects')
         paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, image_paths, blurry_image_ids_path, output_dir)
     
 
