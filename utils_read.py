@@ -143,7 +143,7 @@ def read_bboxes_json(path, return_id=False, return_type=False):
 
 def read_annotation_pickle(path):
     """
-        Returns: A dictionary. Format. scene_id : (bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsic, image_paths)
+        Returns: A dictionary. Format. scene_id : (bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, image_paths)
     """
     with open(path, 'rb') as f:
         data = np.load(f, allow_pickle=True)
@@ -153,24 +153,30 @@ def read_annotation_pickle(path):
     object_type_to_int = metainfo['categories']
     object_int_to_type = {v: k for k, v in object_type_to_int.items()}
     datalist = data['data_list']
-    import pdb; pdb.set_trace()
     output_data = {}
     pbar = tqdm(range(len(datalist)))
     for scene_idx in pbar:
         images = datalist[scene_idx]['images']
+        intrinsic = datalist[scene_idx].get('cam2img', None) # a 4x4 matrix
+        missing_intrinsic = False 
+        if intrinsic is None:
+            missing_intrinsic = True # each view has different intrinsic for mp3d 
+        axis_align_matrix = datalist[scene_idx]['axis_align_matrix'] # a 4x4 matrix
         scene_id = images[0]['img_path'].split('/')[-2] # str
-        intrinsic = images[0]['cam2img'] # a 4x4 matrix
-        axis_align_matrix = images[0]['axis_align_matrix'] # a 4x4 matrix
         visible_view_object_dict = {}
         extrinsics_c2w = []
+        intrinsics = []
         image_paths = []
         for image_idx in range(len(images)):
             img_path = images[image_idx]['img_path'] # str
             extrinsic_id = img_path.split('/')[-1].split('.')[0] # str
             cam2global = images[image_idx]['cam2global'] # a 4x4 matrix
+            if missing_intrinsic:
+                intrinsic = images[image_idx]['cam2img']
             visible_instance_ids = images[image_idx]['visible_instance_ids'] # list of int
             visible_view_object_dict[extrinsic_id] = visible_instance_ids
             extrinsics_c2w.append(cam2global)
+            intrinsics.append(intrinsic)
             image_paths.append(img_path)
             
         instances = datalist[scene_idx]['instances']
@@ -187,8 +193,7 @@ def read_annotation_pickle(path):
         bboxes = np.array(bboxes)
         object_ids = np.array(object_ids)
         pbar.set_description(f"Processing scene {scene_id}")
-        # output_data[scene_id] = (bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsic, image_paths)
-        output_data[scene_id] = {'bboxes': bboxes, 'object_ids': object_ids, 'object_types': object_types, 'visible_view_object_dict': visible_view_object_dict, 'extrinsics_c2w': extrinsics_c2w, 'axis_align_matrix': axis_align_matrix, 'intrinsic': intrinsic, 'image_paths': image_paths}
+        output_data[scene_id] = {'bboxes': bboxes, 'object_ids': object_ids, 'object_types': object_types, 'visible_view_object_dict': visible_view_object_dict, 'extrinsics_c2w': extrinsics_c2w, 'axis_align_matrix': axis_align_matrix, 'intrinsics': intrinsics, 'image_paths': image_paths}
     return output_data
         
 if __name__ == '__main__':

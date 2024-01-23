@@ -10,7 +10,7 @@ from utils_3d import check_bboxes_visibility
 from visualization import get_9dof_boxes, draw_box3d_on_img, get_color_map
 
 
-def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsic, image_paths, blurry_image_ids_path, output_dir):
+def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, image_paths, blurry_image_ids_path, output_dir):
     """
         Select the best views for all 3d objects (bboxs) from a set of camera positions (extrinsics) in a scene.
         Then paint the 3d bbox in each view and save the painted images to the output directory.
@@ -20,7 +20,7 @@ def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_
             object_types: a list of object types (str) of shape (N,)
             visible_view_object_dict: a dictionary of visible objects, where each key is a view index (str) and the value is a list of object ids
             extrinsics_c2w: a list of extrinsic matrices, c2w, shape N, 4, 4
-            intrinsic: the intrinsic matrix for the scene, shape 4, 4
+            intrinsics: a list of intrinsic matrices, shape N, 4, 4
             image_paths: a list of image paths of shape (M,)
             blurry_image_ids_path: path to the json file to contain the blurry image ids
             output_dir: path to the directory to save the painted images to
@@ -38,7 +38,7 @@ def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_
     image_dir = os.join(image_paths[0].split(os.sep)[:-1])
     height, width = cv2.imread(image_paths[0]).shape[:2]
     image_size = (width, height)
-    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  extrinsic_ids, intrinsic, color_map, image_size, image_dir, output_dir)
+    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  extrinsic_ids, intrinsics, color_map, image_size, image_dir, output_dir)
 
     
 def paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic_dir, axis_align_matrix_path, intrinsic_path, depth_intrinsic_path, depth_map_dir, image_dir, blurry_image_id_path, output_dir):
@@ -74,18 +74,22 @@ def paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic
     image_size = (width, height)
     _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  extrinsic_ids, intrinsic, color_map, image_size, image_dir, output_dir)
 
-def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  extrinsic_ids, intrinsic, color_map, image_size, image_dir, output_dir):
+def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, extrinsic_ids, intrinsics, color_map, image_size, image_dir, output_dir):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     pbar = tqdm(range(len(bboxes)))
+    if len(np.array(intrinsics).shape) == 2:
+        intrinsics = np.tile(intrinsics, (len(extrinsics_c2w), 1, 1))
     for i in pbar:
         bbox, object_id, object_type = bboxes[i], object_ids[i], object_types[i]
         visible_views = visible_object_view_dict.get(int(object_id), [])
         selected_extrinsics_c2w = []
+        selected_intrinsics = []
         for view_id in visible_views:
             extrinsic_index = extrinsic_ids.index(view_id)
             extrinsic_c2w = extrinsics_c2w[extrinsic_index]
             selected_extrinsics_c2w.append(extrinsic_c2w)
+            selected_intrinsics.append(intrinsics[extrinsic_index])
         if len(selected_extrinsics_c2w) == 0:
             print(f"Object {object_id}: {object_type} not visible in any view, skipping")
             # create a placeholder txt
@@ -94,7 +98,7 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
                 f.write('Object not visible in any view')
             continue
         selected_extrinsics_c2w = np.array(selected_extrinsics_c2w)
-        best_view, best_view_index = get_best_view(bbox, selected_extrinsics_c2w, intrinsic, image_size)
+        best_view, best_view_index = get_best_view(bbox, selected_extrinsics_c2w, selected_intrinsics, image_size)
         best_view_index = extrinsic_ids.index(visible_views[best_view_index])
         img_in_path = os.path.join(image_dir, extrinsic_ids[best_view_index] + '.jpg')
         img_out_path = os.path.join(output_dir, str(object_id).zfill(3) + '_' + object_type + '_' + extrinsic_ids[best_view_index] + '.jpg')
@@ -147,13 +151,13 @@ def get_visible_objects_dict(object_json_path, extrinsic_dir, axis_align_matrix_
         json.dump(visible_objects_dict, f, indent=4)
     return visible_objects_dict
 
-def get_best_view(o3d_bbox, extrinsics_c2w, intrinsic, image_size):
+def get_best_view(o3d_bbox, extrinsics_c2w, intrinsics, image_size):
     """
         Select the best view for an 3d object (bbox) from a set of camera positions (extrinsics)
         Args:
             o3d_bbox: open3d.geometry.OrientedBoundingBox representing the 3d bbox
             extrinsics_c2w: numpy array of shape (n, 4, 4) representing the extrinsics to select from
-            intrinsic: numpy array of shape (4, 4) representing the intrinsics matrix
+            intrinsics: numpy array of shape (n, 4, 4) representing the intrinsics matrix
             image_size: tuple of (width, height) of the image
         Returns:
             best_view: numpy array of shape (4, 4), the extrinsic matrix of the best view
@@ -163,7 +167,9 @@ def get_best_view(o3d_bbox, extrinsics_c2w, intrinsic, image_size):
     corners = np.concatenate([corners, np.ones((8, 1))], axis=1) # shape (8, 4)
     areas = []
     num_insides = []
-    for extrinsic in extrinsics_c2w:
+    for i in range(len(intrinsics)):
+        intrinsic = intrinsics[i]
+        extrinsic = extrinsics_c2w[i]
         projected_corners = intrinsic @ np.linalg.inv(extrinsic) @ corners.T # shape (4, 8)
         if projected_corners[2, :].min() < 0: # check if the object is behind the camera
             num_insides.append(0)
@@ -174,6 +180,7 @@ def get_best_view(o3d_bbox, extrinsics_c2w, intrinsic, image_size):
     num_insides = np.array(num_insides)
     good_indices = np.where(num_insides==np.max(num_insides))[0]
     for i in good_indices:
+        intrinsic = intrinsics[i]
         extrinsic = extrinsics_c2w[i]
         projected_corners = intrinsic @ np.linalg.inv(extrinsic) @ corners.T # shape (4, 8)
         projected_corners = (projected_corners[:2, :] / projected_corners[2, :]).T # shape (8, 2)
@@ -355,8 +362,8 @@ def single_scene_test():
     paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic_dir, axis_align_matrix_path, intrinsic_path, depth_intrinsic_path, depth_map_dir, image_dir, blurry_image_id_path, output_dir) 
     
 def batched_test():
-    pickle_file_val = './example_data/embodiedscan_infos_val_full.pkl'
-    pickle_file_train = './example_data/embodiedscan_infos_train_full.pkl'
+    pickle_file_val = '/mnt/petrelfs/share_data/wangtai/data/full_10_visible/embodiedscan_infos_val_full.pkl'
+    pickle_file_train = '/mnt/petrelfs/share_data/wangtai/data/full_10_visible/embodiedscan_infos_train_full.pkl'
     anno_dict1 = read_annotation_pickle(pickle_file_val)
     anno_dict2 = read_annotation_pickle(pickle_file_train)
     anno_dict = {**anno_dict1, **anno_dict2}
@@ -370,12 +377,13 @@ def batched_test():
         visible_view_object_dict = anno['visible_view_object_dict']
         extrinsics_c2w = anno['extrinsics_c2w']
         axis_align_matrix = anno['axis_align_matrix']
-        intrinsic = anno['intrinsic']
+        intrinsics = anno['intrinsics']
         image_paths = anno['image_paths']
         blurry_image_ids_path = anno['blurry_image_ids_path']
         output_dir = os.path.join(image_paths[0].split('/')[0, 2], 'painted_images')
-        paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsic, image_paths, blurry_image_ids_path, output_dir)
+        paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, image_paths, blurry_image_ids_path, output_dir)
     
 
 if __name__ == '__main__':
-    single_scene_test()
+    # single_scene_test()
+    batched_test()
