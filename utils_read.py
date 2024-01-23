@@ -1,14 +1,15 @@
 import numpy as np
 import json
 import os
+from tqdm import tqdm
 EXCLUDED_OBJECTS = ['wall', 'ceiling', 'floor']
 
 def reverse_multi2multi_mapping(mapping):
     """
         Args:
-            mapping in format key1:[value1, value2], key2:[value2, value3]
+            mapping: dict in format key1:[value1, value2], key2:[value2, value3]
         Returns:
-            mapping in format value1:[key1], value2:[key1, key2], value3:[key2]
+            mapping: dict in format value1:[key1], value2:[key1, key2], value3:[key2]
     """
     output = {}
     possible_values = []
@@ -22,6 +23,16 @@ def reverse_multi2multi_mapping(mapping):
         for value in values:
             output[value].append(key)
     return output
+
+def reverse_121_mapping(mapping):
+    """
+        Reverse a 1-to-1 mapping.
+        Args:
+            mapping: dict in format key1:value1, key2:value2
+        Returns:
+            mapping: dict in format value1:key1, value2:key2
+    """
+    return {v: k for k, v in mapping.items()}
 
 def load_json(path):
     with open(path, 'r') as f:
@@ -130,3 +141,37 @@ def read_bboxes_json(path, return_id=False, return_type=False):
         return boxes, types
     return boxes    
 
+def read_annotation_pickle(path, return_id=False, return_type=False):
+    """
+        Returns:
+            boxes: numpy array of bounding boxes, shape (M, 9): xyz, lwh, ypr
+            ids: (optional) numpy array of obj ids, shape (M,)
+            types: (optional) list of strings, each string is a type of object
+    """
+    with open(path, 'rb') as f:
+        data = np.load(f, allow_pickle=True)
+    # bboxes_pickle = bboxes_pickle.item()
+    # import pdb; pdb.set_trace()
+    metainfo = data['metainfo']
+    object_type_to_int = metainfo['categories']
+    object_int_to_type = {v: k for k, v in object_type_to_int.items()}
+    datalist = data['data_list']
+    pbar = tqdm(range(len(datalist)))
+    for scene_idx in pbar:
+        images = datalist[scene_idx]['images']
+        scene_id = images[0]['img_path'].split('/')[-2] # str
+        for image_idx in range(len(images)):
+            img_path = images[image_idx]['img_path'] # str
+            cam2global = images[image_idx]['cam2global'] # a 4x4 matrix
+            visible_instance_ids = images[image_idx]['visible_instance_ids'] # list of int
+        instances = datalist[scene_idx]['instances']
+        for object_idx in range(len(instances)):
+            bbox_3d = instances[object_idx]['bbox_3d'] # list of 9 values
+            bbox_label_3d = instances[object_idx]['bbox_label_3d'] # int
+            bbox_id = instances[object_idx]['bbox_id'] # int
+        pbar.set_description(f"Processing scene {scene_id}")
+    return data
+        
+if __name__ == '__main__':
+    pickle_file = './example_data/embodiedscan_infos_val_full.pkl'
+    read_annotation_pickle(pickle_file)
