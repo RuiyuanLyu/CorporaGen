@@ -5,12 +5,43 @@ import json
 from tqdm import tqdm
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon
-from utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_bboxes_json, load_json, reverse_multi2multi_mapping
+from utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_bboxes_json, load_json, reverse_multi2multi_mapping, read_annotation_pickle
 from utils_3d import check_bboxes_visibility
 from visualization import get_9dof_boxes, draw_box3d_on_img, get_color_map
 
 
-def paint_object_pictures(object_json_path, visibility_json_path, extrinsic_dir, axis_align_matrix_path, intrinsic_path, depth_intrinsic_path, depth_map_dir, image_dir, blurry_image_id_path, output_dir):
+def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsic, image_paths, blurry_image_ids_path, output_dir):
+    """
+        Select the best views for all 3d objects (bboxs) from a set of camera positions (extrinsics) in a scene.
+        Then paint the 3d bbox in each view and save the painted images to the output directory.
+        Args:
+            bboxes: a numpy array of shape (N, 9)
+            object_ids: a numpy array of shape (N,) of ints
+            object_types: a list of object types (str) of shape (N,)
+            visible_view_object_dict: a dictionary of visible objects, where each key is a view index (str) and the value is a list of object ids
+            extrinsics_c2w: a list of extrinsic matrices, c2w, shape N, 4, 4
+            intrinsic: the intrinsic matrix for the scene, shape 4, 4
+            image_paths: a list of image paths of shape (M,)
+            blurry_image_ids_path: path to the json file to contain the blurry image ids
+            output_dir: path to the directory to save the painted images to
+        Returns: None
+    """
+    bboxes = get_9dof_boxes(np.array(bboxes))
+    blurry_image_ids = get_blurry_image_ids(image_paths, save_path=blurry_image_ids_path, threshold=200, skip_existing=True)
+    for image_id in blurry_image_ids:
+        if image_id in visible_view_object_dict:
+            visible_view_object_dict.pop(image_id)
+    visible_object_view_dict = reverse_multi2multi_mapping(visible_view_object_dict)
+    extrinsic_ids = [os.path.basename(path).split('.')[0] for path in image_paths]
+    extrinsics_c2w = np.matmul(axis_align_matrix, extrinsics_c2w)
+    color_map = get_color_map()
+    image_dir = os.join(image_paths[0].split(os.sep)[:-1])
+    height, width = cv2.imread(image_paths[0]).shape[:2]
+    image_size = (width, height)
+    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  extrinsic_ids, intrinsic, color_map, image_size, image_dir, output_dir)
+
+    
+def paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic_dir, axis_align_matrix_path, intrinsic_path, depth_intrinsic_path, depth_map_dir, image_dir, blurry_image_id_path, output_dir):
     """
         Select the best views for all 3d objects (bboxs) from a set of camera positions (extrinsics) in a scene.
         Then paint the 3d bbox in each view and save the painted images to the output directory.
@@ -24,10 +55,11 @@ def paint_object_pictures(object_json_path, visibility_json_path, extrinsic_dir,
             output_dir: path to the directory to save the painted images to
         Returns: None
     """
+    # Preparings
     bboxes, object_ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
     bboxes = get_9dof_boxes(bboxes, 'xyz', (0, 0, 192)) # convert to o3d format
     visible_view_object_dict = get_visible_objects_dict(object_json_path, extrinsic_dir, axis_align_matrix_path, depth_intrinsic_path, depth_map_dir, visibility_json_path, skip_existing=True)
-    blurry_image_ids = get_blurry_image_ids(image_dir, save_path=blurry_image_id_path, threshold=200, skip_existing=True) # image ids are the same as view/extrinsic ids
+    blurry_image_ids = get_blurry_image_ids_dir(image_dir, save_path=blurry_image_id_path, threshold=200, skip_existing=True) # image ids are the same as view/extrinsic ids
     for image_id in blurry_image_ids:
         if image_id in visible_view_object_dict:
             visible_view_object_dict.pop(image_id)
@@ -40,6 +72,11 @@ def paint_object_pictures(object_json_path, visibility_json_path, extrinsic_dir,
     sample_img_path = os.path.join(image_dir, extrinsic_ids[0] + '.jpg')
     height, width = cv2.imread(sample_img_path).shape[:2]
     image_size = (width, height)
+    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  extrinsic_ids, intrinsic, color_map, image_size, image_dir, output_dir)
+
+def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  extrinsic_ids, intrinsic, color_map, image_size, image_dir, output_dir):
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     pbar = tqdm(range(len(bboxes)))
     for i in pbar:
         bbox, object_id, object_type = bboxes[i], object_ids[i], object_types[i]
@@ -71,6 +108,7 @@ def paint_object_pictures(object_json_path, visibility_json_path, extrinsic_dir,
         painted_img, _ = draw_box3d_on_img(img, bbox, color, label, best_view, intrinsic, ignore_outside=False)
         cv2.imwrite(img_out_path, painted_img)
         pbar.set_description(f"Object {object_id}: {object_type} painted in view {extrinsic_ids[best_view_index]} and saved.")
+
 
 def get_visible_objects_dict(object_json_path, extrinsic_dir, axis_align_matrix_path, depth_intrinsic_path, depth_map_dir, output_path, skip_existing=True):
     """
@@ -188,11 +226,11 @@ def compute_visible_area(points, image_size):
     intersection = poly1.intersection(poly2)
     return intersection.area
 
-def get_blurry_image_ids(image_dir, save_path=None, threshold=200, skip_existing=True, save_variance_path=None):
+def get_blurry_image_ids(image_paths, save_path=None, threshold=200, skip_existing=True, save_variance_path=None):
     """
         Returns a list of image ids that are blurry.
         Args:
-            image_dir: path to the directory containing the images
+            image_paths: a list of image paths
             save_path: path to the output json file to save the blurry image ids
             threshold: the threshold for the variance of the laplacian to consider an image blurry
             save_variance_path: path to the output json file to save the variance of each image
@@ -202,20 +240,17 @@ def get_blurry_image_ids(image_dir, save_path=None, threshold=200, skip_existing
     if os.path.exists(save_path) and skip_existing:
         print(f"Skipping existing file {save_path}")
         return load_json(save_path)
-    blurry_ids = []
     image_ids = []
-    vars = []
     paths = []
-    for file_name in os.listdir(image_dir):
-        if file_name.endswith('.jpg'):
-            image_id = file_name[:-4]
-            image_path = os.path.join(image_dir, file_name)
-            paths.append(image_path)
-            image_ids.append(image_id)
-    # sort the images by id
+    for image_path in image_paths:
+        image_id = os.path.basename(image_path)[:-4]
+        image_ids.append(image_id)
+        paths.append(image_path)
     image_indices = np.argsort([int(i) for i in image_ids])
     image_ids = [image_ids[i] for i in image_indices]
     paths = [paths[i] for i in image_indices]
+    blurry_ids = []
+    vars = []
     variance_dict = {}
     if save_variance_path is not None:
         if os.path.exists(save_variance_path):
@@ -252,6 +287,29 @@ def get_blurry_image_ids(image_dir, save_path=None, threshold=200, skip_existing
             json.dump(variance_dict, f, indent=4)
     return blurry_ids
 
+def get_blurry_image_ids_dir(image_dir, save_path=None, threshold=200, skip_existing=True, save_variance_path=None):
+    """
+        Returns a list of image ids that are blurry.
+        Args:
+            image_dir: path to the directory containing the images
+            save_path: path to the output json file to save the blurry image ids
+            threshold: the threshold for the variance of the laplacian to consider an image blurry
+            save_variance_path: path to the output json file to save the variance of each image
+        Returns:
+            blurry_ids: a list of image ids that are blurry
+    """
+    if os.path.exists(save_path) and skip_existing:
+        print(f"Skipping existing file {save_path}")
+        return load_json(save_path)
+    paths = []
+    for file_name in os.listdir(image_dir):
+        if file_name.endswith('.jpg'):
+            image_id = file_name[:-4]
+            image_path = os.path.join(image_dir, file_name)
+            paths.append(image_path)
+    blurry_ids = get_blurry_image_ids(paths, save_path=save_path, threshold=threshold, skip_existing=False, save_variance_path=save_variance_path)
+    return blurry_ids
+
 def is_blurry(image, threshold=100, return_variance=False):
     """
         Returns True if the image is blurry, False otherwise.
@@ -280,8 +338,7 @@ def get_local_maxima_indices(data, window_size=3):
             maxima_indices.append(i)
     return maxima_indices
 
-
-if __name__ == '__main__':
+def single_scene_test():
     object_json_path = f"./example_data/label/main_MDJH13.json" # need to exist
     visibility_json_path = f"./example_data/anno_lang/visible_objects.json" # can be generated by this script
     extrinsic_dir = "./example_data/posed_images" # need to exist
@@ -293,6 +350,32 @@ if __name__ == '__main__':
     output_dir = "./example_data/anno_lang/painted_images" # need to exist
     depth_intrinsic_path = f"./example_data/posed_images/depth_intrinsic.txt" # need to exist
     depth_map_dir = "./example_data/posed_images" # need to exist
-    get_blurry_image_ids(image_dir, save_path=blurry_image_id_path, threshold=200, save_variance_path=save_variance_path, skip_existing=False)
+    get_blurry_image_ids_dir(image_dir, save_path=blurry_image_id_path, threshold=200, save_variance_path=save_variance_path, skip_existing=False)
     get_visible_objects_dict(object_json_path, extrinsic_dir, axis_align_matrix_path, depth_intrinsic_path, depth_map_dir, visibility_json_path, skip_existing=False)
-    paint_object_pictures(object_json_path, visibility_json_path, extrinsic_dir, axis_align_matrix_path, intrinsic_path, depth_intrinsic_path, depth_map_dir, image_dir, blurry_image_id_path, output_dir) 
+    paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic_dir, axis_align_matrix_path, intrinsic_path, depth_intrinsic_path, depth_map_dir, image_dir, blurry_image_id_path, output_dir) 
+    
+def batched_test():
+    pickle_file_val = './example_data/embodiedscan_infos_val_full.pkl'
+    pickle_file_train = './example_data/embodiedscan_infos_train_full.pkl'
+    anno_dict1 = read_annotation_pickle(pickle_file_val)
+    anno_dict2 = read_annotation_pickle(pickle_file_train)
+    anno_dict = {**anno_dict1, **anno_dict2}
+    keys = sorted(list(anno_dict.keys()))
+    for key in keys:
+        print(key)
+        anno = anno_dict[key]
+        bboxes = anno['bboxes']
+        object_ids = anno['object_ids']
+        object_types = anno['object_types']
+        visible_view_object_dict = anno['visible_view_object_dict']
+        extrinsics_c2w = anno['extrinsics_c2w']
+        axis_align_matrix = anno['axis_align_matrix']
+        intrinsic = anno['intrinsic']
+        image_paths = anno['image_paths']
+        blurry_image_ids_path = anno['blurry_image_ids_path']
+        output_dir = os.path.join(image_paths[0].split('/')[0, 2], 'painted_images')
+        paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsic, image_paths, blurry_image_ids_path, output_dir)
+    
+
+if __name__ == '__main__':
+    single_scene_test()
