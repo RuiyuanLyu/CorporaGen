@@ -1,28 +1,38 @@
 import numpy as np
 
 
-def interpolate_bbox_points(bbox, granularity=5):
+def interpolate_bbox_points(bbox, granularity=0.2, return_size=False):
     """
         Get the surface points of a 3D bounding box.
         Args:
             bbox: an open3d.geometry.OrientedBoundingBox object.
+            granularity: the roughly desired distance between two adjacent surface points.
+            return_size: if True, return m1, m2, m3 as well.
         Returns:
             M x 3 numpy array of Surface points of the bounding box
-            M = gran^3 - (gran-2)^3 (for a cube with gran=5)
-            8 * 1 for corners, 12 * (gran-2) for edges, 6 * (gran-2)^2 for faces.
+            (m1, m2, m3): if return_size is True, return the number for each dimension.)
     """
-    assert granularity >= 2
-    coords = np.array(np.meshgrid(np.arange(granularity), np.arange(granularity), np.arange(granularity))).T.reshape(-1, 3)
-    surface_points = coords[np.any((coords == 0) | (coords == granularity-1), axis=1)]
-    surface_points /= granularity-1
     corners = np.array(bbox.get_box_points())
     v1, v2, v3 = corners[1]-corners[0], corners[2]-corners[0], corners[3]-corners[0]
+    l1, l2, l3 = np.linalg.norm(v1), np.linalg.norm(v2), np.linalg.norm(v3)
     assert np.allclose(v1.dot(v2), 0) and np.allclose(v2.dot(v3), 0) and np.allclose(v3.dot(v1), 0)
     transformation_matrix = np.column_stack((v1, v2, v3))
+    m1, m2, m3 = l1/granularity, l2/granularity, l3/granularity
+    m1, m2, m3 = int(np.ceil(m1)), int(np.ceil(m2)), int(np.ceil(m3))
+    coords = np.array(np.meshgrid(np.arange(m1+1), np.arange(m2+1), np.arange(m3+1))).T.reshape(-1, 3)
+    condition = (coords[:, 0] == 0) | (coords[:, 0] == m1 - 1) | \
+                (coords[:, 1] == 0) | (coords[:, 1] == m2 - 1) | \
+                (coords[:, 2] == 0) | (coords[:, 2] == m3 - 1)
+    surface_points = coords[condition].astype('float32') # keep only the points on the surface
+    surface_points /= np.array([m1, m2, m3])
     mapped_coords = surface_points @ transformation_matrix
-    return mapped_coords.reshape(-1, 3)
+    mapped_coords = mapped_coords.reshape(-1, 3) + corners[0]
+    if return_size:
+        return mapped_coords, (m1, m2, m3)
+    return mapped_coords
+
      
-def check_bboxes_visibility(bboxes, depth_map, depth_intrinsic, extrinsic_w2c, granularity=2):
+def check_bboxes_visibility(bboxes, depth_map, depth_intrinsic, extrinsic_w2c, corners_only=True, granularity=0.2):
     """
         Check the visibility of 3D bounding boxes in a depth map.
         Args:
@@ -30,20 +40,34 @@ def check_bboxes_visibility(bboxes, depth_map, depth_intrinsic, extrinsic_w2c, g
             depth_map: depth map, numpy array of shape (h, w).
             depth_intrinsic: numpy array of shape (4, 4).
             extrinsic_w2c: numpy array of shape (4, 4).
+            corners_only: if True, only check the corners of the bounding boxes.
+            granularity: the roughly desired distance between two adjacent surface points.
         Returns:
             Boolean array of shape (N, ) indicating the visibility of each bounding box.
     """
-    num_points_per_bbox = granularity * granularity * granularity - (granularity-2) * (granularity-2) * (granularity-2)
-    if granularity == 2:
+    if corners_only:
         points = [box.get_box_points() for box in bboxes]
+        num_points_per_bbox = [8] * len(bboxes)
         points = np.concatenate(points, axis=0) # shape (N*8, 3)
     else:
-        points = [interpolate_bbox_points(box, granularity=granularity) for box in bboxes]
-        points = np.concatenate(points, axis=0) # shape (N*M, 3)
+        points, num_points_per_bbox, num_points_to_view = [], [], []
+        for bbox in bboxes:
+            interpolated_points, (m1, m2, m3) = interpolate_bbox_points(bbox, granularity=granularity, return_size=True)
+            num_points_per_bbox.append(interpolated_points.shape[0])
+            points.append(interpolated_points)
+            num_points_to_view.append(max(m1*m2, m1*m3, m2*m3))
+        points = np.concatenate(points, axis=0) # shape (\sum Mi, 3)
+        num_points_to_view = np.array(num_points_to_view)
+    num_points_per_bbox = np.array(num_points_per_bbox)
     visibles = check_point_visibility(points, depth_map, depth_intrinsic, extrinsic_w2c)
-    visibles = visibles.reshape(len(bboxes), num_points_per_bbox)
-    visibles = np.sum(visibles, axis=1)
-    visibles = visibles/num_points_per_bbox > 0.3 # threshold for visibility
+    num_visibles = []
+    left = 0
+    for i, num_points in enumerate(num_points_per_bbox):
+        slice_i = visibles[left:left+num_points]
+        num_visibles.append(np.sum(slice_i))
+        left += num_points
+    num_visibles = np.array(num_visibles)
+    visibles = num_visibles/num_points_to_view >= 1 # threshold for visibility
     return visibles
 
 def check_point_visibility(points, depth_map, depth_intrinsic, extrinsic_w2c):

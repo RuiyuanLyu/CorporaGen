@@ -88,7 +88,7 @@ def get_visible_objects_dict(object_json_path, extrinsic_dir, axis_align_matrix_
     if os.path.exists(output_path) and skip_existing:
         print(f"Skipping existing file {output_path}")
         return load_json(output_path)
-    bboxes, ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
+    bboxes, object_ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
     bboxes = get_9dof_boxes(bboxes, 'xyz', (0, 0, 192)) # convert to o3d format
     extrinsics_c2w, extrinsic_ids = read_extrinsic_dir(extrinsic_dir) # c2w', shape N, 4, 4
     axis_align_matrix = read_extrinsic(axis_align_matrix_path) # w'2w, shape 4, 4
@@ -101,8 +101,8 @@ def get_visible_objects_dict(object_json_path, extrinsic_dir, axis_align_matrix_
         view_index = extrinsic_ids[i]
         depth_path = os.path.join(depth_map_dir, view_index + '.png')
         depth_map = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED) / 1000.0 # shape (height, width)
-        visibles = check_bboxes_visibility(bboxes, depth_map, depth_intrinsic, np.linalg.inv(extrinsic_c2w)) # bool array of shape N
-        visible_ids = ids[visibles]
+        visibles = check_bboxes_visibility(bboxes, depth_map, depth_intrinsic, np.linalg.inv(extrinsic_c2w), corners_only=False, granularity=0.1)
+        visible_ids = object_ids[visibles]
         visible_objects_dict[view_index] = visible_ids.tolist()
         pbar.set_description(f"View {view_index} has {str(len(visible_ids)).zfill(2)} visible objects")
     with open(output_path, 'w') as f:
@@ -267,7 +267,7 @@ def is_blurry(image, threshold=100, return_variance=False):
         return variance < threshold, variance
     return variance < threshold
 
-def get_local_maxima_indices(data, window_size=5):
+def get_local_maxima_indices(data, window_size=3):
     """
         Returns the local maxima indices of a 1D array.
     """
@@ -293,6 +293,6 @@ if __name__ == '__main__':
     output_dir = "./example_data/anno_lang/painted_images" # need to exist
     depth_intrinsic_path = f"./example_data/posed_images/depth_intrinsic.txt" # need to exist
     depth_map_dir = "./example_data/posed_images" # need to exist
-    get_blurry_image_ids(image_dir, save_path=blurry_image_id_path, threshold=100, save_variance_path=save_variance_path, skip_existing=False)
-    get_visible_objects_dict(object_json_path, extrinsic_dir, axis_align_matrix_path, depth_intrinsic_path, depth_map_dir, visibility_json_path, skip_existing=True)
+    get_blurry_image_ids(image_dir, save_path=blurry_image_id_path, threshold=200, save_variance_path=save_variance_path, skip_existing=False)
+    get_visible_objects_dict(object_json_path, extrinsic_dir, axis_align_matrix_path, depth_intrinsic_path, depth_map_dir, visibility_json_path, skip_existing=False)
     paint_object_pictures(object_json_path, visibility_json_path, extrinsic_dir, axis_align_matrix_path, intrinsic_path, depth_intrinsic_path, depth_map_dir, image_dir, blurry_image_id_path, output_dir) 
