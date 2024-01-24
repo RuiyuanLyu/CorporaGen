@@ -145,7 +145,7 @@ def visualize_object_types_on_sam_image(sam_img_path, sam_json_path, object_json
     print("Texted image saved to  %s" % out_sam_img_path)
 
 
-def draw_box3d_on_img(img, box, color, label, extrinsic, intrinsic, alpha=None, occupency_map=None, ignore_outside=True):
+def draw_box3d_on_img(img, box, color, label, extrinsic_c2w, intrinsic, alpha=None, occupency_map=None, ignore_outside=True):
     """
         Draw a 3D box on an image.
         Args:
@@ -153,7 +153,7 @@ def draw_box3d_on_img(img, box, color, label, extrinsic, intrinsic, alpha=None, 
             box (open3d.geometry.OrientedBoundingBox): A 3D box.
             color (tuple): RGB color of the box.
             label (str): Label of the box.
-            extrinsic (numpy.ndarray): 4x4 extrinsic, camera to world.
+            extrinsic_c2w (numpy.ndarray): 4x4 extrinsic, camera to world.
             intrinsic (numpy.ndarray): 4x4 (extended) intrinsic.
             alpha (float): Alpha value of the drawn faces.
             occupency_map (numpy.ndarray): boolean array, occupency map of the image.
@@ -161,19 +161,19 @@ def draw_box3d_on_img(img, box, color, label, extrinsic, intrinsic, alpha=None, 
             img (numpy.ndarray): Updated image with the box drawn on it.
             occupency_map (numpy.ndarray): updated occupency map 
     """
-    extrinsic_w2c = np.linalg.inv(extrinsic)
+    extrinsic = np.linalg.inv(extrinsic_c2w)
     h, w, _ = img.shape
     x, y = np.meshgrid(np.arange(w), np.arange(h))
     x, y = x.flatten(), y.flatten()
     pixel_points = np.vstack((x, y)).T
 
-    camera_pos_in_world = (extrinsic @ np.array([0, 0, 0, 1]).reshape(4,1)).transpose()
+    camera_pos_in_world = (extrinsic_c2w @ np.array([0, 0, 0, 1]).reshape(4,1)).transpose()
     if is_inside_box(box, camera_pos_in_world):
         return img, occupency_map
     
     if ignore_outside:
         center = box.get_center()
-        center_2d = intrinsic @ extrinsic_w2c @ np.array([center[0], center[1], center[2], 1]).reshape(4,1)
+        center_2d = intrinsic @ extrinsic @ np.array([center[0], center[1], center[2], 1]).reshape(4,1)
         center_2d = center_2d[:2] / center_2d[2]
         if (center_2d[0] < 0 or center_2d[0] > w or center_2d[1] < 0 or center_2d[1] > h):
             return img, occupency_map
@@ -181,7 +181,7 @@ def draw_box3d_on_img(img, box, color, label, extrinsic, intrinsic, alpha=None, 
     corners = np.asarray(box.get_box_points()) # shape (8, 3)
     corners = corners[[0,1,7,2,3,6,4,5]] # shape (8, 3)
     corners = np.concatenate([corners, np.ones((corners.shape[0], 1))], axis=1) # shape (8, 4)
-    corners_img = intrinsic @ extrinsic_w2c @ corners.transpose() # shape (4, 8)
+    corners_img = intrinsic @ extrinsic @ corners.transpose() # shape (4, 8)
     corners_img = corners_img.transpose() # shape (8, 4)
     if (corners_img[:, 2] < EPS).any():
         return img, occupency_map
@@ -216,6 +216,54 @@ def draw_box3d_on_img(img, box, color, label, extrinsic, intrinsic, alpha=None, 
         occupency_map = draw_text(img, label, pos=textpos, bound = (w, h), text_color=(255, 255, 255), text_color_bg=color, occupency_map=occupency_map)
     return img, occupency_map
 
+def crop_box_from_img(img, box, extrinsic_c2w, intrinsic, ignore_outside=True):
+    """
+        Crop the area of corresponding to a 3D box from an image.
+        Args:
+            img (numpy.ndarray): shape (h, w, 3)
+            box (open3d.geometry.OrientedBoundingBox): A 3D box.
+            extrinsic_c2w (numpy.ndarray): 4x4 extrinsic, camera to world.
+            intrinsic (numpy.ndarray): 4x4 (extended) intrinsic.
+        Returns:
+            img (numpy.ndarray): Updated image with the box drawn on it.
+    """
+
+    extrinsic = np.linalg.inv(extrinsic_c2w)
+    h, w, _ = img.shape
+    x, y = np.meshgrid(np.arange(w), np.arange(h))
+    x, y = x.flatten(), y.flatten()
+    pixel_points = np.vstack((x, y)).T
+
+    camera_pos_in_world = (extrinsic_c2w @ np.array([0, 0, 0, 1]).reshape(4,1)).transpose()
+    if is_inside_box(box, camera_pos_in_world):
+        return img
+    
+    if ignore_outside:
+        center = box.get_center()
+        center_2d = intrinsic @ extrinsic @ np.array([center[0], center[1], center[2], 1]).reshape(4,1)
+        center_2d = center_2d[:2] / center_2d[2]
+        if (center_2d[0] < 0 or center_2d[0] > w or center_2d[1] < 0 or center_2d[1] > h):
+            return img # outside the image
+
+    corners = np.asarray(box.get_box_points()) # shape (8, 3)
+    corners = corners[[0,1,7,2,3,6,4,5]] # shape (8, 3)
+    corners = np.concatenate([corners, np.ones((corners.shape[0], 1))], axis=1) # shape (8, 4)
+    corners_img = intrinsic @ extrinsic @ corners.transpose() # shape (4, 8)
+    corners_img = corners_img.transpose() # shape (8, 4)
+    if (corners_img[:, 2] < EPS).any():
+        return img # behind the camera
+    corners_pixel = np.zeros((corners_img.shape[0], 2)) # shape (8, 2)
+    x_min, y_min = np.min(corners_pixel, axis=0)
+    x_max, y_max = np.max(corners_pixel, axis=0)
+    x_size, y_size = x_max - x_min, y_max - y_min
+    x_center, y_center = (x_min + x_max) / 2, (y_min + y_max) / 2
+    # the cropped image is larger than the tight one by 50%, to provide more context
+    x_min, y_min = int(x_center - x_size * 0.75), int(y_center - y_size * 0.75) 
+    x_max, y_max = int(x_center + x_size * 0.75), int(y_center + y_size * 0.75)
+    x_min, y_min = max(x_min, 0), max(y_min, 0)
+    x_max, y_max = min(x_max, w), min(y_max, h)
+    img = img[y_min:y_max, x_min:x_max]
+    return img
 
 def is_inside_box(box, point):
     """
