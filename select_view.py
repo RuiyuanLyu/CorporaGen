@@ -86,7 +86,7 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
         files_and_folders = os.listdir(output_dir)
         files = [f for f in files_and_folders if os.path.isfile(os.path.join(output_dir, f))]
         num_files = len(files)
-        if num_files > len(bboxes):
+        if num_files >= len(bboxes):
             return
     shutil.rmtree(output_dir)
     os.makedirs(output_dir)
