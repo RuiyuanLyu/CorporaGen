@@ -185,9 +185,12 @@ def read_annotation_pickle(path):
             bbox_3d = instances[object_idx]['bbox_3d'] # list of 9 values
             bbox_label_3d = instances[object_idx]['bbox_label_3d'] # int
             bbox_id = instances[object_idx]['bbox_id'] # int
+            object_type = object_int_to_type[bbox_label_3d]
+            if object_type in EXCLUDED_OBJECTS:
+                continue
+            object_types.append(object_type)
             bboxes.append(bbox_3d)
             object_ids.append(bbox_id)
-            object_types.append(object_int_to_type[bbox_label_3d])
         bboxes = np.array(bboxes)
         object_ids = np.array(object_ids)
         pbar.set_description(f"Processing scene {scene_id}")

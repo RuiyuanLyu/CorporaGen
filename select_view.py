@@ -81,7 +81,7 @@ def paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic
     image_size = (width, height)
     _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  extrinsic_ids, intrinsic, color_map, image_size, image_dir, output_dir, output_type=output_type)
 
-def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, extrinsic_ids, intrinsics, color_map, image_size, image_dir, output_dir, skip_existing=True, output_type="paint"):
+def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, extrinsic_ids, intrinsics, color_map, image_size, image_dir, output_dir, skip_existing=False, output_type="paint"):
     assert output_type in ["paint", "crop"], "unsupported output type {}".format(output_type)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -89,7 +89,7 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
         files_and_folders = os.listdir(output_dir)
         files = [f for f in files_and_folders if os.path.isfile(os.path.join(output_dir, f))]
         num_files = len(files)
-        if num_files > len(bboxes):
+        if num_files >= len(bboxes):
             return
     shutil.rmtree(output_dir)
     os.makedirs(output_dir)
@@ -112,10 +112,15 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
             # create a placeholder txt
             file_name = str(object_id).zfill(3) + '_' + object_type + '_placeholder.txt'
             with open(os.path.join(output_dir, file_name), 'w') as f:
-                f.write('Object not visible in any view')
+                f.write('Object not visible in any view.')
             continue
         selected_extrinsics_c2w = np.array(selected_extrinsics_c2w)
         best_view, best_view_index = get_best_view(bbox, selected_extrinsics_c2w, selected_intrinsics, image_size)
+        if best_view is None:
+            file_name = str(object_id).zfill(3) + '_' + object_type + '_placeholder.txt'
+            with open(os.path.join(output_dir, file_name), 'w') as f:
+                f.write('Object not visible in any view.')
+            continue
         best_view_index = extrinsic_ids.index(visible_views[best_view_index])
         intrinsic = intrinsics[best_view_index]
         img_in_path = os.path.join(image_dir, extrinsic_ids[best_view_index] + '.jpg')
@@ -165,13 +170,13 @@ def get_visible_objects_dict(object_json_path, extrinsic_dir, axis_align_matrix_
     pbar = tqdm(range(len(extrinsics_c2w)))
     for i in pbar:
         extrinsic_c2w = extrinsics_c2w[i]
-        view_index = extrinsic_ids[i]
-        depth_path = os.path.join(depth_map_dir, view_index + '.png')
+        view_id = extrinsic_ids[i]
+        depth_path = os.path.join(depth_map_dir, view_id + '.png')
         depth_map = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED) / 1000.0 # shape (height, width)
         visibles = check_bboxes_visibility(bboxes, depth_map, depth_intrinsic, np.linalg.inv(extrinsic_c2w), corners_only=False, granularity=0.1)
         visible_ids = object_ids[visibles]
-        visible_objects_dict[view_index] = visible_ids.tolist()
-        pbar.set_description(f"View {view_index} has {str(len(visible_ids)).zfill(2)} visible objects")
+        visible_objects_dict[view_id] = visible_ids.tolist()
+        pbar.set_description(f"View {view_id} has {str(len(visible_ids)).zfill(2)} visible objects")
     with open(output_path, 'w') as f:
         json.dump(visible_objects_dict, f, indent=4)
     return visible_objects_dict
@@ -194,8 +199,8 @@ def get_best_view(o3d_bbox, extrinsics_c2w, intrinsics, image_size):
     num_insides = []
     for i in range(len(intrinsics)):
         intrinsic = intrinsics[i]
-        extrinsic = extrinsics_c2w[i]
-        projected_corners = intrinsic @ np.linalg.inv(extrinsic) @ corners.T # shape (4, 8)
+        extrinsic_c2w = extrinsics_c2w[i]
+        projected_corners = intrinsic @ np.linalg.inv(extrinsic_c2w) @ corners.T # shape (4, 8)
         if projected_corners[2, :].min() < 0: # check if the object is behind the camera
             num_insides.append(0)
             continue
@@ -203,11 +208,13 @@ def get_best_view(o3d_bbox, extrinsics_c2w, intrinsics, image_size):
         num_inside = np.sum(is_inside_2d_box(projected_corners, image_size))
         num_insides.append(num_inside)
     num_insides = np.array(num_insides)
+    if np.max(num_insides) == 0:
+        return None, None # object is not visible in any view
     good_indices = np.where(num_insides==np.max(num_insides))[0]
     for i in good_indices:
         intrinsic = intrinsics[i]
-        extrinsic = extrinsics_c2w[i]
-        projected_corners = intrinsic @ np.linalg.inv(extrinsic) @ corners.T # shape (4, 8)
+        extrinsic_c2w = extrinsics_c2w[i]
+        projected_corners = intrinsic @ np.linalg.inv(extrinsic_c2w) @ corners.T # shape (4, 8)
         projected_corners = (projected_corners[:2, :] / projected_corners[2, :]).T # shape (8, 2)
         areas.append(compute_visible_area(projected_corners, image_size))
     areas = np.array(areas)
@@ -256,9 +263,12 @@ def compute_visible_area(points, image_size):
     poly1 = Polygon(get_convex_hull_points(points))
     poly2 = Polygon(image_coords)
     intersection = poly1.intersection(poly2)
-    return intersection.area
+    area = intersection.area
+    if area > image_size[0] * image_size[1] / 2:
+        return 0 # discard those are too large
+    return area
 
-def get_blurry_image_ids(image_paths, save_path=None, threshold=200, skip_existing=True, save_variance_path=None):
+def get_blurry_image_ids(image_paths, save_path=None, threshold=200, skip_existing=False, save_variance_path=None):
     """
         Returns a list of image ids that are blurry.
         Args:
@@ -371,7 +381,7 @@ def get_local_maxima_indices(data, window_size=3):
             maxima_indices.append(i)
     return maxima_indices
 
-def single_scene_test():
+def single_scene_test_local():
     object_json_path = f"./example_data/label/main_MDJH13.json" # need to exist
     visibility_json_path = f"./example_data/anno_lang/visible_objects.json" # can be generated by this script
     extrinsic_dir = "./example_data/posed_images" # need to exist
@@ -383,11 +393,47 @@ def single_scene_test():
     output_dir = "./example_data/anno_lang/painted_images" # need to exist
     depth_intrinsic_path = f"./example_data/posed_images/depth_intrinsic.txt" # need to exist
     depth_map_dir = "./example_data/posed_images" # need to exist
-    get_blurry_image_ids_dir(image_dir, save_path=blurry_image_id_path, threshold=200, save_variance_path=save_variance_path, skip_existing=False)
+    get_blurry_image_ids_dir(image_dir, save_path=blurry_image_id_path, threshold=150, save_variance_path=save_variance_path, skip_existing=False)
     get_visible_objects_dict(object_json_path, extrinsic_dir, axis_align_matrix_path, depth_intrinsic_path, depth_map_dir, visibility_json_path, skip_existing=False)
     paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic_dir, axis_align_matrix_path, intrinsic_path, depth_intrinsic_path, depth_map_dir, image_dir, blurry_image_id_path, output_dir) 
+
+def single_scene_test_by_pickle():
+    pickle_file_val = './example_data/embodiedscan_infos_val_full.pkl'
+    pickle_file_train = './example_data/embodiedscan_infos_train_full.pkl'
+    anno_dict1 = read_annotation_pickle(pickle_file_val)
+    anno_dict2 = read_annotation_pickle(pickle_file_train)
+    anno_dict = {**anno_dict1, **anno_dict2}
+    keys = sorted(list(anno_dict.keys()))
+    for key in keys:
+        anno = anno_dict[key]
+        bboxes = anno['bboxes']
+        object_ids = anno['object_ids']
+        object_types = anno['object_types']
+        visible_view_object_dict = anno['visible_view_object_dict']
+        extrinsics_c2w = anno['extrinsics_c2w']
+        axis_align_matrix = anno['axis_align_matrix']
+        intrinsics = anno['intrinsics']
+        image_paths = anno['image_paths']
+
+        dataset, _, scene_id, _ = image_paths[0].split('.')[0].split('/')
+        if dataset != 'scannet':
+            continue
+        if scene_id != 'scene0000_00':
+            continue
+        print(f"Processing {dataset} {scene_id}")
+        real_image_path = './example_data/posed_images'
+        real_image_paths = []
+        for image_path in image_paths:
+            image_id = os.path.basename(image_path)[:-4]
+            real_image_paths.append(os.path.join(real_image_path, image_id + '.jpg'))
+        print(f"Real image path example: {real_image_paths[0]}")
+        blurry_image_ids_path = './example_data/anno_lang/blurry_image_ids.json'
+        output_dir = './example_data/anno_lang/painted_images'
+        paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, real_image_paths, blurry_image_ids_path, output_dir, output_type="paint")
+        # output_dir = './example_data/anno_lang/cropped_images'
+        # paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, real_image_paths, blurry_image_ids_path, output_dir, output_type="crop")
     
-def batched_test():
+def select_for_all_scenes():
     pickle_file_val = '/mnt/petrelfs/share_data/wangtai/data/full_10_visible/embodiedscan_infos_val_full.pkl'
     pickle_file_train = '/mnt/petrelfs/share_data/wangtai/data/full_10_visible/embodiedscan_infos_train_full.pkl'
     data_real_dir = '/mnt/petrelfs/share_data/maoxiaohan'
@@ -420,4 +466,4 @@ def batched_test():
 
 if __name__ == '__main__':
     # single_scene_test()
-    batched_test()
+    select_for_all_scenes()
