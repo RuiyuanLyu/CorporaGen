@@ -9,10 +9,10 @@ from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon
 from utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_bboxes_json, load_json, reverse_multi2multi_mapping, read_annotation_pickle
 from utils_3d import check_bboxes_visibility
-from visualization import get_9dof_boxes, draw_box3d_on_img, get_color_map
+from visualization import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop_box_from_img
 
 
-def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, image_paths, blurry_image_ids_path, output_dir):
+def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint"):
     """
         Select the best views for all 3d objects (bboxs) from a set of camera positions (extrinsics) in a scene.
         Then paint the 3d bbox in each view and save the painted images to the output directory.
@@ -26,6 +26,7 @@ def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_
             image_paths: a list of image paths of shape (M,)
             blurry_image_ids_path: path to the json file to contain the blurry image ids
             output_dir: path to the directory to save the painted images to
+            output_type: whether "paint" or "crop" the images
         Returns: None
     """
     if not os.path.exists(output_dir):
@@ -43,10 +44,10 @@ def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_
     image_dir = os.path.dirname(image_paths[0])
     height, width = cv2.imread(image_paths[0]).shape[:2]
     image_size = (width, height)
-    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  extrinsic_ids, intrinsics, color_map, image_size, image_dir, output_dir)
+    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  extrinsic_ids, intrinsics, color_map, image_size, image_dir, output_dir, output_type=output_type)
 
     
-def paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic_dir, axis_align_matrix_path, intrinsic_path, depth_intrinsic_path, depth_map_dir, image_dir, blurry_image_id_path, output_dir):
+def paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic_dir, axis_align_matrix_path, intrinsic_path, depth_intrinsic_path, depth_map_dir, image_dir, blurry_image_id_path, output_dir, output_type="paint"):
     """
         Select the best views for all 3d objects (bboxs) from a set of camera positions (extrinsics) in a scene.
         Then paint the 3d bbox in each view and save the painted images to the output directory.
@@ -58,6 +59,7 @@ def paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic
             intrinsic_path: path to the intrinsic matrix for the scene
             image_dir: path to the directory containing the images for each view
             output_dir: path to the directory to save the painted images to
+            output_type: whether "paint" or "crop" the images
         Returns: None
     """
     # Preparings
@@ -77,16 +79,17 @@ def paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic
     sample_img_path = os.path.join(image_dir, extrinsic_ids[0] + '.jpg')
     height, width = cv2.imread(sample_img_path).shape[:2]
     image_size = (width, height)
-    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  extrinsic_ids, intrinsic, color_map, image_size, image_dir, output_dir)
+    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  extrinsic_ids, intrinsic, color_map, image_size, image_dir, output_dir, output_type=output_type)
 
-def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, extrinsic_ids, intrinsics, color_map, image_size, image_dir, output_dir, skip_existing=True):
+def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, extrinsic_ids, intrinsics, color_map, image_size, image_dir, output_dir, skip_existing=True, output_type="paint"):
+    assert output_type in ["paint", "crop"], "unsupported output type {}".format(output_type)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     if skip_existing:
         files_and_folders = os.listdir(output_dir)
         files = [f for f in files_and_folders if os.path.isfile(os.path.join(output_dir, f))]
         num_files = len(files)
-        if num_files >= len(bboxes):
+        if num_files > len(bboxes):
             return
     shutil.rmtree(output_dir)
     os.makedirs(output_dir)
@@ -123,8 +126,16 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
             continue
         color = color_map.get(object_type, (0, 0, 192))
         label = str(object_id) + ' ' + object_type
-        painted_img, _ = draw_box3d_on_img(img, bbox, color, label, best_view, intrinsic, ignore_outside=False)
-        cv2.imwrite(img_out_path, painted_img)
+        if output_type == "paint":
+            new_img, _ = draw_box3d_on_img(img, bbox, color, label, best_view, intrinsic, ignore_outside=False)
+        elif output_type == "crop":
+            new_img = crop_box_from_img(img, bbox, best_view, intrinsic)
+            if new_img is None:
+                file_name = str(object_id).zfill(3) + '_' + object_type + '_placeholder.txt'
+                with open(os.path.join(output_dir, file_name), 'w') as f:
+                    f.write('Object cannot be cropped properly.')
+                continue
+        cv2.imwrite(img_out_path, new_img)
         pbar.set_description(f"Object {object_id}: {object_type} painted in view {extrinsic_ids[best_view_index]} and saved.")
 
 
@@ -402,9 +413,10 @@ def batched_test():
         pbar.set_description("Painting for {} scene {}".format(dataset, scene_id))
         image_paths = [os.path.join(data_real_dir, path.replace('matterport3d','matterport3d/matterport3d').replace('scannet','ScanNet_v2')) for path in image_paths] # dirty implementation. The real data is not arranged properly.
         blurry_image_ids_path = os.path.join(out_real_dir, dataset, scene_id, 'blurry_image_ids.json')
-        output_dir = os.path.join(out_real_dir, dataset, scene_id, 'painted_objects')
-        paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, image_paths, blurry_image_ids_path, output_dir)
-    
+        # output_dir = os.path.join(out_real_dir, dataset, scene_id, 'painted_objects')
+        # paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, image_paths, blurry_image_ids_path, output_dir)
+        output_dir = os.path.join(out_real_dir, dataset, scene_id, 'cropped_objects')
+        paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="crop")
 
 if __name__ == '__main__':
     # single_scene_test()

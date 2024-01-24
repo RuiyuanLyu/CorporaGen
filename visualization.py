@@ -236,23 +236,22 @@ def crop_box_from_img(img, box, extrinsic_c2w, intrinsic, ignore_outside=True):
 
     camera_pos_in_world = (extrinsic_c2w @ np.array([0, 0, 0, 1]).reshape(4,1)).transpose()
     if is_inside_box(box, camera_pos_in_world):
-        return img
+        return None
     
     if ignore_outside:
         center = box.get_center()
         center_2d = intrinsic @ extrinsic @ np.array([center[0], center[1], center[2], 1]).reshape(4,1)
         center_2d = center_2d[:2] / center_2d[2]
         if (center_2d[0] < 0 or center_2d[0] > w or center_2d[1] < 0 or center_2d[1] > h):
-            return img # outside the image
+            return None # outside the image
 
     corners = np.asarray(box.get_box_points()) # shape (8, 3)
-    corners = corners[[0,1,7,2,3,6,4,5]] # shape (8, 3)
     corners = np.concatenate([corners, np.ones((corners.shape[0], 1))], axis=1) # shape (8, 4)
     corners_img = intrinsic @ extrinsic @ corners.transpose() # shape (4, 8)
     corners_img = corners_img.transpose() # shape (8, 4)
     if (corners_img[:, 2] < EPS).any():
-        return img # behind the camera
-    corners_pixel = np.zeros((corners_img.shape[0], 2)) # shape (8, 2)
+        return None # behind the camera
+    corners_pixel = (corners_img[:, :2].T / corners_img[:, 2]).T
     x_min, y_min = np.min(corners_pixel, axis=0)
     x_max, y_max = np.max(corners_pixel, axis=0)
     x_size, y_size = x_max - x_min, y_max - y_min
