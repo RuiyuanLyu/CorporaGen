@@ -4,6 +4,17 @@ import os
 import json
 import shutil
 import scipy
+from functools import wraps
+import mmengine
+
+
+def mmengine_track_func(func):
+    @wraps(func)
+    def wrapped_func(args):
+        return func(*args)
+
+    return wrapped_func
+
 
 from tqdm import tqdm
 from scipy.spatial import ConvexHull
@@ -12,7 +23,7 @@ from utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_
 from utils_3d import check_bboxes_visibility, check_point_visibility, interpolate_bbox_points
 from visualization import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop_box_from_img
 
-
+@mmengine_track_func
 def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint"):
     """
         Select the best views for all 3d objects (bboxs) from a set of camera positions (extrinsics) in a scene.
