@@ -98,7 +98,7 @@ def paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic
     color_map = get_color_map()
     _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  view_ids, intrinsic, depth_intrinsic, depth_maps, color_map, image_dir, output_dir, output_type=output_type)
 
-def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, view_ids, intrinsics, depth_intrinsics, depth_maps, color_map, image_dir, output_dir, skip_existing=False, output_type="paint"):
+def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, view_ids, intrinsics, depth_intrinsics, depth_maps, color_map, image_dir, output_dir, skip_existing=True, output_type="paint"):
     assert output_type in ["paint", "crop"], "unsupported output type {}".format(output_type)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
