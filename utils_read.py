@@ -1,6 +1,7 @@
 import numpy as np
 import json
 import os
+import cv2
 from tqdm import tqdm
 EXCLUDED_OBJECTS = ['wall', 'ceiling', 'floor']
 
@@ -108,6 +109,17 @@ def read_intrinsic(path, mode='scannet'):
     else:
         raise ValueError('Invalid mode.')
 
+def read_depth_map(path):
+    """
+        Reads depth map from file.
+        Returns:
+            depth: numpy array of depth values, shape (H, W)
+    """
+    depth_map = cv2.imread(path, cv2.IMREAD_UNCHANGED) / 1000.0
+    if "matterport" in path:
+        depth_map /= 4.0 # for matterport, depth should be divided by 4000
+    return depth_map
+
 def read_bboxes_json(path, return_id=False, return_type=False):
     """
         Returns:
@@ -159,6 +171,9 @@ def read_annotation_pickle(path):
         missing_intrinsic = False 
         if intrinsic is None:
             missing_intrinsic = True # each view has different intrinsic for mp3d 
+        depth_intrinsic = datalist[scene_idx].get('cam2depth', None) # a 4x4 matrix, for 3rscan
+        if depth_intrinsic is None and not missing_intrinsic:
+            depth_intrinsic = datalist[scene_idx]['depth2img'] # a 4x4 matrix, for scannet
         axis_align_matrix = datalist[scene_idx]['axis_align_matrix'] # a 4x4 matrix
         scene_id = images[0]['img_path'].split('/')[-2] # str
             
@@ -182,6 +197,7 @@ def read_annotation_pickle(path):
         visible_view_object_dict = {}
         extrinsics_c2w = []
         intrinsics = []
+        depth_intrinsics = []
         image_paths = []
         for image_idx in range(len(images)):
             img_path = images[image_idx]['img_path'] # str
@@ -189,15 +205,17 @@ def read_annotation_pickle(path):
             cam2global = images[image_idx]['cam2global'] # a 4x4 matrix
             if missing_intrinsic:
                 intrinsic = images[image_idx]['cam2img']
+                depth_intrinsic = images[image_idx]['cam2depth']
             visible_instance_indices = images[image_idx]['visible_instance_ids'] # list of int
             visible_instance_ids = object_ids[visible_instance_indices]
             visible_view_object_dict[extrinsic_id] = visible_instance_ids
             extrinsics_c2w.append(cam2global)
             intrinsics.append(intrinsic)
+            depth_intrinsics.append(depth_intrinsic)
             image_paths.append(img_path)
 
         pbar.set_description(f"Processing scene {scene_id}")
-        output_data[scene_id] = {'bboxes': bboxes, 'object_ids': object_ids, 'object_types': object_types, 'visible_view_object_dict': visible_view_object_dict, 'extrinsics_c2w': extrinsics_c2w, 'axis_align_matrix': axis_align_matrix, 'intrinsics': intrinsics, 'image_paths': image_paths}
+        output_data[scene_id] = {'bboxes': bboxes, 'object_ids': object_ids, 'object_types': object_types, 'visible_view_object_dict': visible_view_object_dict, 'extrinsics_c2w': extrinsics_c2w, 'axis_align_matrix': axis_align_matrix, 'intrinsics': intrinsics, 'depth_intrinsics': depth_intrinsics, 'image_paths': image_paths}
     return output_data
 
 

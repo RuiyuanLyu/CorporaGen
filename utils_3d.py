@@ -32,14 +32,14 @@ def interpolate_bbox_points(bbox, granularity=0.2, return_size=False):
     return mapped_coords
 
      
-def check_bboxes_visibility(bboxes, depth_map, depth_intrinsic, extrinsic_w2c, corners_only=True, granularity=0.2):
+def check_bboxes_visibility(bboxes, depth_map, depth_intrinsic, extrinsic, corners_only=True, granularity=0.2):
     """
         Check the visibility of 3D bounding boxes in a depth map.
         Args:
             bboxes: a list of N open3d.geometry.OrientedBoundingBox
             depth_map: depth map, numpy array of shape (h, w).
             depth_intrinsic: numpy array of shape (4, 4).
-            extrinsic_w2c: numpy array of shape (4, 4).
+            extrinsic: w2c. numpy array of shape (4, 4).
             corners_only: if True, only check the corners of the bounding boxes.
             granularity: the roughly desired distance between two adjacent surface points.
         Returns:
@@ -59,7 +59,7 @@ def check_bboxes_visibility(bboxes, depth_map, depth_intrinsic, extrinsic_w2c, c
         points = np.concatenate(points, axis=0) # shape (\sum Mi, 3)
         num_points_to_view = np.array(num_points_to_view)
     num_points_per_bbox = np.array(num_points_per_bbox)
-    visibles = check_point_visibility(points, depth_map, depth_intrinsic, extrinsic_w2c)
+    visibles = check_point_visibility(points, depth_map, depth_intrinsic, extrinsic)
     num_visibles = []
     left = 0
     for i, num_points in enumerate(num_points_per_bbox):
@@ -70,21 +70,21 @@ def check_bboxes_visibility(bboxes, depth_map, depth_intrinsic, extrinsic_w2c, c
     visibles = num_visibles/num_points_to_view >= 1 # threshold for visibility
     return visibles
 
-def check_point_visibility(points, depth_map, depth_intrinsic, extrinsic_w2c):
+def check_point_visibility(points, depth_map, depth_intrinsic, extrinsic):
     """
         Check the visibility of 3D points in a depth map.
         Args:
             points: 3D points, numpy array of shape (n, 3).
             depth_map: depth map, numpy array of shape (h, w).
             depth_intrinsic: numpy array of shape (4, 4).
-            extrinsic_w2c: numpy array of shape (4, 4).
+            extrinsic: w2c. numpy array of shape (4, 4).
         Returns:
             Boolean array of shape (n, ) indicating the visibility of each point.
     """
     # Project 3D points to 2D image plane
     visibles = np.ones(points.shape[0], dtype=bool)
     points = np.concatenate([points, np.ones_like(points[..., :1])], axis=-1) # shape (n, 4)
-    points = depth_intrinsic @ extrinsic_w2c @ points.T # (4, n)
+    points = depth_intrinsic @ extrinsic @ points.T # (4, n)
     xs, ys, zs = points[:3, :]
     visibles &= (zs > 0) # remove points behind the camera
     xs, ys = xs / zs, ys / zs # normalize to image plane
