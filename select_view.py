@@ -523,7 +523,7 @@ def single_scene_test_by_pickle():
         output_dir = './example_data/anno_lang/cropped_images'
         paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, real_image_paths, blurry_image_ids_path, output_dir, output_type="crop")
     
-def select_for_all_scenes_single_thread():
+def select_for_all_scenes():
     pickle_file_val = '/mnt/petrelfs/share_data/wangtai/data/full_10_visible/embodiedscan_infos_val_full.pkl'
     pickle_file_train = '/mnt/petrelfs/share_data/wangtai/data/full_10_visible/embodiedscan_infos_train_full.pkl'
     data_real_dir = '/mnt/petrelfs/share_data/maoxiaohan'
@@ -555,42 +555,7 @@ def select_for_all_scenes_single_thread():
         output_dir = os.path.join(out_real_dir, dataset, scene_id, 'cropped_objects')
         paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="crop")
 
-def select_for_all_scenes_multi_threads():
-    pickle_file_val = '/mnt/petrelfs/share_data/wangtai/data/full_10_visible/embodiedscan_infos_val_full.pkl'
-    pickle_file_train = '/mnt/petrelfs/share_data/wangtai/data/full_10_visible/embodiedscan_infos_train_full.pkl'
-    data_real_dir = '/mnt/petrelfs/share_data/maoxiaohan'
-    out_real_dir = '/mnt/petrelfs/share_data/lvruiyuan'
-    anno_dict1 = read_annotation_pickle(pickle_file_val)
-    anno_dict2 = read_annotation_pickle(pickle_file_train)
-    anno_dict = {**anno_dict1, **anno_dict2}
-    keys = sorted(list(anno_dict.keys()))
-    inputs = []
-    for key_index in range(len(keys)):
-        key = keys[key_index]
-        anno = anno_dict[key]
-        bboxes = anno['bboxes']
-        object_ids = anno['object_ids']
-        object_types = anno['object_types']
-        visible_view_object_dict = anno['visible_view_object_dict']
-        extrinsics_c2w = anno['extrinsics_c2w']
-        axis_align_matrix = anno['axis_align_matrix']
-        intrinsics = anno['intrinsics']
-        depth_intrinsics = anno['depth_intrinsics']
-        image_paths = anno['image_paths']
-
-        dataset, _, scene_id, _ = image_paths[0].split('.')[0].split('/')
-        image_paths = [os.path.join(data_real_dir, path.replace('matterport3d','matterport3d/matterport3d').replace('scannet','ScanNet_v2')) for path in image_paths] # dirty implementation. The real data is not arranged properly.
-        blurry_image_ids_path = os.path.join(out_real_dir, dataset, scene_id, 'blurry_image_ids.json')
-        # output_dir = os.path.join(out_real_dir, dataset, scene_id, 'painted_objects')
-        # paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint")
-        output_dir = os.path.join(out_real_dir, dataset, scene_id, 'cropped_objects')
-        
-        input = (bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, "crop")
-        inputs.append(input)
-    import mmengine
-    mmengine.utils.track_parallel_progress(func=paint_object_pictures, tasks=inputs, nproc=8)
-
         
 if __name__ == '__main__':
     # single_scene_test()
-    select_for_all_scenes_multi_threads()
+    select_for_all_scenes()
