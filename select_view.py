@@ -117,7 +117,7 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
     if len(np.array(depth_intrinsics).shape) == 2:
         depth_intrinsics = np.tile(depth_intrinsics, (len(view_ids), 1, 1))
     
-    pbar = tqdm(range(len(bboxes))) if TRACKED else range(len(bboxes))
+    pbar = tqdm(range(len(bboxes))) if not TRACKED else range(len(bboxes))
     for i in pbar:
         bbox, object_id, object_type = bboxes[i], object_ids[i], object_types[i]
         if object_type in EXCLUDED_OBJECTS:
@@ -166,7 +166,7 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
                     f.write('Object cannot be cropped properly.')
                 continue
         cv2.imwrite(img_out_path, new_img)
-        if TRACKED:
+        if not TRACKED:
             pbar.set_description(f"Object {object_id}: {object_type} painted in view {view_ids[best_view_index]} and saved.")
 
 
