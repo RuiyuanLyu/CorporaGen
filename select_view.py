@@ -7,12 +7,15 @@ import scipy
 from functools import wraps
 import mmengine
 
-
+global TRACKED
+TRACKED = False
 def mmengine_track_func(func):
     @wraps(func)
     def wrapped_func(args):
-        return func(*args)
-
+        global TRACKED
+        TRACKED = True
+        result = func(*args)
+        return result
     return wrapped_func
 
 
@@ -24,6 +27,9 @@ from utils_3d import check_bboxes_visibility, check_point_visibility, interpolat
 from visualization import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop_box_from_img
 
 @mmengine_track_func
+def paint_object_pictures_tracked(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint"):
+    paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint")
+
 def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint"):
     """
         Select the best views for all 3d objects (bboxs) from a set of camera positions (extrinsics) in a scene.
@@ -111,7 +117,7 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
     if len(np.array(depth_intrinsics).shape) == 2:
         depth_intrinsics = np.tile(depth_intrinsics, (len(view_ids), 1, 1))
     
-    pbar = tqdm(range(len(bboxes)))
+    pbar = tqdm(range(len(bboxes))) if TRACKED else range(len(bboxes))
     for i in pbar:
         bbox, object_id, object_type = bboxes[i], object_ids[i], object_types[i]
         if object_type in EXCLUDED_OBJECTS:
@@ -160,7 +166,8 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
                     f.write('Object cannot be cropped properly.')
                 continue
         cv2.imwrite(img_out_path, new_img)
-        pbar.set_description(f"Object {object_id}: {object_type} painted in view {view_ids[best_view_index]} and saved.")
+        if TRACKED:
+            pbar.set_description(f"Object {object_id}: {object_type} painted in view {view_ids[best_view_index]} and saved.")
 
 
 def get_visible_objects_dict(object_json_path, extrinsic_dir, axis_align_matrix_path, depth_intrinsic_path, depth_map_dir, output_path, skip_existing=True):
@@ -599,7 +606,7 @@ def select_for_all_scenes_multi_threads():
         input = (bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, "crop")
         inputs.append(input)
     import mmengine
-    mmengine.utils.track_parallel_progress(func=paint_object_pictures, tasks=inputs, nproc=8)
+    mmengine.utils.track_parallel_progress(func=paint_object_pictures_tracked, tasks=inputs, nproc=8)
 
         
 if __name__ == '__main__':
