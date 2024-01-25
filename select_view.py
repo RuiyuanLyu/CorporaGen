@@ -7,7 +7,7 @@ import shutil
 from tqdm import tqdm
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon
-from utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_bboxes_json, load_json, reverse_multi2multi_mapping, read_annotation_pickle
+from utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_bboxes_json, load_json, reverse_multi2multi_mapping, read_annotation_pickle, EXCLUDED_OBJECTS
 from utils_3d import check_bboxes_visibility
 from visualization import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop_box_from_img
 
@@ -89,7 +89,8 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
         files_and_folders = os.listdir(output_dir)
         files = [f for f in files_and_folders if os.path.isfile(os.path.join(output_dir, f))]
         num_files = len(files)
-        if num_files >= len(bboxes):
+        valid_objects = [obj for obj in object_types if obj not in EXCLUDED_OBJECTS]
+        if num_files >= len(valid_objects):
             return
     shutil.rmtree(output_dir)
     os.makedirs(output_dir)
@@ -99,6 +100,8 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
         intrinsics = np.tile(intrinsics, (len(extrinsics_c2w), 1, 1))
     for i in pbar:
         bbox, object_id, object_type = bboxes[i], object_ids[i], object_types[i]
+        if object_type in EXCLUDED_OBJECTS:
+            continue
         visible_views = visible_object_view_dict.get(int(object_id), [])
         selected_extrinsics_c2w = []
         selected_intrinsics = []

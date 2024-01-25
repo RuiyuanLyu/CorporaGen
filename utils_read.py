@@ -161,21 +161,6 @@ def read_annotation_pickle(path):
             missing_intrinsic = True # each view has different intrinsic for mp3d 
         axis_align_matrix = datalist[scene_idx]['axis_align_matrix'] # a 4x4 matrix
         scene_id = images[0]['img_path'].split('/')[-2] # str
-        visible_view_object_dict = {}
-        extrinsics_c2w = []
-        intrinsics = []
-        image_paths = []
-        for image_idx in range(len(images)):
-            img_path = images[image_idx]['img_path'] # str
-            extrinsic_id = img_path.split('/')[-1].split('.')[0] # str
-            cam2global = images[image_idx]['cam2global'] # a 4x4 matrix
-            if missing_intrinsic:
-                intrinsic = images[image_idx]['cam2img']
-            visible_instance_ids = images[image_idx]['visible_instance_ids'] # list of int
-            visible_view_object_dict[extrinsic_id] = visible_instance_ids
-            extrinsics_c2w.append(cam2global)
-            intrinsics.append(intrinsic)
-            image_paths.append(img_path)
             
         instances = datalist[scene_idx]['instances']
         bboxes = []
@@ -186,13 +171,31 @@ def read_annotation_pickle(path):
             bbox_label_3d = instances[object_idx]['bbox_label_3d'] # int
             bbox_id = instances[object_idx]['bbox_id'] # int
             object_type = object_int_to_type[bbox_label_3d]
-            if object_type in EXCLUDED_OBJECTS:
-                continue
+            # if object_type in EXCLUDED_OBJECTS:
+            #     continue
             object_types.append(object_type)
             bboxes.append(bbox_3d)
             object_ids.append(bbox_id)
         bboxes = np.array(bboxes)
         object_ids = np.array(object_ids)
+
+        visible_view_object_dict = {}
+        extrinsics_c2w = []
+        intrinsics = []
+        image_paths = []
+        for image_idx in range(len(images)):
+            img_path = images[image_idx]['img_path'] # str
+            extrinsic_id = img_path.split('/')[-1].split('.')[0] # str
+            cam2global = images[image_idx]['cam2global'] # a 4x4 matrix
+            if missing_intrinsic:
+                intrinsic = images[image_idx]['cam2img']
+            visible_instance_indices = images[image_idx]['visible_instance_ids'] # list of int
+            visible_instance_ids = object_ids[visible_instance_indices]
+            visible_view_object_dict[extrinsic_id] = visible_instance_ids
+            extrinsics_c2w.append(cam2global)
+            intrinsics.append(intrinsic)
+            image_paths.append(img_path)
+
         pbar.set_description(f"Processing scene {scene_id}")
         output_data[scene_id] = {'bboxes': bboxes, 'object_ids': object_ids, 'object_types': object_types, 'visible_view_object_dict': visible_view_object_dict, 'extrinsics_c2w': extrinsics_c2w, 'axis_align_matrix': axis_align_matrix, 'intrinsics': intrinsics, 'image_paths': image_paths}
     return output_data
