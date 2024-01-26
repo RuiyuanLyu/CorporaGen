@@ -61,8 +61,8 @@ def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_
     extrinsics_c2w = np.matmul(axis_align_matrix, extrinsics_c2w)
     color_map = get_color_map()
     image_dir = os.path.dirname(image_paths[0])
-    depth_maps = [read_depth_map(os.path.join(image_dir, view_id+'.png')) for view_id in view_ids]
-    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  view_ids, intrinsics, depth_intrinsics, depth_maps, color_map, image_dir, output_dir, output_type=output_type)
+    depth_map_paths = [os.path.join(image_dir, view_id+'.png') for view_id in view_ids]
+    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  view_ids, intrinsics, depth_intrinsics, depth_map_paths, color_map, image_dir, output_dir, output_type=output_type)
 
     
 def paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic_dir, axis_align_matrix_path, intrinsic_path, depth_intrinsic_path, depth_map_dir, image_dir, blurry_image_id_path, output_dir, output_type="paint"):
@@ -94,11 +94,11 @@ def paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic
     extrinsics_c2w = np.matmul(axis_align_matrix, extrinsics_c2w) # c2w
     intrinsic = read_intrinsic(intrinsic_path) # shape 4, 4
     depth_intrinsic = read_intrinsic(depth_intrinsic_path) # shape 4, 4
-    depth_maps = [read_depth_map(os.path.join(depth_map_dir, view_id+'.png')) for view_id in view_ids] # shape N, H, W
+    depth_map_paths = [os.path.join(image_dir, view_id+'.png') for view_id in view_ids]
     color_map = get_color_map()
-    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  view_ids, intrinsic, depth_intrinsic, depth_maps, color_map, image_dir, output_dir, output_type=output_type)
+    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w,  view_ids, intrinsic, depth_intrinsic, depth_map_paths, color_map, image_dir, output_dir, output_type=output_type)
 
-def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, view_ids, intrinsics, depth_intrinsics, depth_maps, color_map, image_dir, output_dir, skip_existing=True, output_type="paint"):
+def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, view_ids, intrinsics, depth_intrinsics, depth_map_paths, color_map, image_dir, output_dir, skip_existing=True, output_type="paint"):
     assert output_type in ["paint", "crop"], "unsupported output type {}".format(output_type)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -112,6 +112,7 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
     shutil.rmtree(output_dir)
     os.makedirs(output_dir)
     
+    depth_maps = [read_depth_map(path) for path in depth_map_paths]
     if len(np.array(intrinsics).shape) == 2:
         intrinsics = np.tile(intrinsics, (len(view_ids), 1, 1))
     if len(np.array(depth_intrinsics).shape) == 2:
