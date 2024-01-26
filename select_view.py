@@ -401,9 +401,11 @@ def get_blurry_image_ids(image_paths, save_path=None, threshold=150, skip_existi
     blurry_ids = []
     vars = []
     variance_dict = {}
-    if save_variance_path is not None:
-        if os.path.exists(save_variance_path):
-            variance_dict = load_json(save_variance_path)
+    if save_variance_path is None:
+        save_variance_dir = os.path.dirname(save_path)
+        save_variance_path = os.path.join(save_variance_dir, "image_variances.json")
+    if os.path.exists(save_variance_path):
+        variance_dict = load_json(save_variance_path)
     pbar = tqdm(range(len(paths)))
     for i in pbar:
         image_path = paths[i]
@@ -428,12 +430,11 @@ def get_blurry_image_ids(image_paths, save_path=None, threshold=150, skip_existi
     if save_path is not None:
         with open(save_path, 'w') as f:
             json.dump(blurry_ids, f, indent=4)
-    if save_variance_path is not None:
-        variance_dict = {}
-        for i in range(len(image_ids)):
-            variance_dict[image_ids[i]] = vars[i]
-        with open(save_variance_path, 'w') as f:
-            json.dump(variance_dict, f, indent=4)
+    variance_dict = {}
+    for i in range(len(image_ids)):
+        variance_dict[image_ids[i]] = vars[i]
+    with open(save_variance_path, 'w') as f:
+        json.dump(variance_dict, f, indent=4)
     return blurry_ids
 
 def get_blurry_image_ids_dir(image_dir, save_path=None, threshold=150, skip_existing=True, save_variance_path=None):
