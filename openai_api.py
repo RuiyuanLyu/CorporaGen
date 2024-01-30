@@ -88,9 +88,9 @@ def get_content_groups_from_source_groups(source_groups):
         content_group = []
         for source in source_group:
             if os.path.exists(source):
-                content_group.append(get_image_content_for_api(source, high_detail=False))
+                content_group.append(_get_image_content_for_api(source, high_detail=False))
             else:
-                content_group.append(get_text_content_for_api(source))
+                content_group.append(_get_text_content_for_api(source))
         content_groups.append(content_group)
     return content_groups
         
@@ -108,9 +108,9 @@ def picture_description_by_LLM(image_paths, prompt=None, high_detail=False, save
             NOTE: response["choices"][0]["message"]["content"] contains the actual description.
     """
     content = []
-    content.append(get_text_content_for_api(prompt))
+    content.append(_get_text_content_for_api(prompt))
     for image_path in image_paths:
-        content.append(get_image_content_for_api(image_path))
+        content.append(_get_image_content_for_api(image_path))
     headers = get_headers()
     payload = get_payload(content)
     print("requesting OpenAI API...")
@@ -169,7 +169,7 @@ def encode_image(image_path):
         return base64.b64encode(image_file.read()).decode('utf-8')
 
 
-def get_text_content_for_api(text):
+def _get_text_content_for_api(text):
     """
         prepare the text content suitable for the OpenAI API.
     """
@@ -186,7 +186,7 @@ def get_text_content_for_api(text):
     return content
 
 
-def get_image_content_for_api(image_path, high_detail=False):
+def _get_image_content_for_api(image_path, high_detail=False):
     """
         prepare the image content suitable for the OpenAI API.
     """
