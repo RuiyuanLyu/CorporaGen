@@ -42,9 +42,9 @@ with gr.Blocks() as demo:
     def get_file_path(file):
         global file_name
         if file==None:
-            return None,None
+            return None, None
         file_name = os.path.basename(file.name)
-        return gr.update(value=file.name),gr.update(value=file.name)
+        return gr.update(value=file.name), gr.update(value=file.name)
 
     
     with gr.Row():
@@ -54,7 +54,7 @@ with gr.Blocks() as demo:
 
 
 
-    label = gr.Radio(["guest room", "living room", "study",'bedroom','dinning room','kitchen','basement','restroom','Toilet'], label="label", info="definition of this region")
+    label = gr.Radio(["guest room", "living room", "study", 'bedroom', 'dinning room', 'kitchen', 'basement', 'restroom', 'Toilet'], label="label", info="definition of this region")
 
 
 
@@ -83,7 +83,7 @@ with gr.Blocks() as demo:
     def draw_polygon(img):
         for i in range(img.shape[0]):
             for j in range(img.shape[1]):
-                img[i][j][0] += is_in_poly((i,j),vertex_list)*int(255*0.4)
+                img[i][j][0] += is_in_poly((i, j), vertex_list)*int(255*0.4)
         return img
 
     def draw_dot(img, vertex_num, evt: gr.SelectData):
@@ -100,14 +100,14 @@ with gr.Blocks() as demo:
                 for click_evt in click_evt_list:
                     global vertex_list
                     vertex_list.append([click_evt.index[1], click_evt.index[0]])
-                    out[max(click_evt.index[1]-size,0):min(click_evt.index[1]+size,out.shape[0]-1), max(click_evt.index[0]-size,0):min(click_evt.index[0]+size,out.shape[1]-1)] = np.array([255, 0, 0]).astype(np.uint8)
+                    out[max(click_evt.index[1]-size, 0):min(click_evt.index[1]+size, out.shape[0]-1), max(click_evt.index[0]-size, 0):min(click_evt.index[0]+size, out.shape[1]-1)] = np.array([255, 0, 0]).astype(np.uint8)
                 click_evt_list = []
                 new_out = draw_polygon(out.copy())
                 poly_done = True
                 new_out = new_out.astype(np.uint8)
                 poly_image = new_out
                 return new_out
-            out[max(evt.index[1] - size, 0):min(evt.index[1] + size, out.shape[0] - 1),
+            out[max(evt.index[1] - size, 0):min(evt.index[1] + size, out.shape[0] - 1), 
             max(evt.index[0] - size, 0):min(evt.index[0] + size, out.shape[1] - 1)] = np.array(
                 [255, 0, 0]).astype(np.uint8)
             out = out.astype(np.uint8)
@@ -124,7 +124,7 @@ with gr.Blocks() as demo:
         pixel_y = int((y - min_y) * ratio)
         return pixel_y, pixel_x
 
-    def new_draw_dot(img,evt: gr.SelectData):
+    def new_draw_dot(img, evt: gr.SelectData):
         out = img.copy()
         min_distance = np.inf
         min_object_id = 0
@@ -146,16 +146,16 @@ with gr.Blocks() as demo:
             if (o_x-m_x)**2+(o_y-m_y)**2<min_distance:
                 min_distance = (o_x-m_x)**2+(o_y-m_y)**2
                 min_object_id = object_id
-                p = (o_x,o_y)
+                p = (o_x, o_y)
 
-        out[max(p[0] - size, 0):min(p[0] + size, out.shape[0] - 1),
+        out[max(p[0] - size, 0):min(p[0] + size, out.shape[0] - 1), 
         max(p[1] - size, 0):min(p[1] + size, out.shape[1] - 1)] = np.array(
             [0, 0, 255]).astype(np.uint8)
         detail_img = cv2.imread(useful_object[min_object_id])
-        return out,detail_img
+        return out, detail_img
 
     
-    def annotate(label,output_img):
+    def annotate(label, output_img):
         global poly_done
         global vertex_list
 
@@ -180,7 +180,7 @@ with gr.Blocks() as demo:
             click_evt_list = []
             poly_done = False
 
-            return label,None,annotation_list
+            return label, None, annotation_list
 
     def clear():
         global annotation_list
@@ -191,7 +191,7 @@ with gr.Blocks() as demo:
         vertex_list = []
         global poly_done
         poly_done = False
-        return None,None
+        return None, None
 
     
     def save_to_file():
@@ -207,7 +207,7 @@ with gr.Blocks() as demo:
         vertex_list = []
         global poly_done
         poly_done = False
-        return None,None,None,None,None
+        return None, None, None, None, None
 
 
 
@@ -223,12 +223,12 @@ with gr.Blocks() as demo:
         detail_show_img = gr.Image(label="Posed Image")
 
     show_json = gr.JSON(label='Annotate History')
-    input_file.change(get_file_path, inputs=[input_file], outputs=[input_img,object_postion_img])
+    input_file.change(get_file_path, inputs=[input_file], outputs=[input_img, object_postion_img])
     input_img.select(draw_dot, [input_img, total_vertex_num], output_img)
-    object_postion_img.select(new_draw_dot, [input_img], [object_postion_img,detail_show_img])
-    clear_btn.click(fn=clear, inputs=[], outputs=[output_img,show_json])
-    annotate_btn.click(fn=annotate, inputs=[label, output_img], outputs=[label, output_img,show_json])
-    save_btn.click(fn=save_to_file, inputs=[], outputs=[input_file,output_img,show_json,object_postion_img,detail_show_img])
+    object_postion_img.select(new_draw_dot, [input_img], [object_postion_img, detail_show_img])
+    clear_btn.click(fn=clear, inputs=[], outputs=[output_img, show_json])
+    annotate_btn.click(fn=annotate, inputs=[label, output_img], outputs=[label, output_img, show_json])
+    save_btn.click(fn=save_to_file, inputs=[], outputs=[input_file, output_img, show_json, object_postion_img, detail_show_img])
 
 
 
