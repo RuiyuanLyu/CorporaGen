@@ -28,7 +28,7 @@ from visualization import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop
 
 @mmengine_track_func
 def paint_object_pictures_tracked(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint"):
-    paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint")
+    paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type)
 
 def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint"):
     """
