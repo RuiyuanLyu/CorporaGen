@@ -241,7 +241,12 @@ if __name__ == "__main__":
 
     painted_img_dir = "C:/Users/86186/Desktop/3D_scene_data/anno_lang/painted_images" #where is the color data
     output_dir = "C:/Users/86186/Desktop/3D_scene_data/CorporaGen-master/CorporaGen-master/annotation"
+    
+    object_json_path = "./example_data/label/main_MDJH13.json"
+    point_cloud_path = "./example_data/lidar/main.pcd"
 
+    painted_img_dir = "./example_data/anno_lang/painted_images" #where is the color data
+    output_dir = "./example_data/anno_lang"
 
     object_json_file = open(object_json_path, "r")
     content = object_json_file.read()
