@@ -158,6 +158,14 @@ def read_bboxes_json(path, return_id=False, return_type=False):
 def read_annotation_pickle(path):
     """
         Returns: A dictionary. Format. scene_id : (bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, image_paths)
+        bboxes: numpy array of bounding boxes, shape (N, 9): xyz, lwh, ypr
+        object_ids: numpy array of obj ids, shape (N,)
+        object_types: list of strings, each string is a type of object
+        visible_view_object_dict: a dictionary {view_id: visible_instance_ids}
+        extrinsics_c2w: a list of 4x4 matrices, each matrix is the extrinsic matrix of a view
+        axis_align_matrix: a 4x4 matrix, the axis-aligned matrix of the scene
+        intrinsics: a list of 4x4 matrices, each matrix is the intrinsic matrix of a view
+        image_paths: a list of strings, each string is the path of an image in the scene
     """
     with open(path, 'rb') as f:
         data = np.load(f, allow_pickle=True)
