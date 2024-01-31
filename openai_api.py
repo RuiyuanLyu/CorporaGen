@@ -30,7 +30,8 @@ def mimic_chat_budget(user_content_groups, system_prompt=None):
             model = "gpt-3.5-turbo"
             # remove the image urls from the previous rounds
             for message in messages:
-                for content_component in message["content"]:
+                for content_component in reversed(message["content"]):
+                    # must reverse the order, otherwise some may be remained.
                     if isinstance(content_component, str):
                         continue
                     if content_component["type"] == "image_url":
@@ -43,6 +44,7 @@ def mimic_chat_budget(user_content_groups, system_prompt=None):
         )
         response = response.choices[0].message.content.strip()
         messages.append({"role": "assistant", "content": response})
+        print(response)
     return messages
  
 
