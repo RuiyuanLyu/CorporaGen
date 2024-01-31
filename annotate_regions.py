@@ -3,60 +3,29 @@ import json
 from tqdm import tqdm
 from openai_api import mimic_chat, mimic_chat_budget, get_content_groups_from_source_groups
 from utils_read import load_json
+import numpy as np
 
 
-def annotate_objects(image_dir, output_dir, skip_existing=True):
-    """
-        Uses GPT-4 to annotate objects in a directory of images.
-        Returns:
-            A dictionary of object annotations, where the keys are object ids and the values are lists of object descriptions.
-    """
-    annotations = {}
-    file_names = []
-    object_ids = []
-    for file_name in os.listdir(image_dir):
-        if not file_name.endswith(".jpg"):
-            continue
-        object_id, object_type, image_id = file_name.split("_") # example file name: 068_chair_00232.jpg
-        # the line is used to prevent unwanted files from being annotated
-        file_names.append(file_name)
-    pbar = tqdm(range(len(file_names)))
-    for i in pbar:
-        file_name = file_names[i]
-        object_id, object_type, image_id = file_name.split(".")[0].split("_")
-        image_path = os.path.join(image_dir, file_name)
-        json_path = os.path.join(output_dir, f"{object_id}_{object_type}_{image_id}.json")
-        pbar.set_description(f"Annotating object {object_id}")
-        if skip_existing and os.path.exists(json_path):
-            annotation = load_json(json_path)
-            is_valid, error_message = check_annotation(annotation)
-            if is_valid:
-                annotations[object_id] = annotation
-                print(f"Skipping existing annotation for object {object_id}")
-                continue
-        annotation = annotate_object_image(image_path)
-        annotations[object_id] = annotation
-        with open(json_path, "w") as f:
-            json.dump(annotation, f, indent=4)
-    return annotations
-
-
-def annotate_region_image(image_paths, area_type):
+def annotate_region_image(image_paths, region_type, object_ids, object_types):
     """
         Uses GPT-4 to annotate an object in an image.
+        Args:
+            image_paths: A list of paths to images cooresponding to the single region.
+            region_type: A string indicating the type of the area, e.g. "bedroom".
+            object_ids: A list of ints indicating the ids of the objects in the image.
+            object_types: A list of strings indicating the types of the objects in the image.
         Returns:
-            The discription of the object in the image.
-    """
-    for image_path in image_paths:
-        image_path = image_path.replace("\\", "/")
-        image_name = image_path.split("/")[-1]
-        object_id, object_type, image_id = image_name.split(".")[0].split("_")
-    
-    user_message1 = "I will share photos of a room's {} and use 3D boxes to highlight important items within it. Your task is to provide a description of the primary furniture and decorations found in the area, as well as their respective positions. Please aim for a roughly 150-word description, and when referring to objects, enclose their names in angle brackets, like <01 piano>".format(area_type) 
+            A list of strings, each string is a part of the annotation.
+    """    
+    user_message1 = "I will share photos of a room's {} and use 3D boxes to highlight important items within it. Your task is to provide a description of the primary furniture and decorations found in the area, as well as their respective positions. Please aim for a roughly 250-word description, and when referring to objects, enclose their names and ids in angle brackets, like <piano> <01>.".format(region_type) 
+    user_message1 += "In this region, the items that need to be described include "
+    for (object_id, object_type) in zip(object_ids, object_types):
+        user_message1 += f"<{object_type}> <{object_id}>, "
+    user_message1 = user_message1[:-2] + ". Please focus on describing them in order of their significance rather than the order I mentioned them."
     user_message2 = "Based on these layouts, could you share information about how crowded it is, how well it's organized, the lighting, and (optional) whether there are any elements that tell a story?"
     system_prompt = "You are an expert interior designer, who is very sensitive at room furnitures and their placements. You are talking with a high-school student with average knowledge of furniture design."
     source_groups = [
-        [user_message1, image_path],
+        [user_message1, *image_paths],
         [user_message2]
     ]
     content_groups = get_content_groups_from_source_groups(source_groups)
@@ -110,6 +79,63 @@ def check_annotation(annotation):
         return False, "Length error. The shorthand version is too long."
     return True, ""
 
+def get_visible_objects_dict(dataset_tar, scene_id_tar):
+    """
+        Reads the annotation files and returns a dictionary {object_id: visible_view_ids} for each object in the scene.
+        Args:
+            dataset_tar: A string indicating the dataset.
+            scene_id_tar: A string indicating the scene id.
+        Returns:
+            visible_view_object_dict: A dictionary {view_id: visible_object_ids}
+            object_ids: A numpy.ndarray of ints indicating the ids of the objects in the scene.
+            object_types: A list of strings indicating the types of the objects in the scene.
+    """
+    pickle_file_val = './example_data/embodiedscan_infos_val_full.pkl'
+    pickle_file_train = './example_data/embodiedscan_infos_train_full.pkl'
+    from utils_read import read_annotation_pickle
+    anno_dict1 = read_annotation_pickle(pickle_file_val)
+    anno_dict2 = read_annotation_pickle(pickle_file_train)
+    anno_dict = {**anno_dict1, **anno_dict2}
+    keys = sorted(list(anno_dict.keys()))
+    for key_index in range(len(keys)):
+        key = keys[key_index]
+        anno = anno_dict[key]
+        image_paths = anno['image_paths']
+        dataset, _, scene_id, _ = image_paths[0].split('.')[0].split('/')
+        if dataset != dataset_tar or scene_id != scene_id_tar:
+            continue
+        object_ids = anno['object_ids']
+        object_types = anno['object_types']
+        visible_view_object_dict = anno['visible_view_object_dict']
+        return visible_view_object_dict, object_ids, object_types
+    
+def prepare_visible_objects(visible_view_object_dict, view_ids, object_ids, object_types):
+    """
+        Prepares the visible objects for the region annotation.
+        Args:
+            visible_view_object_dict: A dictionary {view_id: visible_object_ids}
+            view_ids: A list of strings, the views used to annotate the region.
+            object_ids: A numpy.ndarray of ints indicating the ids of the objects in the scene.
+            object_types: A list of strings indicating the types of the objects in the scene.
+        Returns:
+            visible_object_ids: A list of ints indicating the ids of the visible objects in the region.
+            visible_object_types: A list of strings indicating the types of the visible objects in the region.
+    """
+    visible_object_ids_pre = []
+    for view_id in view_ids:
+        visible_object_ids_pre += visible_view_object_dict[view_id].tolist()
+    visible_object_ids_pre = list(set(visible_object_ids_pre))
+    visible_object_ids, visible_object_types = [], []
+    from utils_read import EXCLUDED_OBJECTS
+    for object_id in visible_object_ids_pre:
+        object_index = np.where(object_ids == object_id)[0][0]
+        object_type = object_types[object_index]
+        if object_type in EXCLUDED_OBJECTS:
+            continue
+        visible_object_ids.append(object_id)
+        visible_object_types.append(object_type)
+    return visible_object_ids, visible_object_types
+
 
 if __name__ == "__main__":
     # image_path = "./example_data/anno_lang/painted_images/068_chair_00232.jpg"
@@ -117,7 +143,13 @@ if __name__ == "__main__":
     # for i, line in enumerate(annotation):
     #     print(f"Line {i+1}:")
     #     print(line)
-    image_dir = "./example_data/anno_lang/painted_images"
-    output_dir = "./example_data/anno_lang/corpora_object"
-    annotations = annotate_objects(image_dir, output_dir, skip_existing=True)
-    check_annotation_path(output_dir)
+    view_ids = ["00860", "00970"]
+    image_paths = ["./{}_annotated.jpg".format(view_id) for view_id in view_ids]
+    region_type = "sleeping region"
+    visible_view_object_dict, object_ids, object_types = get_visible_objects_dict("scannet", "scene0000_00")
+    # output_path = "./example_data/anno_lang/corpora_region"
+    visible_object_ids, visible_object_types = prepare_visible_objects(visible_view_object_dict, view_ids, object_ids, object_types)
+    annotations = annotate_region_image(image_paths, region_type, visible_object_ids, visible_object_types)
+    with open("annotation.json", "w") as f:
+        json.dump(annotations, f, indent=4)
+    print(annotations)
