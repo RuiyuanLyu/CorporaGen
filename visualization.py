@@ -73,6 +73,7 @@ def annotate_image_with_3dbboxes(img_path, bboxes, object_ids, object_types, int
         Returns:
             None
     """
+    assert len(bboxes) == len(object_ids) and len(object_ids) == len(object_types), "Number of bboxes, object ids, and object types should be the same, but got {} {} {}".format(len(bboxes), len(object_ids), len(object_types))
     img = cv2.imread(img_path)
     extrinsic_c2w = axis_align_matrix @ extrinsic_c2w # camera to world
     indices, distances = sort_objects_by_projection_distance(bboxes, extrinsic_c2w)
