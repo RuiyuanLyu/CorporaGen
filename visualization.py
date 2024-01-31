@@ -436,15 +436,16 @@ def annotate_images_with_visible_objects(img_ids):
             if view_id in img_ids:
                 view_index = view_ids.index(view_id)
                 img_path = f"./example_data/posed_images/{view_id}.jpg"
-                visible_object_ids = visible_view_object_dict[view_id]
-                visible_bboxes, visible_object_types = [], []
+                visible_object_ids_pre = visible_view_object_dict[view_id]
+                visible_bboxes, visible_object_ids, visible_object_types = [], [], []
                 for object_id in object_ids:
-                    if object_id in visible_object_ids:
+                    if object_id in visible_object_ids_pre:
                         index = np.where(object_ids == object_id)[0][0]
                         object_type = object_types[index]
                         if object_type in EXCLUDED_OBJECTS:
                             continue
                         visible_bboxes.append(bboxes[index])
+                        visible_object_ids.append(object_id)
                         visible_object_types.append(object_type)
                 intrinsic = intrinsics[view_index]
                 extrinsic_c2w = extrinsics_c2w[view_index]
