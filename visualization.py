@@ -4,7 +4,7 @@ import cv2
 import matplotlib
 import json
 from linemesh import LineMesh
-from utils_read import read_bboxes_json, read_intrinsic, read_extrinsic
+from utils_read import read_bboxes_json, read_intrinsic, read_extrinsic, read_annotation_pickle, EXCLUDED_OBJECTS
 EPS = 1e-4
 ALPHA = 0.15
 
@@ -51,28 +51,44 @@ def annotate_image_with_3dbboxes_path_mode(img_path, object_json_path, intrinsic
         Returns:
             None
     """
-    img = cv2.imread(img_path)
     intrinsic = read_intrinsic(intrinsic_path)
-    extrinsic = read_extrinsic(extrinsic_path) # camera to world'
+    extrinsic_c2w = read_extrinsic(extrinsic_path) # camera to world'
     axis_align_matrix = read_extrinsic(axis_align_matrix_path) # world' to world
-    extrinsic = axis_align_matrix @ extrinsic # camera to world
     bboxes, object_ids, object_types = read_bboxes_json(object_json_path, return_id=True, return_type=True)
-    indices, distances = sort_objects_by_projection_distance(bboxes, extrinsic)
-    bboxes = bboxes[indices]
+    bboxes = get_9dof_boxes(bboxes, 'xyz', (0, 0, 192))
+    annotate_image_with_3dbboxes(img_path, bboxes, object_ids, object_types, intrinsic, extrinsic_c2w, axis_align_matrix, out_img_path)
+
+def annotate_image_with_3dbboxes(img_path, bboxes, object_ids, object_types, intrinsic, extrinsic_c2w, axis_align_matrix, out_img_path):
+    """
+        Annotate an image with 3D bounding boxes, and also object types and ids.
+        Args:
+            img_path: path to the image to be annotated
+            bboxes (List[o3d.geometry.OrientedBoundingBox]): N 3D bounding boxes.
+            object_ids (numpy.ndarray): N object ids.
+            object_types (numpy.ndarray): N object types.
+            intrinsic (numpy.ndarray): 4x4 (extended) intrinsic.
+            extrinsic_c2w (numpy.ndarray): 4x4 extrinsic, camera to world'.
+            axis_align_matrix (numpy.ndarray): 4x4 extrinsic, world' to world.
+            out_img_path: path to save the annotated image
+        Returns:
+            None
+    """
+    img = cv2.imread(img_path)
+    extrinsic_c2w = axis_align_matrix @ extrinsic_c2w # camera to world
+    indices, distances = sort_objects_by_projection_distance(bboxes, extrinsic_c2w)
+    bboxes = [bboxes[i] for i in indices]
     object_ids = [object_ids[i] for i in indices]
     object_types = [object_types[i] for i in indices]
     color_dict = get_color_map('color_map.txt')
-    bboxes = get_9dof_boxes(bboxes, 'xyz', (0, 0, 192))
     occupency_map = np.zeros_like(img[:, :, 0], dtype=bool)
     for i, bbox in enumerate(bboxes):
         if distances[i] > 100 or distances[i] < 0:
             continue
         color = color_dict.get(object_types[i], (0, 0, 192))
         label = str(object_ids[i]) + ' ' + object_types[i]
-        img, occupency_map = draw_box3d_on_img(img, bbox, color, label, extrinsic, intrinsic, occupency_map=occupency_map)
+        img, occupency_map = draw_box3d_on_img(img, bbox, color, label, extrinsic_c2w, intrinsic, occupency_map=occupency_map)
     cv2.imwrite(out_img_path, img)
     print("Annotated image saved to  %s" % out_img_path)
-
 
 def get_color_map(path='color_map.txt'):
     """
@@ -97,14 +113,20 @@ def get_color_map(path='color_map.txt'):
 
 def sort_objects_by_projection_distance(bboxes, extrinsic):
     """
-        Sort objects by distance from the camera.
+        Sort objects by their (centers') projection distance from the camera.
         Args:
             bboxes (numpy.ndarray): Nx9 bboxes of the N objects.
+                or (List[o3d.geometry.OrientedBoundingBox]): A list of 3D boxes.
             extrinsic (numpy.ndarray): 4x4 extrinsic, camera to world.
         Returns:
             sorted_indices (numpy.ndarray): a permutation of the indices of the input boxxes
     """
-    centers = bboxes[:, :3]
+    if isinstance(bboxes, list):
+        centers = np.array([box.get_center() for box in bboxes])
+    elif isinstance(bboxes, np.ndarray):
+        centers = bboxes[:, :3]
+    else:
+        raise ValueError("Unsupported input type {} for bboxes".format(type(bboxes)))
     centers = np.concatenate([centers, np.ones((centers.shape[0], 1))], axis=1) # shape (N, 4)
     centers_in_camera = extrinsic @ centers.transpose() # shape (4, N)
     distance = centers_in_camera[2, :] # shape (N,)
@@ -383,13 +405,63 @@ def visualize_distribution_hist(data, num_bins=20):
     plt.ylabel('Frequency')
     plt.show()
 
+def annotate_images_with_visible_objects(img_ids):
+    pickle_file_val = './example_data/embodiedscan_infos_val_full.pkl'
+    pickle_file_train = './example_data/embodiedscan_infos_train_full.pkl'
+    anno_dict1 = read_annotation_pickle(pickle_file_val)
+    anno_dict2 = read_annotation_pickle(pickle_file_train)
+    anno_dict = {**anno_dict1, **anno_dict2}
+    keys = sorted(list(anno_dict.keys()))
+    for key_index in range(len(keys)):
+        key = keys[key_index]
+        anno = anno_dict[key]
+        bboxes = anno['bboxes']
+        object_ids = anno['object_ids']
+        object_types = anno['object_types']
+        visible_view_object_dict = anno['visible_view_object_dict']
+        extrinsics_c2w = anno['extrinsics_c2w']
+        axis_align_matrix = anno['axis_align_matrix']
+        intrinsics = anno['intrinsics']
+        depth_intrinsics = anno['depth_intrinsics']
+        image_paths = anno['image_paths']
+        
+        dataset, _, scene_id, _ = image_paths[0].split('.')[0].split('/')
+        if dataset != 'scannet':
+            continue
+        if scene_id != 'scene0000_00':
+            continue
+        bboxes = get_9dof_boxes(bboxes, 'zxy', (0, 0, 192))
+        view_ids = [image_path.split('.')[0].split('/')[-1] for image_path in image_paths]
+        for view_id in view_ids:
+            if view_id in img_ids:
+                view_index = view_ids.index(view_id)
+                img_path = f"./example_data/posed_images/{view_id}.jpg"
+                visible_object_ids = visible_view_object_dict[view_id]
+                visible_bboxes, visible_object_types = [], []
+                for object_id in object_ids:
+                    if object_id in visible_object_ids:
+                        index = np.where(object_ids == object_id)[0][0]
+                        object_type = object_types[index]
+                        if object_type in EXCLUDED_OBJECTS:
+                            continue
+                        visible_bboxes.append(bboxes[index])
+                        visible_object_types.append(object_type)
+                intrinsic = intrinsics[view_index]
+                extrinsic_c2w = extrinsics_c2w[view_index]
+                axis_align_matrix = axis_align_matrix
+                out_img_path = f"./{view_id}_annotated.jpg"
+                annotate_image_with_3dbboxes(img_path, visible_bboxes, visible_object_ids, visible_object_types, intrinsic, extrinsic_c2w, axis_align_matrix, out_img_path)
+
 if __name__ == '__main__':
-    img_id = "02300"
-    img_path = f"./example_data/posed_images/{img_id}.jpg"
-    object_json_path = f"./example_data/label/main_MDJH01.json"
-    intrinsic_path = f"./example_data/posed_images/intrinsic.txt"
-    extrinsic_path = f"./example_data/posed_images/{img_id}.txt"
-    axis_align_matrix_path = "./example_data/label/rot_matrix.npy"
-    out_img_path = f"./{img_id}_annotated.jpg"
-    annotate_image_with_3dbboxes_path_mode(img_path, object_json_path, intrinsic_path, extrinsic_path, axis_align_matrix_path, out_img_path)
-    # annotate_image_with_single_3dbbox_path_mode(img_path, object_json_path, intrinsic_path, extrinsic_path, axis_align_matrix_path, out_img_path, object_id=50)
+    img_ids = ["00860", "00970"]
+    annotate_images_with_visible_objects(img_ids)
+    # for img_id in img_ids:
+        # img_path = f"./example_data/posed_images/{img_id}.jpg"
+        # object_json_path = f"./example_data/label/main_MDJH01.json"
+        # intrinsic_path = f"./example_data/posed_images/intrinsic.txt"
+        # extrinsic_path = f"./example_data/posed_images/{img_id}.txt"
+        # axis_align_matrix_path = "./example_data/label/rot_matrix.npy"
+        # out_img_path = f"./{img_id}_annotated.jpg"
+        # annotate_image_with_3dbboxes_path_mode(img_path, object_json_path, intrinsic_path, extrinsic_path, axis_align_matrix_path, out_img_path)
+        # annotate_image_with_single_3dbbox_path_mode(img_path, object_json_path, intrinsic_path, extrinsic_path, axis_align_matrix_path, out_img_path, object_id=50)
+    
