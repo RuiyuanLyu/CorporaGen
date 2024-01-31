@@ -208,7 +208,7 @@ def read_annotation_pickle(path):
             if missing_intrinsic:
                 intrinsic = images[image_idx]['cam2img']
                 depth_intrinsic = images[image_idx]['cam2depth']
-            visible_instance_indices = images[image_idx]['visible_instance_ids'] # list of int
+            visible_instance_indices = images[image_idx]['visible_instance_ids'] # numpy array of int
             visible_instance_ids = object_ids[visible_instance_indices]
             visible_view_object_dict[extrinsic_id] = visible_instance_ids
             extrinsics_c2w.append(cam2global)
