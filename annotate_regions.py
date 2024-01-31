@@ -17,7 +17,8 @@ def annotate_region_image(image_paths, region_type, object_ids, object_types):
         Returns:
             A list of strings, each string is a part of the annotation.
     """    
-    user_message1 = "I will share photos of a room's {} and use 3D boxes to highlight important items within it. Your task is to provide a description of the primary furniture and decorations found in the area, as well as their respective positions. Please aim for a roughly 250-word description, and when referring to objects, enclose their names and ids in angle brackets, like <piano> <01>.".format(region_type) 
+    num_words = 150 + 10*len(object_ids)
+    user_message1 = "I will share photos of a room's {} and use 3D boxes to highlight important items within it. Your task is to provide a description of the primary furniture and decorations found in the area, as well as their respective positions. Please aim for a roughly {}-word description, and when referring to objects, enclose their names and ids in angle brackets, like <piano> <01>.".format(region_type, num_words)
     user_message1 += "In this region, the items that need to be described include "
     for (object_id, object_type) in zip(object_ids, object_types):
         user_message1 += f"<{object_type}> <{object_id}>, "

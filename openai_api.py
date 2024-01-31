@@ -40,7 +40,7 @@ def mimic_chat_budget(user_content_groups, system_prompt=None):
         response = client.chat.completions.create(
             model=model,
             messages=messages,
-            max_tokens=1000,
+            max_tokens=2000,
         )
         response = response.choices[0].message.content.strip()
         messages.append({"role": "assistant", "content": response})
