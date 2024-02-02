@@ -84,6 +84,7 @@ def annotate_image_with_3dbboxes(img_path, bboxes, object_ids, object_types, int
     occupency_map = np.zeros_like(img[:, :, 0], dtype=bool)
     for i, bbox in enumerate(bboxes):
         if distances[i] > 100 or distances[i] < 0:
+            print("Object {} is too far away with distance {}".format(object_ids[i], distances[i]))
             continue
         color = color_dict.get(object_types[i], (0, 0, 192))
         label = str(object_ids[i]) + ' ' + object_types[i]
@@ -112,13 +113,13 @@ def get_color_map(path='color_map.txt'):
     return item_colors
 
 
-def sort_objects_by_projection_distance(bboxes, extrinsic):
+def sort_objects_by_projection_distance(bboxes, extrinsic_c2w):
     """
         Sort objects by their (centers') projection distance from the camera.
         Args:
             bboxes (numpy.ndarray): Nx9 bboxes of the N objects.
                 or (List[o3d.geometry.OrientedBoundingBox]): A list of 3D boxes.
-            extrinsic (numpy.ndarray): 4x4 extrinsic, camera to world.
+            extrinsic_c2w (numpy.ndarray): 4x4 extrinsic, camera to world.
         Returns:
             sorted_indices (numpy.ndarray): a permutation of the indices of the input boxxes
     """
@@ -129,7 +130,7 @@ def sort_objects_by_projection_distance(bboxes, extrinsic):
     else:
         raise ValueError("Unsupported input type {} for bboxes".format(type(bboxes)))
     centers = np.concatenate([centers, np.ones((centers.shape[0], 1))], axis=1) # shape (N, 4)
-    centers_in_camera = extrinsic @ centers.transpose() # shape (4, N)
+    centers_in_camera = np.linalg.inv(extrinsic_c2w) @ centers.transpose() # shape (4, N)
     distance = centers_in_camera[2, :] # shape (N,)
     sorted_indices = np.argsort(-distance)
     return sorted_indices, distance[sorted_indices]
@@ -437,15 +438,15 @@ def annotate_images_with_visible_objects(img_ids):
             if view_id in img_ids:
                 view_index = view_ids.index(view_id)
                 img_path = f"./example_data/posed_images/{view_id}.jpg"
-                visible_object_ids_pre = visible_view_object_dict[view_id]
+                visible_object_ids_pre = set(visible_view_object_dict[view_id])
                 visible_bboxes, visible_object_ids, visible_object_types = [], [], []
                 for object_id in object_ids:
                     if object_id in visible_object_ids_pre:
-                        index = np.where(object_ids == object_id)[0][0]
-                        object_type = object_types[index]
+                        object_index = np.where(object_ids == object_id)[0][0]
+                        object_type = object_types[object_index]
                         if object_type in EXCLUDED_OBJECTS:
                             continue
-                        visible_bboxes.append(bboxes[index])
+                        visible_bboxes.append(bboxes[object_index])
                         visible_object_ids.append(object_id)
                         visible_object_types.append(object_type)
                 intrinsic = intrinsics[view_index]
@@ -455,7 +456,8 @@ def annotate_images_with_visible_objects(img_ids):
                 annotate_image_with_3dbboxes(img_path, visible_bboxes, visible_object_ids, visible_object_types, intrinsic, extrinsic_c2w, axis_align_matrix, out_img_path)
 
 if __name__ == '__main__':
-    img_ids = ["00860", "00970"]
+    # img_ids = ["00860", "00970"]
+    img_ids = ["01750", "01860", "02300", "04600", "04970"]
     annotate_images_with_visible_objects(img_ids)
     # for img_id in img_ids:
         # img_path = f"./example_data/posed_images/{img_id}.jpg"
