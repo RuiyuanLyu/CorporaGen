@@ -38,47 +38,27 @@ def annotate_region_image(image_paths, region_type, object_ids, object_types):
             annotation.append(message["content"])
     return annotation
 
-def check_annotation_path(json_dir):
-    valid_dict = {}
-    num_invalid = 0
-    for file_name in os.listdir(json_dir):
-        if not file_name.endswith(".json"):
-            continue
-        with open(os.path.join(json_dir, file_name), "r") as f:
-            object_id, object_type, image_id = file_name.split(".")[0].split("_")
-            data = json.load(f) 
-            is_valid, error_message = check_annotation(data)
-            if not is_valid:
-                num_invalid += 1
-                print(f"Invalid annotation for object {object_id}: {error_message}")
-            valid_dict[object_id] = is_valid
-    print(f"Checked {len(valid_dict)} annotations. {num_invalid} annotations are invalid.")
-    return valid_dict
-
-def check_annotation(annotation):
+def check_annotation(annotation, object_ids, object_types):
     """
-        Checks if the annotation is valid.
+        Checks if the annotation contains the object ids and types correctly.
         Args:
-            annotation: A list of descriptions. Annotation[0] should be the long version of the description, and Annotation[1] should be the short version.
+            annotation: A list of descriptions.
+            object_ids: A list of ints, the ids of the objects in the region.
+            object_types: A list of strings, the types of the objects in the region.
         Returns:
             is_valid: A boolean indicating if the annotation is valid.
             error_message: A string containing the error message if the annotation is not valid.
     """
-    if not isinstance(annotation, list):
-        return False, "Type error. Annotation should be a *list* of two strings."
-    if len(annotation)!= 2:
-        return False, "Number of elements error. Annotation should be a list of *two* strings."
-    if not isinstance(annotation[0], str) or not isinstance(annotation[1], str):
-        return False, "Type error. Annotation should be a list of two *strings*."
-    long_description = annotation[0].lower()
-    short_description = annotation[1].lower()
-    if "sorry" in long_description or "misunderstand" in long_description:
-        return False, "The model may not describe objects accurately or the object we want."
-    if len(short_description) > len(long_description):
-        return False, "Length error. The shorthand version is longer. Hallucinations are not allowed."
-    if len(short_description) > 1200:
-        return False, "Length error. The shorthand version is too long."
-    return True, ""
+    description = " ".join(annotation)
+    num_objects = len(object_ids)
+    num_detected_objects = 0
+    for object_id, object_type in zip(object_ids, object_types):        
+        if f"<{object_id}>" not in description:
+            print(f"Error: {object_type} <{object_id}> not found in annotation.")
+        else:
+            num_detected_objects += 1
+    print(f"Detected {num_detected_objects} out of {num_objects} objects in the annotation.")
+    return num_detected_objects == num_objects
 
 def get_visible_objects_dict(dataset_tar, scene_id_tar):
     """
@@ -125,7 +105,7 @@ def prepare_visible_objects(visible_view_object_dict, view_ids, object_ids, obje
     visible_object_ids_pre = []
     for view_id in view_ids:
         visible_object_ids_pre += visible_view_object_dict[view_id].tolist()
-    visible_object_ids_pre = list(set(visible_object_ids_pre))
+    visible_object_ids_pre = sorted(list(set(visible_object_ids_pre)))
     visible_object_ids, visible_object_types = [], []
     from utils_read import EXCLUDED_OBJECTS
     for object_id in visible_object_ids_pre:
@@ -145,12 +125,14 @@ if __name__ == "__main__":
     #     print(f"Line {i+1}:")
     #     print(line)
     view_ids = ["00860", "00970"]
-    image_paths = ["./{}_annotated.jpg".format(view_id) for view_id in view_ids]
+    image_paths = ["./example_data/anno_lang/regions/01_sleeping_region/{}_annotated.jpg".format(view_id) for view_id in view_ids]
     region_type = "sleeping region"
     visible_view_object_dict, object_ids, object_types = get_visible_objects_dict("scannet", "scene0000_00")
-    # output_path = "./example_data/anno_lang/corpora_region"
+    output_path = "./example_data/anno_lang/regions/01_sleeping_region/annotation.json"
     visible_object_ids, visible_object_types = prepare_visible_objects(visible_view_object_dict, view_ids, object_ids, object_types)
-    annotations = annotate_region_image(image_paths, region_type, visible_object_ids, visible_object_types)
-    with open("annotation.json", "w") as f:
-        json.dump(annotations, f, indent=4)
+    # annotations = annotate_region_image(image_paths, region_type, visible_object_ids, visible_object_types)
+    # with open(output_path, "w") as f:
+    #     json.dump(annotations, f, indent=4)
+    annotations = load_json(output_path)
     print(annotations)
+    check_annotation(annotations, visible_object_ids, visible_object_types)
