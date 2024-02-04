@@ -6,6 +6,13 @@ import shutil
 import scipy
 from functools import wraps
 import mmengine
+from tqdm import tqdm
+from scipy.spatial import ConvexHull
+from shapely.geometry import Polygon
+from utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_depth_map, read_bboxes_json, load_json, reverse_multi2multi_mapping, read_annotation_pickle, EXCLUDED_OBJECTS
+from utils_3d import check_bboxes_visibility, check_point_visibility, interpolate_bbox_points
+from utils_vis import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop_box_from_img
+
 
 global TRACKED
 TRACKED = False
@@ -17,14 +24,6 @@ def mmengine_track_func(func):
         result = func(*args)
         return result
     return wrapped_func
-
-
-from tqdm import tqdm
-from scipy.spatial import ConvexHull
-from shapely.geometry import Polygon
-from utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_depth_map, read_bboxes_json, load_json, reverse_multi2multi_mapping, read_annotation_pickle, EXCLUDED_OBJECTS
-from utils_3d import check_bboxes_visibility, check_point_visibility, interpolate_bbox_points
-from utils_vis import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop_box_from_img
 
 @mmengine_track_func
 def paint_object_pictures_tracked(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint"):
@@ -208,54 +207,6 @@ def get_visible_objects_dict(object_json_path, extrinsic_dir, axis_align_matrix_
         json.dump(visible_objects_dict, f, indent=4)
     return visible_objects_dict
 
-def get_best_view_old(o3d_bbox, extrinsics_c2w, intrinsics, image_size):
-    """
-        DEPRECATED. Select the best view for an 3d object (bbox) from a set of camera positions (extrinsics)
-        Args:
-            o3d_bbox: open3d.geometry.OrientedBoundingBox representing the 3d bbox
-            extrinsics_c2w: numpy array of shape (n, 4, 4) representing the extrinsics to select from
-            intrinsics: numpy array of shape (n, 4, 4) representing the intrinsics matrix
-            image_size: tuple of (width, height) of the image
-        Returns:
-            best_view: numpy array of shape (4, 4), the extrinsic matrix of the best view
-            best_view_index: int, the index of the best view in the extrinsics array
-    """
-    corners = np.array(o3d_bbox.get_box_points()) # shape (8, 3)
-    corners = np.concatenate([corners, np.ones((8, 1))], axis=1) # shape (8, 4)
-    areas = []
-    num_insides = []
-    for i in range(len(intrinsics)):
-        intrinsic = intrinsics[i]
-        extrinsic_c2w = extrinsics_c2w[i]
-        projected_corners = intrinsic @ np.linalg.inv(extrinsic_c2w) @ corners.T # shape (4, 8)
-        if projected_corners[2, :].min() < 0: # check if the object is behind the camera
-            num_insides.append(0)
-            continue
-        projected_corners = (projected_corners[:2, :] / projected_corners[2, :]).T # shape (8, 2)
-        num_inside = np.sum(is_inside_2d_box(projected_corners, image_size))
-        num_insides.append(num_inside)
-    num_insides = np.array(num_insides)
-    if np.max(num_insides) == 0:
-        return None, None # object is not visible in any view
-    good_indices = np.where(num_insides==np.max(num_insides))[0]
-    for i in good_indices:
-        intrinsic = intrinsics[i]
-        extrinsic_c2w = extrinsics_c2w[i]
-        projected_corners = intrinsic @ np.linalg.inv(extrinsic_c2w) @ corners.T # shape (4, 8)
-        projected_corners = (projected_corners[:2, :] / projected_corners[2, :]).T # shape (8, 2)
-        areas.append(compute_visible_area(projected_corners, image_size))
-    areas = np.array(areas)
-    _best_view_index = np.argmax(areas)
-    best_view_index = good_indices[_best_view_index]
-    best_view = extrinsics_c2w[best_view_index]
-    best_area = areas[_best_view_index]
-    # print(f"Best view index: {best_view_index}, best area: {best_area}")
-    # if best_area > 0:
-    #     best_projection = intrinsic @ np.linalg.inv(best_view) @ corners.T # shape (4, 8)
-    #     best_projection = (best_projection[:2, :] / best_projection[2, :]).T # shape (8, 2)
-    #     print(best_projection)
-    return best_view, best_view_index
-
 def get_best_view(o3d_bbox, extrinsics_c2w, depth_intrinsics, depth_maps):
     """
         Select the best view for an 3d object (bbox) from a set of camera positions (extrinsics)
@@ -316,22 +267,6 @@ def get_best_view(o3d_bbox, extrinsics_c2w, depth_intrinsics, depth_maps):
             return best_view_index
     best_view_index = np.argmax(centered_areas)
     return best_view_index
-        
-        
-def is_inside_2d_box(points, box_size):
-    """
-        Check if a set of points are inside a 2d box
-        Args:
-            points: a numpy array of shape (n,2) representing the points in the plane
-            box_size: a tuple of (width, height) of the box
-        Returns: a boolean array of shape (n,) indicating if each point is inside the box
-    """
-    width, height = box_size
-    x_min, y_min = 0, 0
-    x_max, y_max = width - 1, height - 1
-    inside = (points[:, 0] >= x_min) & (points[:, 0] <= x_max) & (points[:, 1] >= y_min) & (points[:, 1] <= y_max)
-    return inside
-
 
 def _compute_area(points):
     """
@@ -349,7 +284,6 @@ def _compute_area(points):
         else:
             print(points)
             raise e
-
         
 def _get_convex_hull_points(points):
     """
