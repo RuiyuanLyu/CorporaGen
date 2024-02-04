@@ -24,7 +24,7 @@ from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon
 from utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_depth_map, read_bboxes_json, load_json, reverse_multi2multi_mapping, read_annotation_pickle, EXCLUDED_OBJECTS
 from utils_3d import check_bboxes_visibility, check_point_visibility, interpolate_bbox_points
-from visualization import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop_box_from_img
+from utils_vis import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop_box_from_img
 
 @mmengine_track_func
 def paint_object_pictures_tracked(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint"):
