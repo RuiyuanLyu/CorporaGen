@@ -14,94 +14,7 @@ import json
 from match_region import get_data,process_data
 from visualization import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop_box_from_img
 import matplotlib.pyplot as plt
-def get_local_maxima_indices(data, window_size=3):
-    """
-        Returns the local maxima indices of a 1D array.
-    """
-    maxima_indices = []
-    if len(data) < window_size:
-        return maxima_indices
-    for i in range(len(data)):
-        left_index = max(i - window_size, 0)
-        right_index = min(i + window_size, len(data) - 1)
-        window = data[left_index:right_index]
-        if data[i] == np.max(window) and data[i] > 0:
-            maxima_indices.append(i)
-    return maxima_indices
-def is_blurry(image, threshold=100, return_variance=False):
-    """
-        Returns True if the image is blurry, False otherwise.
-        The lower the variance of the laplacian, the more blurry the image.
-    """
-    if len(image.shape) == 3:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = image
-    laplacian  = cv2.Laplacian(gray, cv2.CV_64F)
-    variance = laplacian.var()
-    if return_variance:
-        return variance < threshold, variance
-    return variance < threshold
-def get_blurry_image_ids(image_paths, save_path=None, threshold=150, skip_existing=False, save_variance_path=None):
-    """
-        Returns a list of image ids that are blurry.
-        Args:
-            image_paths: a list of image paths
-            save_path: path to the output json file to save the blurry image ids
-            threshold: the threshold for the variance of the laplacian to consider an image blurry
-            save_variance_path: path to the output json file to save the variance of each image
-        Returns:
-            blurry_ids: a list of image ids that are blurry
-    """
-    if os.path.exists(save_path) and skip_existing:
-        # print(f"Skipping existing file {save_path}")
-        return load_json(save_path)
-    image_ids = []
-    paths = image_paths
-    for image_path in image_paths:
-        image_id = os.path.basename(image_path)[:-4]
-        image_ids.append(image_id)
-    image_indices = np.argsort([int(i) for i in image_ids])
-    image_ids = [image_ids[i] for i in image_indices]
-    paths = [paths[i] for i in image_indices]
-    blurry_ids = []
-    vars = []
-    variance_dict = {}
-    if save_variance_path is None:
-        save_variance_dir = os.path.dirname(save_path)
-        save_variance_path = os.path.join(save_variance_dir, "image_variances.json")
-    if os.path.exists(save_variance_path):
-        variance_dict = load_json(save_variance_path)
-    pbar = tqdm(range(len(paths)))
-    for i in pbar:
-        image_path = paths[i]
-        image_id = image_ids[i]
-        pbar.set_description(f"Checking {image_id}")
-        if image_id in variance_dict:
-            variance = variance_dict[image_id]
-            vars.append(variance)
-            if variance < threshold:
-                blurry_ids.append(image_id)
-            continue
-        image = cv2.imread(image_path)
-        blurry, variance = is_blurry(image, threshold, return_variance=True)
-        vars.append(variance)
-        if blurry:
-            blurry_ids.append(image_id)
-    not_blurry_indices = get_local_maxima_indices(vars) # only applies for consecutive image streams
-    for i in not_blurry_indices:
-        if image_ids[i] in blurry_ids:
-            blurry_ids.remove(image_ids[i])
-    print(f"Found {len(blurry_ids)} blurry images out of {len(image_ids)}")
-    if save_path is not None:
-        with open(save_path, 'w') as f:
-            json.dump(blurry_ids, f, indent=4)
-    variance_dict = {}
-    for i in range(len(image_ids)):
-        variance_dict[image_ids[i]] = vars[i]
-    with open(save_variance_path, 'w') as f:
-        json.dump(variance_dict, f, indent=4)
-    return blurry_ids
+from select_view import get_local_maxima_indices, is_blurry, get_blurry_image_ids, _compute_area
 
 
 
@@ -489,23 +402,6 @@ def get_best_view(o3d_bbox, extrinsics_c2w, depth_intrinsics, depth_maps,show=Fa
             return best_view_index
     best_view_index = np.argmax(centered_areas)
     return best_view_index
-
-def _compute_area(points):
-    """
-        Computes the area of a set of points.
-    """
-    try:
-        hull = ConvexHull(points)
-        area = hull.volume
-        return area
-    except scipy.spatial.qhull.QhullError as e:
-        if "QH6154" in str(e): # in the same line
-            return 0
-        if "QH6013" in str(e): # same x coordinate
-            return 0
-        else:
-            print(points)
-            raise e
 
 
 def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, view_ids,
