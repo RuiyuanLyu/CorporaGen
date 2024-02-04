@@ -58,15 +58,16 @@ with gr.Blocks() as demo:
 
     label = gr.Radio(
         [
-            "guest room",
-            "living room",
-            "study",
-            "bedroom",
-            "dinning room",
-            "kitchen",
-            "basement",
-            "restroom",
-            "Toilet",
+            "living region",
+            "study region",
+            "sleeping region",
+            "dinning region",
+            "cooking region",
+            "guest region",
+            "bathing region",
+            "restroom region",
+            "storage region",
+            "others"
         ],
         label="label",
         info="definition of this region",
