@@ -11,10 +11,10 @@ from utils_3d import check_bboxes_visibility, check_point_visibility, interpolat
 from utils_read import read_annotation_pickle
 import shutil
 import json
-from match_region import get_data,process_data
+from region_matching import get_data,process_data
 from utils_vis import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop_box_from_img
 import matplotlib.pyplot as plt
-from select_view import get_local_maxima_indices, is_blurry, get_blurry_image_ids, _compute_area
+from object_view_select import get_local_maxima_indices, is_blurry, get_blurry_image_ids, _compute_area
 
 
 
