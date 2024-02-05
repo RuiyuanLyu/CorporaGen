@@ -74,7 +74,7 @@ def render_2d_top_down_view(point_cloud_path="example_data/lidar/main.pcd", outp
         x, y, _ = point
         pixel_x = int((x - min_x) * 20)
         pixel_y = int((y - min_y) * 20)
-        projection_image[pixel_y, pixel_x] = (color * 255).astype(np.uint8)
+        projection_image[pixel_y, pixel_x] = (color[::-1] * 255).astype(np.uint8)
     
     plt.imshow(projection_image, origin='lower')
     plt.axis('off')  # hide axis ticks and labels
