@@ -538,9 +538,6 @@ if __name__ == '__main__':
     group_dict = {}
 
     for region in region_with_label:
-        group_dict[region['label']]=region['object_ids']
+        group_dict[str(region['id'])+'_'+region['label']]=region['object_ids']
     print(group_dict)
     paint_group_pictures(group_dict, bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w,axis_align_matrix,intrinsics, real_image_paths, blurry_image_ids_path, output_dir)
-    #print(real_image_paths)
-
-    #paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, real_image_paths, blurry_image_ids_path, output_dir, output_type="paint")

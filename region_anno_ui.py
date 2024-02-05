@@ -1,4 +1,5 @@
 ####################  使用方式  #######################################
+<<<<<<< HEAD
 # 目的是给定当前俯视图，通过在图上选点框定图上的功能区域
 # 单个scene的标注流程
 # 1. 点击"Input file”框，根据文件名选择需要标注的图片
@@ -13,8 +14,20 @@
 # 其他说明
 # 1. “Clear”会清空对于当前图片*所有*的标注，谨慎点击
 # 2. 当前标注会展现在“Annotation History”中
+=======
+# 1. 点击"Input file”框，选择需要标注的图片
+# 2. 拖动“Vertex Number”滑块，选择多边形的顶点个数
+# 3. 在”Image”框中点Vertex Number个点，即选中了多边形
+# 4. 在”Lable”框中输入label
+# 5. 点击“Annotate”，完成一个多边形的标注(如果Vertex Number不满足或没有label则会提示)
+# 6. 点击“Clear”，自动清空对于当前图片的标注
+# 7. 点击“Undo”，返回上一步操作
+# 8. 重复2-5，标注更多多边形
+# 9. 点击“Save to file”，标注数据被保存在“./annotation/XXX.txt”里
+# 10. 当前标注会展现在“Annotation History”中
+>>>>>>> region_update
 ######################################################################
-
+#-*- coding:utf-8 –*-
 import os
 
 import cv2
@@ -24,19 +37,64 @@ from math import ceil
 import json
 import open3d as o3d
 from utils_read import read_annotation_pickle
-
-
+global file_name
 global click_evt_list
 global vertex_list
 global annotation_list
-global file_name
+
 global poly_done
 global poly_image
-click_evt_list = []
-vertex_list = []
-annotation_list = []
+import copy
+
+# for undo
+global item_dict_list
+global enable_undo
+global init_item_dict
+
 file_name = None
 poly_done = False
+global store_vertex_list
+vertex_list = []
+annotation_list = []
+<<<<<<< HEAD
+file_name = None
+poly_done = False
+=======
+
+item_dict_list=[]
+init_item_dict = {}
+
+
+init_item_dict['out_image'] = None
+init_item_dict['show_json'] = None
+init_item_dict['poly_done'] = False
+
+init_item_dict['vertex_list'] = []
+init_item_dict['annotation_list'] = []
+
+item_dict_list.append(init_item_dict)
+
+def lang_translation(region_name):
+    if region_name=="起居室":
+        return "living region"
+    if region_name=="书房":
+        return "study region"
+    if region_name=="卧室":
+        return "sleeping region"
+    if region_name=="饭厅":
+        return "dinning region"
+    if region_name=="厨房":
+        return "cooking region"
+    if region_name=="浴室":
+        return "bathing region"
+    if region_name=="储藏室":
+        return "storage region"
+    if region_name=="厕所":
+        return "restroom region"
+    if region_name=="其它":
+        return "others"
+    return None
+>>>>>>> region_update
 
 with gr.Blocks() as demo:
 
@@ -63,6 +121,7 @@ with gr.Blocks() as demo:
 
     label = gr.Radio(
         [
+<<<<<<< HEAD
             "living region",
             "study region",
             "sleeping region",
@@ -73,6 +132,9 @@ with gr.Blocks() as demo:
             "restroom region",
             "storage region",
             "others"
+=======
+            "起居室","书房","卧室","饭厅","厨房","浴室","储藏室","厕所","其它"
+>>>>>>> region_update
         ],
         label="label",
         info="definition of this region",
@@ -103,15 +165,21 @@ with gr.Blocks() as demo:
                 img[i][j][0] += is_in_poly((i, j), vertex_list) * int(255 * 0.4)
         return img
 
-    def draw_dot(img, vertex_num, evt: gr.SelectData):
+    def draw_dot(img,out_img,vertex_num, evt: gr.SelectData):
         global click_evt_list
         global poly_done
         global poly_image
+        global vertex_list
+
+        global enable_undo
         w, h, c = img.shape
         size = ceil(max([w, h]) * 0.01)
 
         out = img.copy() * 0.6
+
+
         if not poly_done:
+<<<<<<< HEAD
             click_evt_list.append(evt)
             if len(click_evt_list) == vertex_num:
                 for click_evt in click_evt_list:
@@ -126,6 +194,34 @@ with gr.Blocks() as demo:
                         ),
                     ] = np.array([255, 0, 0]).astype(np.uint8)
                 click_evt_list = []
+=======
+            #print(item_dict_list[-1]['vertex_list'],item_dict_list[-1]['poly_done'],vertex_list,poly_done)
+            new_item_dict = copy.deepcopy(item_dict_list[-1])
+            new_item_dict['poly_done'] = poly_done
+            new_item_dict['out_image'] = out_img
+
+
+            new_item_dict['vertex_list'] = copy.deepcopy(vertex_list)
+            item_dict_list.append(new_item_dict)
+            vertex_list.append([evt.index[1], evt.index[0]])
+
+
+
+            if len(vertex_list) == vertex_num:
+                #print("OK!")
+
+                for vertex in vertex_list:
+
+                    out[
+                        max(vertex[0] - size, 0) : min(
+                            vertex[0] + size, out.shape[0] - 1
+                        ),
+                        max(vertex[1] - size, 0) : min(
+                            vertex[1] + size, out.shape[1] - 1
+                        ),
+                    ] = np.array([255, 0, 0]).astype(np.uint8)
+
+>>>>>>> region_update
                 new_out = draw_polygon(out.copy())
                 poly_done = True
                 new_out = new_out.astype(np.uint8)
@@ -144,7 +240,14 @@ with gr.Blocks() as demo:
                             max(o_y - 1, 0) : min(o_y + 1, out.shape[1] - 1),
                         ] = np.array([0, 0, 255]).astype(np.uint8)
                 poly_image = new_out
+                global store_vertex_list
+                store_vertex_list = copy.deepcopy(vertex_list)
+                #print(store_vertex_list)
+                vertex_list = []
+                #print('before return', poly_done, vertex_list)
+
                 return new_out
+<<<<<<< HEAD
             out[
                 max(evt.index[1] - size, 0) : min(
                     evt.index[1] + size, out.shape[0] - 1
@@ -153,8 +256,21 @@ with gr.Blocks() as demo:
                     evt.index[0] + size, out.shape[1] - 1
                 ),
             ] = np.array([255, 0, 0]).astype(np.uint8)
+=======
+            for vertex in vertex_list:
+                out[
+                max(vertex[0] - size, 0): min(
+                    vertex[0] + size, out.shape[0] - 1
+                ),
+                max(vertex[1] - size, 0): min(
+                    vertex[1] + size, out.shape[1] - 1
+                ),
+                ] = np.array([255, 0, 0]).astype(np.uint8)
+>>>>>>> region_update
             out = out.astype(np.uint8)
+            #print('before return',poly_done,vertex_list)
             return out
+
 
         else:
             return poly_image
@@ -194,20 +310,45 @@ with gr.Blocks() as demo:
             max(p[0] - size, 0) : min(p[0] + size, out.shape[0] - 1),
             max(p[1] - size, 0) : min(p[1] + size, out.shape[1] - 1),
         ] = np.array([0, 0, 255]).astype(np.uint8)
+<<<<<<< HEAD
         detail_img = cv2.imread(useful_object[min_object_id])
         return out, detail_img
 
     def annotate(label, output_img):
+=======
+        detail_img = gr.update(value=useful_object[min_object_id])
+        return out, detail_img
+
+    def annotate(label, output_img,show_json):
+>>>>>>> region_update
         global poly_done
         global vertex_list
+        global click_evt_list
+        global annotation_list
+        new_item_dict = copy.deepcopy(item_dict_list[-1])
+        new_item_dict['poly_done'] = poly_done
+        new_item_dict['out_image'] = output_img
+        new_item_dict['show_json'] = show_json
+        new_item_dict['annotation_list'] = annotation_list
+        global store_vertex_list
+
+<<<<<<< HEAD
+        if poly_done and label != None:
+=======
+
+        new_item_dict['vertex_list'] = vertex_list
+        item_dict_list.append(new_item_dict)
 
         if poly_done and label != None:
 
-            global annotation_list
-            annotation = {}
-            annotation["label"] = label
+>>>>>>> region_update
 
-            annotation["vertex"] = vertex_list
+            annotation = {}
+            annotation["id"] = len(annotation_list)
+            annotation["label"] = lang_translation(label)
+
+
+            annotation["vertex"] = store_vertex_list
             annotation_list.append(annotation)
             vertex_list = []
 
@@ -216,23 +357,57 @@ with gr.Blocks() as demo:
             return None, None, annotation_list
         else:
 
-            vertex_list = []
-            global click_evt_list
-            click_evt_list = []
-            poly_done = False
+            gr.Info('Vertex num not match or have no label!Unable to annotation.')
 
+<<<<<<< HEAD
             return label, None, annotation_list
+=======
+            return label, output_img, annotation_list
+>>>>>>> region_update
 
-    def clear():
+    def clear(output_img, show_json):
         global annotation_list
-        annotation_list = []
-        global click_evt_list
-        click_evt_list = []
-        global vertex_list
-        vertex_list = []
         global poly_done
+<<<<<<< HEAD
         poly_done = False
         return None, None
+=======
+        global click_evt_list
+        global vertex_list
+
+        new_item_dict = copy.deepcopy(item_dict_list[-1])
+        new_item_dict['poly_done'] = poly_done
+        new_item_dict['out_image'] = output_img
+        new_item_dict['show_json'] = show_json
+        new_item_dict['annotation_list'] = annotation_list
+
+        new_item_dict['vertex_list'] = vertex_list
+        item_dict_list.append(new_item_dict)
+        annotation_list = []
+        vertex_list = []
+
+        poly_done = False
+        return None, None
+
+    def undo(output_img, show_json):
+        #print('undo!!!!')
+        if len(item_dict_list)==1:
+            return output_img, show_json
+        else:
+            global annotation_list
+            global poly_done
+            global vertex_list
+            global click_evt_list
+            output_img = item_dict_list[-1]['out_image']
+            show_json = item_dict_list[-1]['show_json']
+            annotation_list = item_dict_list[-1]['annotation_list']
+            poly_done = item_dict_list[-1]['poly_done']
+            vertex_list = item_dict_list[-1]['vertex_list']
+            del item_dict_list[-1]
+            #print('get:',poly_done,vertex_list)
+
+            return output_img,show_json
+>>>>>>> region_update
 
     def save_to_file():
         global annotation_list
@@ -247,10 +422,16 @@ with gr.Blocks() as demo:
         vertex_list = []
         global poly_done
         poly_done = False
+<<<<<<< HEAD
+=======
+        global item_dict_list
+        item_dict_list = [init_item_dict]
+>>>>>>> region_update
         return None, None, None, None, None
 
     annotate_btn = gr.Button("Annotate")
     clear_btn = gr.Button("Clear")
+    undo_btn = gr.Button("Undo")
     save_btn = gr.Button("Save to file")
 
     with gr.Row():
@@ -261,6 +442,7 @@ with gr.Blocks() as demo:
     input_file.change(
         get_file_path, inputs=[input_file], outputs=[input_img, object_postion_img]
     )
+<<<<<<< HEAD
     input_img.select(draw_dot, [input_img, total_vertex_num], output_img)
     object_postion_img.select(
         new_draw_dot, [input_img], [object_postion_img, detail_show_img]
@@ -268,6 +450,16 @@ with gr.Blocks() as demo:
     clear_btn.click(fn=clear, inputs=[], outputs=[output_img, show_json])
     annotate_btn.click(
         fn=annotate, inputs=[label, output_img], outputs=[label, output_img, show_json]
+=======
+    input_img.select(draw_dot, [input_img,output_img,total_vertex_num], output_img)
+    object_postion_img.select(
+        new_draw_dot, [input_img], [object_postion_img, detail_show_img]
+    )
+    clear_btn.click(fn=clear, inputs=[output_img, show_json], outputs=[output_img, show_json])
+    undo_btn.click(fn=undo, inputs=[output_img, show_json], outputs=[output_img, show_json])
+    annotate_btn.click(
+        fn=annotate, inputs=[label,output_img,show_json], outputs=[label, output_img, show_json]
+>>>>>>> region_update
     )
     save_btn.click(
         fn=save_to_file,
@@ -280,8 +472,12 @@ with gr.Blocks() as demo:
             detail_show_img,
         ],
     )
+<<<<<<< HEAD
 
+=======
+>>>>>>> region_update
 
+demo.queue()
 if __name__ == "__main__":
 
     import os
@@ -318,4 +514,8 @@ if __name__ == "__main__":
     for img_file in os.listdir(painted_img_dir):
         useful_object[int(img_file[:3])] = painted_img_dir + "/" + img_file
 
+<<<<<<< HEAD
     demo.launch()
+=======
+    demo.launch(show_error=True)
+>>>>>>> region_update
