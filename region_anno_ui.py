@@ -1,13 +1,18 @@
 ####################  使用方式  #######################################
-# 1. 点击"Input file”框，选择需要标注的图片
-# 2. 拖动“Vertex Number”滑块，选择多边形的顶点个数
-# 3. 在”Image”框中点Vertex Number个点，即选中了多边形
-# 4. 在”Lable”框中输入label
-# 5. 点击“Annotate”，完成一个多边形的标注，自动清空“Selected Polygon”和“Label”(如果Vertex Number不满足或没有label则清空当前步)
-# 6. 点击“Clear”，自动清空对于当前图片的标注
-# 7. 重复2-5，标注更多多边形
-# 8. 点击“Save to file”，标注数据被保存在“./annotation/XXX.txt”里
-# 9. 当前标注会展现在“Annotation History”中
+# 目的是给定当前俯视图，通过在图上选点框定图上的功能区域
+# 单个scene的标注流程
+# 1. 点击"Input file”框，根据文件名选择需要标注的图片
+# 2. 不断重复以下流程，直到标完所有功能区
+#   a. 拖动“Vertex Number”滑块，选择多边形的顶点个数
+#   b. 在”Image”框中点Vertex Number个点，即选中了多边形
+#   c. 在”Lable”框中选择label，即该区域提供的功能
+#   d. 点击“Annotate”，完成一个多边形的标注
+#     i. “Selected Polygon”和“Label”会被自动清空
+#     ii. 如果顶点的数量不匹配，或者没有label则会清空当前多边形
+# 3. 点击“Save to file”，整张图片的标注数据会被保存
+# 其他说明
+# 1. “Clear”会清空对于当前图片*所有*的标注，谨慎点击
+# 2. 当前标注会展现在“Annotation History”中
 ######################################################################
 
 import os
