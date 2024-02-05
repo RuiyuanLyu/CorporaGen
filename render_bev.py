@@ -53,7 +53,7 @@ def render_3d_top_down_view(point_cloud_path="example_data/lidar/main.pcd"):
     visualizer.destroy_window()
     
 
-def render_2d_top_down_view(point_cloud_path="example_data/lidar/main.pcd", output_path='point_cloud_top_view.png'):
+def render_bev(point_cloud_path="example_data/lidar/main.pcd", output_path='point_cloud_top_view.png'):
     point_cloud = o3d.io.read_point_cloud(point_cloud_path)
 
     points = np.asarray(point_cloud.points)
@@ -87,4 +87,4 @@ if __name__ == '__main__':
     # render_3d_top_down_view()
     point_cloud_path="example_data/lidar/main.pcd"
     output_path='example_data/anno_lang/point_cloud_top_view.png'
-    render_2d_top_down_view(point_cloud_path, output_path)
+    render_bev(point_cloud_path, output_path)
