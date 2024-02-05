@@ -1,6 +1,7 @@
 import open3d as o3d
 import numpy as np
 import matplotlib.pyplot as plt
+import cv2
 
 def compute_extrinsic_matrix(lookat_point, camera_coords):
     """
@@ -77,7 +78,7 @@ def render_2d_top_down_view(point_cloud_path="example_data/lidar/main.pcd", outp
     
     plt.imshow(projection_image, origin='lower')
     plt.axis('off')  # hide axis ticks and labels
-    plt.savefig(output_path, bbox_inches='tight', pad_inches=0, dpi=200)
+    cv2.imwrite(output_path,projection_image)
     print("Successfully saved to", output_path)
     plt.show()
     

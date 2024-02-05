@@ -4,7 +4,7 @@ import json
 import open3d as o3d
 from utils_3d import euler_angles_to_matrix
 from utils_read import read_bboxes_json, read_intrinsic
-from visualization import visualize_object_types_on_sam_image
+from utils_vis import visualize_object_types_on_sam_image
 
 # WARNING: this file is deprecated and will be removed in the future.
 
