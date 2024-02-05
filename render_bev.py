@@ -28,24 +28,32 @@ def compute_extrinsic_matrix(lookat_point, camera_coords):
     return extrinsic
 
 
-def render_3d_top_down_view(ply_path, output_path):
-    point_cloud = o3d.io.read_point_cloud(ply_path)
+def _render_3d_bev(ply_path, output_path, axis_align_matrix=None, resolution=100):
+    mesh = o3d.io.read_triangle_mesh(ply_path)
 
+    if axis_align_matrix is None:
+        axis_align_matrix = np.eye(4)
+    points = np.asarray(mesh.vertices)
+    points = np.concatenate([points, np.ones_like(points[..., :1])], axis=-1)  # shape (n, 4)
+    points = axis_align_matrix @ points.T # shape (4, n)
+    points = (points.T)[:, :3]
+    mesh.vertices = o3d.utility.Vector3dVector(points)
     # Create a visualizer object
     visualizer = o3d.visualization.Visualizer()
 
     # Add the point cloud to the visualizer
     visualizer.create_window(visible=False, width=1024, height=768)
-    visualizer.add_geometry(point_cloud)
+    visualizer.add_geometry(mesh)
 
     # Set the camera view point
     view_control = visualizer.get_view_control()
     pinhole_camera_param = view_control.convert_to_pinhole_camera_parameters()
-    camera_position = np.array([0, 0, 8])
+    camera_position = np.array([0, 0, 1000])
     lookat_point = np.array([0, 0, 0])
     extrinsic_matrix = compute_extrinsic_matrix(lookat_point, camera_position)
     pinhole_camera_param.extrinsic = extrinsic_matrix
     view_control.convert_from_pinhole_camera_parameters(pinhole_camera_param)
+    view_control.set_field_of_view(1)
     visualizer.poll_events()
     visualizer.update_renderer()
 
@@ -54,7 +62,7 @@ def render_3d_top_down_view(ply_path, output_path):
     visualizer.destroy_window()
     
 
-def _render_bev_pcd(point_cloud_path, output_path, axis_align_matrix=None, resolution=80, roof_percentage=0.0):
+def _render_2d_bev(point_cloud_path, output_path, axis_align_matrix=None, resolution=80, roof_percentage=0.0):
     if axis_align_matrix is None:
         axis_align_matrix = np.eye(4)
     point_cloud = o3d.io.read_point_cloud(point_cloud_path)
@@ -114,7 +122,7 @@ def render_bev_scannet(scene_id):
     point_cloud_path = f"/mnt/petrelfs/share_data/maoxiaohan/ScanNet_v2/scans/{scene_id}/{scene_id}_vh_clean.ply"
     output_path = "testing_scannet.png"
     axis_align_matrix = read_axis_align_matrix(f"/mnt/petrelfs/share_data/maoxiaohan/ScanNet_v2/scans/{scene_id}/{scene_id}.txt", mode="scannet")
-    _render_bev_pcd(point_cloud_path, output_path, axis_align_matrix, resolution=80)
+    _render_3d_bev(point_cloud_path, output_path, axis_align_matrix, resolution=80)
 
 def render_bev_mp3d(scene_id):
     """
@@ -130,7 +138,7 @@ def render_bev_mp3d(scene_id):
     output_path = "testing_mp3d.png"
     axis_align_matrix = np.load(f"/mnt/petrelfs/share_data/maoxiaohan/matterport3d/matterport3d/data/{scene_id}/label/rot_matrix.npy")
     print(axis_align_matrix)
-    _render_bev_pcd(point_cloud_path, output_path, axis_align_matrix, resolution=80, roof_percentage=0.2)
+    _render_3d_bev(point_cloud_path, output_path, axis_align_matrix, resolution=80, roof_percentage=0.2)
 
 def render_bev_3rscan(scene_id):
     """
@@ -140,7 +148,7 @@ def render_bev_3rscan(scene_id):
     point_cloud_path = f"/mnt/petrelfs/share_data/maoxiaohan/3rscan/data/{scene_id}/lidar/mesh.refined.v2.obj"
     output_path = "testing_3rscan.png"
     # axis_align_matrix = np.load(f"/mnt/petrelfs/share_data/maoxiaohan/matterport3d/matterport3d/data/{scene_id}/label/rot_matrix.npy")
-    _render_bev_pcd(point_cloud_path, output_path, resolution=80)
+    _render_3d_bev(point_cloud_path, output_path, resolution=80)
 
 
 if __name__ == '__main__':
