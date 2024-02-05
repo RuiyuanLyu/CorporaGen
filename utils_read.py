@@ -90,7 +90,7 @@ def read_extrinsic(path):
         raise ValueError("Invalid file extension.")
 
 
-def _read_mp3d_intrinsic(path):
+def _read_intrinsic_mp3d(path):
     a = np.loadtxt(path)
     intrinsic = np.identity(4, dtype=float)
     intrinsic[0][0] = a[2]  # fx
@@ -101,7 +101,7 @@ def _read_mp3d_intrinsic(path):
     return intrinsic
 
 
-def _read_scannet_intrinsic(path):
+def _read_intrinsic_scannet(path):
     intrinsic = np.loadtxt(path)
     return intrinsic
 
@@ -113,12 +113,25 @@ def read_intrinsic(path, mode="scannet"):
         extended intrinsic of shape (4, 4)
     """
     if mode == "scannet":
-        return _read_scannet_intrinsic(path)
+        return _read_intrinsic_scannet(path)
     elif mode == "mp3d":
-        return _read_mp3d_intrinsic(path)
+        return _read_intrinsic_mp3d(path)
     else:
-        raise ValueError("Invalid mode.")
+        raise ValueError("Invalid mode {}.".format(mode)) 
 
+def _read_axis_align_matrix_scannet(path):
+    with open(path, 'r') as file:
+        first_line = file.readline()
+    vals = first_line.strip().split(' ')[2:]
+    vals = np.array(vals, dtype=np.float64)
+    output = vals.reshape(4, 4)
+    return output
+
+def read_axis_align_matrix(path, mode):
+    if mode == "scannet":
+        return _read_axis_align_matrix_scannet(path)
+    else:
+        raise ValueError("Invalid mode {}.".format(mode)) 
 
 def read_depth_map(path):
     """
