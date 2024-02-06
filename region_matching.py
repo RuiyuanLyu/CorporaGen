@@ -16,7 +16,7 @@ def is_in_poly(p, poly):
             is_in = True
             break
         if min(y1, y2) < py <= max(y1, y2):
-            x = x1 + (py - y1) * (x2 - x1) / (y2 - y1)
+            x = x1 + (py - y1) * (x2 - x1) / (y2 - y1) # find the point on the line, with y=py
             if x == px:
                 is_in = True
                 break
@@ -50,8 +50,6 @@ def get_data(input_annotation_path,point_cloud_path):
         else:
             s += l
     region_with_label = json.loads(s)
-
-
 
     points = np.asarray(point_cloud.points)
     sorted_indices = np.argsort(points[:, 2])
