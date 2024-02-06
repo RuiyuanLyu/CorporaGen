@@ -31,8 +31,12 @@ def get_position_in_render_image(point,min_x, min_y,ratio=20):
     return pixel_y,pixel_x
 
 def get_data(input_annotation_path,point_cloud_path):
-    '''extract data from input files'''
-
+    '''
+    extracts the min_x, min_y, and region_with_label from input data
+    Returns:
+        min_x,min_y: the minimum x and y coordinates of the point cloud
+        region_with_label: a list of dict [{id:int, label:str, vertex:[(x1,y1),(x2,y2),...,(xn,yn)]]
+    '''
 
     point_cloud = o3d.io.read_point_cloud(point_cloud_path)
 
@@ -58,8 +62,12 @@ def get_data(input_annotation_path,point_cloud_path):
 
     return min_x,min_y,region_with_label
 
-def process_data(region_with_label,object_ids,bboxes,min_x, min_y):
-    '''process the annotation data'''
+def update_objects(region_with_label,object_ids,bboxes,min_x, min_y):
+    '''
+    update the object_ids for each region in the region_with_label 
+    Returns:
+        region_with_label (list(dict)): updated dict with object_ids for each region
+    '''
 
     for region in region_with_label:
 
@@ -77,27 +85,22 @@ def process_data(region_with_label,object_ids,bboxes,min_x, min_y):
 
 if __name__ == "__main__":
     file_name = 'point_cloud_top_view.png'
-    input_annotation_path = f"C:/Users/86186/Desktop/3D_scene_data/CorporaGen-master/CorporaGen-master/annotation/{file_name}.txt" #The result of manual annotation
-    visibility_json_path = "C:/Users/86186/Desktop/3D_scene_data/anno_lang/visible_objects.json"
-    object_json_path = "C:/Users/86186/Desktop/3D_scene_data/example_data/label/main_MDJH13.json"
-    point_cloud_path = "C:/Users/86186/Desktop/3D_scene_data/example_data/lidar/main.pcd"
-    otuput_annotation_dir = "C:/Users/86186/Desktop/3D_scene_data/CorporaGen-master/CorporaGen-master/process_annotation"
+    input_annotation_path = f"./example_data/anno_lang/region_anno/{file_name}.txt" #The result of manual annotation
+    point_cloud_path = "./example_data/lidar/main.pcd"
+    output_annotation_dir = "./example_data/anno_lang/region_anno"
 
     ratio = 20 #ratio of point to render image
 
     min_x, min_y, region_with_label = get_data(input_annotation_path,point_cloud_path)
 
-    object_data = np.load("../CorporaGen-master2/CorporaGen-master/example.npy",allow_pickle=True).item()
+    object_data = np.load("example_data/example.npy",allow_pickle=True).item()
     bboxes = object_data['bboxes']
     object_ids = object_data['object_ids']
 
+    region_with_label = update_objects(region_with_label,object_ids,bboxes,min_x, min_y)
 
-    region_with_label = process_data(region_with_label,object_ids,bboxes,min_x, min_y)
-
-
-
-    os.makedirs(otuput_annotation_dir, exist_ok=True)
-    with open(f"{otuput_annotation_dir}/{file_name}.txt", 'w') as file:
+    os.makedirs(output_annotation_dir, exist_ok=True)
+    with open(f"{output_annotation_dir}/{file_name}_updated.txt", 'w') as file:
         file.write(str(region_with_label))
 
 
