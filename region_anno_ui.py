@@ -57,6 +57,8 @@ init_item_dict['annotation_list'] = []
 
 item_dict_list.append(init_item_dict)
 
+scene_list= ['None','point_cloud_top_view','TBD1','TBD2']
+
 def lang_translation(region_name):
     if region_name=="起居室":
         return "living region"
@@ -81,6 +83,7 @@ def lang_translation(region_name):
 with gr.Blocks() as demo:
 
     input_file = gr.File(label="Input file")
+    scene = gr.Dropdown(scene_list)
     total_vertex_num = gr.Slider(
         label="Vertex Number",
         info="How different corners can be in a segment.",
@@ -96,6 +99,26 @@ with gr.Blocks() as demo:
             return None, None
         file_name = os.path.basename(file.name)
         return gr.update(value=file.name), gr.update(value=file.name)
+
+    def get_file(scene):
+        if scene == None or scene=='None':
+            return None, None,None,None, None,None
+
+        global annotation_list
+        annotation_list = []
+        global click_evt_list
+        click_evt_list = []
+        global vertex_list
+        vertex_list = []
+        global poly_done
+        poly_done = False
+        global item_dict_list
+        item_dict_list = [init_item_dict]
+
+
+
+        return gr.update(value=f'example_data/anno_lang/{scene}.png'), gr.update(value=f'example_data/anno_lang/{scene}.png'),gr.update(value=f'example_data/anno_lang/{scene}.obj'),None,None,None
+
 
     with gr.Row():
         input_img = gr.Image(label="Image")
@@ -345,18 +368,30 @@ with gr.Blocks() as demo:
         poly_done = False
         global item_dict_list
         item_dict_list = [init_item_dict]
-        return None, None, None, None, None
+
+
+
+
+        return None,None, None, None, None, None,None
 
     annotate_btn = gr.Button("Annotate")
     clear_btn = gr.Button("Clear")
     undo_btn = gr.Button("Undo")
     save_btn = gr.Button("Save to file")
 
+    show_obj = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0],  label="3D Model")
+
     with gr.Row():
         object_postion_img = gr.Image(label="Object Position")
         detail_show_img = gr.Image(label="Posed Image")
 
+
+
     show_json = gr.JSON(label="Annotate History")
+    scene.change(
+        get_file, inputs=[scene], outputs=[input_img, object_postion_img,show_obj,output_img,
+            show_json,detail_show_img]
+    )
     input_file.change(
         get_file_path, inputs=[input_file], outputs=[input_img, object_postion_img]
     )
@@ -373,11 +408,14 @@ with gr.Blocks() as demo:
         fn=save_to_file,
         inputs=[],
         outputs=[
+            scene,
+
             input_file,
             output_img,
             show_json,
             object_postion_img,
             detail_show_img,
+            show_obj
         ],
     )
 
@@ -409,6 +447,7 @@ if __name__ == "__main__":
 
     point_cloud = o3d.io.read_point_cloud(point_cloud_path)
     points = np.asarray(point_cloud.points)
+    print(points.shape)
     sorted_indices = np.argsort(points[:, 2])
     points = points[sorted_indices]
     min_x, min_y, _ = np.min(points, axis=0)
