@@ -114,6 +114,8 @@ with gr.Blocks() as demo:
         poly_done = False
         global item_dict_list
         item_dict_list = [init_item_dict]
+        global file_name
+        file_name = scene+'.png'
 
 
 
