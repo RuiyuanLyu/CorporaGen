@@ -1,4 +1,4 @@
-import open3d as o3d # 0.9.0.0
+import open3d as o3d # version 0.16.0. NEVER EVER use version 0.17.0 or later, or you will get fucked by vis control.
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
@@ -27,6 +27,63 @@ def compute_extrinsic_matrix(lookat_point, camera_coords):
     extrinsic[3, 3] = 1
     return extrinsic
 
+# testing_scannet_file = "./data/scannet/scene0000_00/lidar/main.pcd"
+# testing_mp3d_file = "./data/mp3d/1mp3d_0000_region0/lidar/main.pcd"
+# testing_3rscan_dir = "./data/3rscan/3rscan0041/lidar/" # contains mesh.refined_0.png, mesh.refined.mtl, mesh.refined.v2.obj, axis_align_matrix.npy
+
+# Load the testing point cloud file and visualize it
+def load_point_cloud(pcd_file):
+    pcd = o3d.io.read_point_cloud(pcd_file)
+    return pcd
+
+def load_mesh(mesh_dir):
+    mesh = o3d.io.read_triangle_mesh(mesh_dir + "mesh.refined.v2.obj", enable_post_processing=True)
+    axis_align_matrix = np.load(mesh_dir + "axis_align_matrix.npy")
+    mesh.transform(axis_align_matrix)
+    return mesh
+
+def take_bev_screenshot(o3d_obj, filename):
+    min_x, min_y, min_z = np.min(o3d_obj.vertices, axis=0)
+    max_x, max_y, max_z = np.max(o3d_obj.vertices, axis=0)
+    print("x range: ", min_x, max_x)
+    print("y range: ", min_y, max_y)
+    print("z range: ", min_z, max_z)
+    width = max_x - min_x
+    height = max_y - min_y
+    center_x, center_y = (min_x + max_x) / 2, (min_y + max_y) / 2
+    num_pixels_per_meter = 200
+    width_in_pixels = int(width * num_pixels_per_meter)
+    height_in_pixels = int(height * num_pixels_per_meter)
+    print("pixels: WxH ", width_in_pixels, height_in_pixels)
+    vis = o3d.visualization.Visualizer()
+    vis.create_window(width=width_in_pixels, height=height_in_pixels)
+    # if isinstance(o3d_obj, o3d.geometry.TriangleMesh):
+    #     o3d_obj.compute_vertex_normals()
+    ctr = vis.get_view_control()
+    camera_param = ctr.convert_to_pinhole_camera_parameters()
+    print(camera_param.intrinsic.intrinsic_matrix)
+    print(camera_param.extrinsic)
+
+    vis.add_geometry(o3d_obj)
+    ctr.set_zoom(0.5)
+    Z_HEIGHT = 50
+    f = Z_HEIGHT * num_pixels_per_meter
+    new_intrinsic = np.array([[f, 0, (width_in_pixels-1)/2], [0, f, (height_in_pixels-1)/2], [0, 0, 1]])
+    camera_param.intrinsic.intrinsic_matrix = new_intrinsic
+    
+    camera_param.extrinsic = compute_extrinsic_matrix(lookat_point=np.array([center_x, center_y, 0]), camera_coords=np.array([center_x, center_y, Z_HEIGHT]))
+    print(camera_param.intrinsic.intrinsic_matrix)
+    print(camera_param.extrinsic)
+    ctr.convert_from_pinhole_camera_parameters(camera_param)
+    camera_param = ctr.convert_to_pinhole_camera_parameters()
+    print(camera_param.intrinsic.intrinsic_matrix)
+    print(camera_param.extrinsic)
+
+    vis.poll_events()    
+    vis.update_renderer()
+    import time; time.sleep(2)
+    vis.capture_screen_image(filename)
+    vis.destroy_window()
 
 def _render_3d_bev(ply_path, output_path, axis_align_matrix=None, resolution=100):
     mesh = o3d.io.read_triangle_mesh(ply_path)
@@ -46,14 +103,14 @@ def _render_3d_bev(ply_path, output_path, axis_align_matrix=None, resolution=100
     visualizer.add_geometry(mesh)
 
     # Set the camera view point
-    view_control = visualizer.get_view_control()
-    pinhole_camera_param = view_control.convert_to_pinhole_camera_parameters()
+    ctr = visualizer.get_view_control()
+    pinhole_camera_param = ctr.convert_to_pinhole_camera_parameters()
     camera_position = np.array([0, 0, 1000])
     lookat_point = np.array([0, 0, 0])
     extrinsic_matrix = compute_extrinsic_matrix(lookat_point, camera_position)
     pinhole_camera_param.extrinsic = extrinsic_matrix
-    view_control.convert_from_pinhole_camera_parameters(pinhole_camera_param)
-    view_control.set_field_of_view(1)
+    ctr.convert_from_pinhole_camera_parameters(pinhole_camera_param)
+    ctr.set_field_of_view(1)
     visualizer.poll_events()
     visualizer.update_renderer()
 
@@ -151,14 +208,8 @@ def render_bev_3rscan(scene_id):
     _render_3d_bev(point_cloud_path, output_path, resolution=80)
 
 
-if __name__ == '__main__':
-    # render_3d_top_down_view()
-    # point_cloud_path="example_data/lidar/main.pcd"
-    # output_path='example_data/anno_lang/point_cloud_top_view.png'
-    pass
-    # scene_id = "scene0040_00"
-    # render_bev_scannet(scene_id)
-    # scene_id = "1mp3d_0070_region0"
-    # render_bev_mp3d(scene_id)
-    scene_id = "3rscan0000"
-    render_bev_3rscan(scene_id)
+if __name__ == "__main__":
+    # test_load_point_cloud(testing_scannet_file)
+    # test_load_point_cloud(testing_mp3d_file)
+    mesh = test_load_mesh(testing_3rscan_dir)
+    take_bev_screenshot(mesh, "testing.png")
