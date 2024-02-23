@@ -208,6 +208,7 @@ def visualize_object_types_on_sam_image(
     sam_img_path, sam_json_path, object_json_path, id_mapping, out_sam_img_path
 ):
     """
+    DEPRECATED.
     Render object types on SAM image, and save the result to a new SAM image.
     Args:
         sam_img_path: path to SAM image

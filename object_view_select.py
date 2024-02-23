@@ -5,11 +5,6 @@ import json
 import shutil
 import scipy
 from functools import wraps
-<<<<<<< HEAD
-import mmengine
-=======
-
->>>>>>> region_update
 from tqdm import tqdm
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon

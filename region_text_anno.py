@@ -24,7 +24,7 @@ def annotate_region_image(image_paths, region_type, object_ids, object_types):
         user_message1 += f"<{object_type}> <{object_id}>, "
     user_message1 = user_message1[:-2] + ". Please focus on describing them in order of their significance rather than the order I mentioned them."
     user_message2 = "Based on these layouts, could you share information about how crowded it is, how well it's organized, the lighting, and (optional) whether there are any elements that tell a story?"
-    system_prompt = "You are an expert interior designer, who is very sensitive at room furnitures and their placements. You are talking with a high-school student with average knowledge of furniture design."
+    system_prompt = "You are an expert interior designer, who is very sensitive at room furnitures and their placements. The expected reader is a high-school student with average knowledge of furniture design."
     source_groups = [
         [user_message1, *image_paths],
         [user_message2]
@@ -117,22 +117,32 @@ def prepare_visible_objects(visible_view_object_dict, view_ids, object_ids, obje
         visible_object_types.append(object_type)
     return visible_object_ids, visible_object_types
 
-
 if __name__ == "__main__":
     # image_path = "./example_data/anno_lang/painted_images/068_chair_00232.jpg"
     # annotation = annotate_object_image(image_path)
     # for i, line in enumerate(annotation):
     #     print(f"Line {i+1}:")
     #     print(line)
-    view_ids = ["00860", "00970"]
-    image_paths = ["./example_data/anno_lang/regions/01_sleeping_region/{}_annotated.jpg".format(view_id) for view_id in view_ids]
-    region_type = "sleeping region"
+    view_ids = ["01750", "01860", "04600", "04970"]
+    region_name = "02_kitchen"
+    image_paths = [f"./example_data/anno_lang/regions/{region_name}/{view_id}_annotated.jpg" for view_id in view_ids]
+    region_type = "kitchen region"
     visible_view_object_dict, object_ids, object_types = get_visible_objects_dict("scannet", "scene0000_00")
-    output_path = "./example_data/anno_lang/regions/01_sleeping_region/annotation.json"
+    output_path = f"./example_data/anno_lang/regions/{region_name}/annotation.json"
     visible_object_ids, visible_object_types = prepare_visible_objects(visible_view_object_dict, view_ids, object_ids, object_types)
-    # annotations = annotate_region_image(image_paths, region_type, visible_object_ids, visible_object_types)
-    # with open(output_path, "w") as f:
-    #     json.dump(annotations, f, indent=4)
+    if 1==1:
+        my_object_ids = [4, 43, 44, 41, 183, 52, 184, 181, 182, 46, 180, 34, 53, 179, 3, 31, 32, 30, 29, 155, 54, 185, 186, 1, 154]
+        my_object_ids = sorted(list(set(my_object_ids)))
+        my_object_types = []
+        for object_id in my_object_ids:
+            object_index = np.where(object_ids == object_id)[0][0]
+            object_type = object_types[object_index]
+            my_object_types.append(object_type)
+        visible_object_ids = my_object_ids
+        visible_object_types = my_object_types
+    annotations = annotate_region_image(image_paths, region_type, visible_object_ids, visible_object_types)
+    with open(output_path, "w") as f:
+        json.dump(annotations, f, indent=4)
     annotations = load_json(output_path)
     print(annotations)
     check_annotation(annotations, visible_object_ids, visible_object_types)
