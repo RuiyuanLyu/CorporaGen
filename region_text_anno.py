@@ -24,7 +24,7 @@ def annotate_region_image(image_paths, region_type, object_ids, object_types):
         user_message1 += f"<{object_type}> <{object_id}>, "
     user_message1 = user_message1[:-2] + ". Please focus on describing them in order of their significance rather than the order I mentioned them."
     user_message2 = "Based on these layouts, could you share information about how crowded it is, how well it's organized, the lighting, and (optional) whether there are any elements that tell a story?"
-    system_prompt = "You are an expert interior designer, who is very sensitive at room furnitures and their placements. You are talking with a high-school student with average knowledge of furniture design."
+    system_prompt = "You are an expert interior designer, who is very sensitive at room furnitures and their placements. The expected reader is a high-school student with average knowledge of furniture design."
     source_groups = [
         [user_message1, *image_paths],
         [user_message2]

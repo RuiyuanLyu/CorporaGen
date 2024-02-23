@@ -51,9 +51,9 @@ def annotate_object_image(image_path):
     image_name = image_path.split("/")[-1]
     object_id, object_type, image_id = image_name.split(".")[0].split("_")
     
-    user_message1 = "Please describe the {} in the highlighted box, mainly including the following aspects: appearance (shape, color), material, size (e.g., larger or smaller compared to similar items), condition (e.g., whether a door is open or closed), placement (e.g.,vertical/leaning/slanting/stacked), functionality (compared to similar items), and design features (e.g., whether a chair has armrests/backrest)".format(object_type) 
+    user_message1 = "Please describe the {} in the highlighted box, mainly including the following aspects: appearance (shape, color), material, size (e.g., larger or smaller compared to similar items), condition (e.g., whether a door is open or closed), placement (e.g.,vertical/leaning/slanting/stacked), functionality (compared to similar items), and design features (e.g., whether a chair has armrests/backrest). Please aim for a roughly 300-word description".format(object_type) 
     user_message2 = "Please omit the plain and ordinary parts of the description, only retaining the unique characteristics of the objects; rewrite and recombine the retained descriptions to make the language flow naturally, without being too rigid. Make the descriptions about 150 words."
-    system_prompt = "You are an expert interior designer, who is very sensitive at room furnitures and their placements."
+    system_prompt = "You are an expert interior designer, who is very sensitive at room furnitures and their placements. The expected reader is a high-school student with average knowledge of furniture design."
     source_groups = [
         [user_message1, image_path],
         [user_message2]
@@ -101,7 +101,7 @@ def check_annotation(annotation):
         return False, "Type error. Annotation should be a list of two *strings*."
     long_description = annotation[0].lower()
     short_description = annotation[1].lower()
-    if "sorry" in long_description or "misunderstand" in long_description:
+    if "sorry" in long_description or "misunderst" in long_description:
         return False, "The model may not describe objects accurately or the object we want."
     if len(short_description) > len(long_description):
         return False, "Length error. The shorthand version is longer. Hallucinations are not allowed."
