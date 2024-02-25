@@ -24,6 +24,7 @@ from math import ceil
 import json
 import open3d as o3d
 from utils_read import read_annotation_pickle
+from render_bev_local import load_mesh,_render_2d_bev,take_bev_screenshot
 global file_name
 global click_evt_list
 global vertex_list
@@ -57,7 +58,7 @@ init_item_dict['annotation_list'] = []
 
 item_dict_list.append(init_item_dict)
 
-scene_list= ['None','point_cloud_top_view','TBD1','TBD2']
+scene_list = ['scene0000_00','3rscan0041','1mp3d_0000_region0']
 
 def lang_translation(region_name):
     if region_name=="起居室":
@@ -93,16 +94,9 @@ with gr.Blocks() as demo:
         value=4,
     )
 
-    def get_file_path(file):
-        global file_name
-        if file == None:
-            return None, None
-        file_name = os.path.basename(file.name)
-        return gr.update(value=file.name), gr.update(value=file.name)
-
-    def get_file(scene):
-        if scene == None or scene=='None':
-            return None, None,None,None, None,None
+    def get_file(scene_id):
+        if scene_id == None or scene_id=='None':
+            return None,None,None,None,None
 
         global annotation_list
         annotation_list = []
@@ -114,16 +108,16 @@ with gr.Blocks() as demo:
         poly_done = False
         global item_dict_list
         item_dict_list = [init_item_dict]
-        global file_name
-        file_name = scene+'.png'
 
 
 
-        return gr.update(value=f'example_data/anno_lang/{scene}.png'), gr.update(value=f'example_data/anno_lang/{scene}.png'),gr.update(value=f'example_data/anno_lang/{scene}.obj'),None,None,None
+        return gr.update(value=f'{scene_id}/anno_lang/render.png'), gr.update(value=f'{scene_id}/anno_lang/render.png'),\
+               None,None,None
 
 
     with gr.Row():
         input_img = gr.Image(label="Image")
+
         output_img = gr.Image(label="Selected Polygon")
 
     label = gr.Radio(
@@ -159,7 +153,7 @@ with gr.Blocks() as demo:
                 img[i][j][0] += is_in_poly((i, j), vertex_list) * int(255 * 0.4)
         return img
 
-    def draw_dot(img,out_img,vertex_num, evt: gr.SelectData):
+    def draw_dot(scene_id,img,out_img,vertex_num, evt: gr.SelectData):
         global click_evt_list
         global poly_done
         global poly_image
@@ -202,13 +196,21 @@ with gr.Blocks() as demo:
                 new_out = draw_polygon(out.copy())
                 poly_done = True
                 new_out = new_out.astype(np.uint8)
-                for object_id in object_ids:
-                    k = list(object_ids).index(object_id)
-                    o_x = bboxes[k][0]
-                    o_y = bboxes[k][1]
-                    o_x, o_y = get_position_in_render_image((o_x, o_y))
+                for object_id in scene_info[scene_id]['object_ids']:
+                    k = list(scene_info[scene_id]['object_ids']).index(object_id)
+                    o_x = scene_info[scene_id]['bboxes'][k][0]
+                    o_y = scene_info[scene_id]['bboxes'][k][1]
+                    if scene_id[:6]=='3rscan':
+                        o_x,o_y = get_position_in_mesh_render_image((o_x,o_y),scene_info[scene_id]['center_x'],
+                                                                scene_info[scene_id]['center_y'],
+                                                                scene_info[scene_id]['num_pixels_per_meter'],
+                                                                img.shape[:2])
+                    else:
+                        o_x, o_y = get_position_in_pcd_render_image((o_x, o_y), scene_info[scene_id]['min_x'],
+                                                                scene_info[scene_id]['min_y'],
+                                                                scene_info[scene_id]['resolution'])
                     # global vertex_list
-                    if object_types[k] not in exclude_type and is_in_poly(
+                    if scene_info[scene_id]['object_types'][k] not in exclude_type and is_in_poly(
                         (o_x, o_y), vertex_list
                     ):
 
@@ -241,14 +243,24 @@ with gr.Blocks() as demo:
         else:
             return poly_image
 
-    def get_position_in_render_image(point, ratio=20):
+    def get_position_in_pcd_render_image(point,min_x,min_y, ratio=20):
 
         x, y = point
         pixel_x = int((x - min_x) * ratio)
         pixel_y = int((y - min_y) * ratio)
         return pixel_y, pixel_x
 
-    def new_draw_dot(img, evt: gr.SelectData):
+    def get_position_in_mesh_render_image(point,center_x,center_y,num_pixels_per_meter,photo_pixel):
+
+        dx = point[0] - center_x
+        dy = point[1] - center_y
+
+        ox = (int(num_pixels_per_meter * dx) + photo_pixel[1] // 2)
+        oy = photo_pixel[0] // 2 - (int(num_pixels_per_meter * dy))
+
+        return oy,ox
+
+    def new_draw_dot(scene_id,img, evt: gr.SelectData):
         out = img.copy()
         min_distance = np.inf
         min_object_id = 0
@@ -256,17 +268,25 @@ with gr.Blocks() as demo:
         m_y = evt.index[0]
         w, h, c = img.shape
         size = ceil(max([w, h]) * 0.01)
-        for object_id in useful_object.keys():
+        for object_id in scene_info[scene_id]['useful_object'].keys():
 
-            for index_ in range(len(object_ids)):
-                if object_ids[index_] == object_id:
+            for index_ in range(len(scene_info[scene_id]['object_ids'])):
+                if scene_info[scene_id]['object_ids'][index_] == object_id:
                     kkk = index_
 
                     break
 
-            o_x = bboxes[kkk][0]
-            o_y = bboxes[kkk][1]
-            o_x, o_y = get_position_in_render_image((o_x, o_y))
+            o_x = scene_info[scene_id]['bboxes'][kkk][0]
+            o_y = scene_info[scene_id]['bboxes'][kkk][1]
+            if scene_id[:6] == '3rscan':
+                o_x, o_y = get_position_in_mesh_render_image((o_x, o_y), scene_info[scene_id]['center_x'],
+                                                             scene_info[scene_id]['center_y'],
+                                                             scene_info[scene_id]['num_pixels_per_meter'],
+                                                             img.shape[:2])
+            else:
+                o_x, o_y = get_position_in_pcd_render_image((o_x, o_y), scene_info[scene_id]['min_x'],
+                                                            scene_info[scene_id]['min_y'],
+                                                            scene_info[scene_id]['resolution'])
             if (o_x - m_x) ** 2 + (o_y - m_y) ** 2 < min_distance:
                 min_distance = (o_x - m_x) ** 2 + (o_y - m_y) ** 2
                 min_object_id = object_id
@@ -276,7 +296,7 @@ with gr.Blocks() as demo:
             max(p[0] - size, 0) : min(p[0] + size, out.shape[0] - 1),
             max(p[1] - size, 0) : min(p[1] + size, out.shape[1] - 1),
         ] = np.array([0, 0, 255]).astype(np.uint8)
-        detail_img = gr.update(value=useful_object[min_object_id])
+        detail_img = gr.update(value=scene_info[scene_id]['useful_object'][min_object_id])
         return out, detail_img
 
     def annotate(label, output_img,show_json):
@@ -355,11 +375,11 @@ with gr.Blocks() as demo:
 
             return output_img,show_json
 
-    def save_to_file():
+    def save_to_file(scene_id):
         global annotation_list
-        global file_name
-        os.makedirs(output_dir, exist_ok=True)
-        with open(f"{output_dir}/{file_name}.txt", "w") as file:
+
+        os.makedirs(scene_info[scene_id]['output_dir'], exist_ok=True)
+        with open(f"{scene_info[scene_id]['output_dir']}/annotation.txt", "w") as file:
             file.write(str(annotation_list))
         annotation_list = []
         global click_evt_list
@@ -381,7 +401,7 @@ with gr.Blocks() as demo:
     undo_btn = gr.Button("Undo")
     save_btn = gr.Button("Save to file")
 
-    show_obj = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0],  label="3D Model")
+
 
     with gr.Row():
         object_postion_img = gr.Image(label="Object Position")
@@ -391,15 +411,13 @@ with gr.Blocks() as demo:
 
     show_json = gr.JSON(label="Annotate History")
     scene.change(
-        get_file, inputs=[scene], outputs=[input_img, object_postion_img,show_obj,output_img,
+        get_file, inputs=[scene], outputs=[input_img, object_postion_img,output_img,
             show_json,detail_show_img]
     )
-    input_file.change(
-        get_file_path, inputs=[input_file], outputs=[input_img, object_postion_img]
-    )
-    input_img.select(draw_dot, [input_img,output_img,total_vertex_num], output_img)
+
+    input_img.select(draw_dot, [scene,input_img,output_img,total_vertex_num], output_img)
     object_postion_img.select(
-        new_draw_dot, [input_img], [object_postion_img, detail_show_img]
+        new_draw_dot, [scene,input_img], [object_postion_img, detail_show_img]
     )
     clear_btn.click(fn=clear, inputs=[output_img, show_json], outputs=[output_img, show_json])
     undo_btn.click(fn=undo, inputs=[output_img, show_json], outputs=[output_img, show_json])
@@ -408,7 +426,7 @@ with gr.Blocks() as demo:
     )
     save_btn.click(
         fn=save_to_file,
-        inputs=[],
+        inputs=[scene],
         outputs=[
             scene,
 
@@ -417,7 +435,7 @@ with gr.Blocks() as demo:
             show_json,
             object_postion_img,
             detail_show_img,
-            show_obj
+
         ],
     )
 
@@ -426,37 +444,40 @@ if __name__ == "__main__":
 
     import os
 
-    # only load scene 0
 
-    if os.path.exists("example_data/example.npy"):
 
-        anno = np.load("example_data/example.npy", allow_pickle=True).item()
-    else:
-
-        anno = read_annotation_pickle("example_data/embodiedscan_infos_train_full.pkl")[
-            "scene0000_00"
-        ]
-        np.save("example_data/example.npy", anno)
-
-    bboxes = anno["bboxes"]
-    object_ids = anno["object_ids"]
-    object_types = anno["object_types"]
-    visible_view_object_dict = anno["visible_view_object_dict"]
-    point_cloud_path = "example_data/lidar/main.pcd"
-    painted_img_dir = "example_data/anno_lang/painted_images"  # where is the color data
-    output_dir = "example_data/anno_lang/region_anno"
     exclude_type = ["wall"]
 
-    point_cloud = o3d.io.read_point_cloud(point_cloud_path)
-    points = np.asarray(point_cloud.points)
-    print(points.shape)
-    sorted_indices = np.argsort(points[:, 2])
-    points = points[sorted_indices]
-    min_x, min_y, _ = np.min(points, axis=0)
-    max_x, max_y, _ = np.max(points, axis=0)
+    scene_info = {}
 
-    useful_object = {}
-    for img_file in os.listdir(painted_img_dir):
-        useful_object[int(img_file[:3])] = painted_img_dir + "/" + img_file
+    for scene_id in scene_list:
+        if os.path.exists(f"./{scene_id}/example.npy"):
+
+            anno = np.load(f"./{scene_id}/example.npy", allow_pickle=True).item()
+        else:
+
+            anno = read_annotation_pickle('example_data/embodiedscan_infos_train_full.pkl')[f'{scene_id}']
+            np.save(f"./{scene_id}/example.npy", anno)
+
+        scene_info[scene_id] = {}
+
+        scene_info[scene_id]["bboxes"] = anno["bboxes"]
+        scene_info[scene_id]["object_ids"] = anno["object_ids"]
+        scene_info[scene_id]["object_types"] = anno["object_types"]
+        scene_info[scene_id]["visible_view_object_dict"] = anno["visible_view_object_dict"]
+        scene_info[scene_id]["output_dir"] = f"{scene_id}/anno_lang/region_anno"
+        painted_img_dir = f"{scene_id}/anno_lang/painted_images"  # where is the color data
+        scene_info[scene_id]["useful_object"] = {}
+        for img_file in os.listdir(painted_img_dir):
+            scene_info[scene_id]["useful_object"][int(img_file[:3])] = painted_img_dir + "/" + img_file
+        if scene_id[:6] == '3rscan':
+            mesh = load_mesh(f'./{scene_id}/lidar/')
+            scene_info[scene_id]["center_x"],scene_info[scene_id]["center_y"],scene_info[scene_id]["num_pixels_per_meter"] \
+                = take_bev_screenshot(mesh, f"./{scene_id}/anno_lang/render.png",get_data=True)
+        else:
+            pcd_path = f'./{scene_id}/lidar/main.pcd'
+            scene_info[scene_id]['min_x'], scene_info[scene_id]['min_y'], scene_info[scene_id]['man_x'], \
+            scene_info[scene_id]['max_y'], scene_info[scene_id]['resolution']=_render_2d_bev(pcd_path, f"./{scene_id}/anno_lang/render.png",get_data=True)
+
 
     demo.launch(show_error=True)
