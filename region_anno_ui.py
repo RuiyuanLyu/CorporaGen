@@ -24,7 +24,7 @@ from math import ceil
 import json
 import open3d as o3d
 from utils_read import read_annotation_pickle
-from render_bev_local import load_mesh,_render_2d_bev,take_bev_screenshot
+from render_bev_local import load_mesh,_render_2d_bev,take_bev_screenshot,process_mesh
 global file_name
 global click_evt_list
 global vertex_list
@@ -83,7 +83,7 @@ def lang_translation(region_name):
 
 with gr.Blocks() as demo:
 
-    input_file = gr.File(label="Input file")
+
     scene = gr.Dropdown(scene_list)
     total_vertex_num = gr.Slider(
         label="Vertex Number",
@@ -200,7 +200,9 @@ with gr.Blocks() as demo:
                     k = list(scene_info[scene_id]['object_ids']).index(object_id)
                     o_x = scene_info[scene_id]['bboxes'][k][0]
                     o_y = scene_info[scene_id]['bboxes'][k][1]
-                    if scene_id[:6]=='3rscan':
+                    draw_size_of_object = 1
+                    if scene_id[:6]!='3rsscan':
+                        draw_size_of_object = 5
                         o_x,o_y = get_position_in_mesh_render_image((o_x,o_y),scene_info[scene_id]['center_x'],
                                                                 scene_info[scene_id]['center_y'],
                                                                 scene_info[scene_id]['num_pixels_per_meter'],
@@ -215,8 +217,8 @@ with gr.Blocks() as demo:
                     ):
 
                         new_out[
-                            max(o_x - 1, 0) : min(o_x + 1, out.shape[0] - 1),
-                            max(o_y - 1, 0) : min(o_y + 1, out.shape[1] - 1),
+                            max(o_x - draw_size_of_object, 0) : min(o_x + draw_size_of_object, out.shape[0] - 1),
+                            max(o_y - draw_size_of_object, 0) : min(o_y + draw_size_of_object, out.shape[1] - 1),
                         ] = np.array([0, 0, 255]).astype(np.uint8)
                 poly_image = new_out
                 global store_vertex_list
@@ -278,7 +280,7 @@ with gr.Blocks() as demo:
 
             o_x = scene_info[scene_id]['bboxes'][kkk][0]
             o_y = scene_info[scene_id]['bboxes'][kkk][1]
-            if scene_id[:6] == '3rscan':
+            if scene_id[:6] != '3rscsan':
                 o_x, o_y = get_position_in_mesh_render_image((o_x, o_y), scene_info[scene_id]['center_x'],
                                                              scene_info[scene_id]['center_y'],
                                                              scene_info[scene_id]['num_pixels_per_meter'],
@@ -394,7 +396,7 @@ with gr.Blocks() as demo:
 
 
 
-        return None,None, None, None, None, None,None
+        return None,None, None, None, None, None
 
     annotate_btn = gr.Button("Annotate")
     clear_btn = gr.Button("Clear")
@@ -430,7 +432,7 @@ with gr.Blocks() as demo:
         outputs=[
             scene,
 
-            input_file,
+
             output_img,
             show_json,
             object_postion_img,
@@ -471,13 +473,21 @@ if __name__ == "__main__":
         for img_file in os.listdir(painted_img_dir):
             scene_info[scene_id]["useful_object"][int(img_file[:3])] = painted_img_dir + "/" + img_file
         if scene_id[:6] == '3rscan':
-            mesh = load_mesh(f'./{scene_id}/lidar/')
-            scene_info[scene_id]["center_x"],scene_info[scene_id]["center_y"],scene_info[scene_id]["num_pixels_per_meter"] \
-                = take_bev_screenshot(mesh, f"./{scene_id}/anno_lang/render.png",get_data=True)
-        else:
-            pcd_path = f'./{scene_id}/lidar/main.pcd'
-            scene_info[scene_id]['min_x'], scene_info[scene_id]['min_y'], scene_info[scene_id]['man_x'], \
-            scene_info[scene_id]['max_y'], scene_info[scene_id]['resolution']=_render_2d_bev(pcd_path, f"./{scene_id}/anno_lang/render.png",get_data=True)
+            mesh = o3d.io.read_triangle_mesh(f'./{scene_id}/lidar/mesh.refined.v2.obj')
+            matrix = np.asarray(anno['axis_align_matrix'])
+            mesh = process_mesh(mesh,matrix)
+        elif scene_id[:5] == '1mp3d':
+            ply_name = scene_id.split('_')[2]+'.ply'
+            mesh = o3d.io.read_triangle_mesh(f'./{scene_id}/lidar/{ply_name}')
+            matrix = np.asarray(anno['axis_align_matrix'])
+            mesh = process_mesh(mesh, matrix)
+        elif scene_id[:5] == 'scene':
+            ply_name = scene_id+'_vh_clean.ply'
+            mesh = o3d.io.read_triangle_mesh(f'./{scene_id}/lidar/{ply_name}')
+            matrix = np.asarray(anno['axis_align_matrix'])
+            mesh = process_mesh(mesh, matrix)
+        scene_info[scene_id]["center_x"],scene_info[scene_id]["center_y"],scene_info[scene_id]["num_pixels_per_meter"] \
+            = take_bev_screenshot(mesh, f"./{scene_id}/anno_lang/render.png",get_data=True)
 
 
     demo.launch(show_error=True)

@@ -2,7 +2,7 @@ import open3d as o3d  # version 0.16.0. NEVER EVER use version 0.17.0 or later, 
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
-from utils_read import read_axis_align_matrix, load_json, reverse_121_mapping
+from utils_read import read_axis_align_matrix, load_json, reverse_121_mapping,read_annotation_pickle
 
 
 def compute_extrinsic_matrix(lookat_point, camera_coords):
@@ -44,14 +44,8 @@ def load_mesh(mesh_dir):
     axis_align_matrix = np.load(mesh_dir + "axis_align_matrix.npy")
     mesh.transform(axis_align_matrix)
     return mesh
-def load_1mp3d():
-    mesh = o3d.io.read_triangle_mesh('1mp3d_0000_region0/lidar/region0.ply', enable_post_processing=True)
-
-    output_path = "testing_mp3d.png"
-    axis_align_matrix = np.load(
-        '1mp3d_0000_region0/lidar/rot_matrix.npy')
-    mesh.transform(axis_align_matrix)
-    return mesh
+def process_mesh(mesh,axis_align_matrix):
+    return mesh.transform(axis_align_matrix)
 
 
 def take_bev_screenshot(o3d_obj, filename,axis_align_matrix=None,get_data=False):
@@ -230,17 +224,30 @@ def render_bev_3rscan(scene_id):
 
 
 if __name__ == "__main__":
+    import os
+    scene_id_list = ['1mp3d_0000_region0','3rscan0041','scene0000_00']
+    #scene_id_list = ['3rscan0041']
+    for scene_id in scene_id_list:
+        if os.path.exists(f"./{scene_id}/example.npy"):
 
-    #scene_id = '3rscan0041'
-    #scene_id = 'scene0000_00'
-    scene_id = '1mp3d_0000_region0'
+            anno = np.load(f"./{scene_id}/example.npy", allow_pickle=True).item()
+        else:
 
-    if scene_id[:6]=='3rscan':
-        mesh = load_mesh(f'./{scene_id}/lidar/')
-        take_bev_screenshot(mesh,f"./{scene_id}/anno_lang/render.png")
-
-    else:
-        pcd_path = f'./{scene_id}/lidar/main.pcd'
-
-        _render_2d_bev(pcd_path,f"./{scene_id}/anno_lang/render.png")
+            anno = read_annotation_pickle('example_data/embodiedscan_infos_train_full.pkl')[f'{scene_id}']
+            np.save(f"./{scene_id}/example.npy", anno)
+        if scene_id[:6] == '3rscan':
+            mesh = o3d.io.read_triangle_mesh(f'./{scene_id}/lidar/mesh.refined.v2.obj',enable_post_processing=True)
+            matrix = np.asarray(anno['axis_align_matrix'])
+            mesh = process_mesh(mesh, matrix)
+        elif scene_id[:5] == '1mp3d':
+            ply_name = scene_id.split('_')[2] + '.ply'
+            mesh = o3d.io.read_triangle_mesh(f'./{scene_id}/lidar/{ply_name}',enable_post_processing=True)
+            matrix = np.asarray(anno['axis_align_matrix'])
+            mesh = process_mesh(mesh, matrix)
+        elif scene_id[:5] == 'scene':
+            ply_name = scene_id + '_vh_clean.ply'
+            mesh = o3d.io.read_triangle_mesh(f'./{scene_id}/lidar/{ply_name}',enable_post_processing=True)
+            matrix = np.asarray(anno['axis_align_matrix'])
+            mesh = process_mesh(mesh, matrix)
+        take_bev_screenshot(mesh, f"./{scene_id}/anno_lang/render.png")
 
