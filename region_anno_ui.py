@@ -24,7 +24,7 @@ from math import ceil
 import json
 import open3d as o3d
 from utils_read import read_annotation_pickle
-from render_bev_local import load_mesh,_render_2d_bev,take_bev_screenshot,process_mesh
+from render_bev import load_mesh,_render_2d_bev,take_bev_screenshot,process_mesh
 global file_name
 global click_evt_list
 global vertex_list

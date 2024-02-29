@@ -1,8 +1,9 @@
-import open3d as o3d # version 0.16.0. NEVER EVER use version 0.17.0 or later, or you will get fucked by vis control.
+import open3d as o3d  # version 0.16.0. NEVER EVER use version 0.17.0 or later, or you will get fucked by vis control.
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
-from utils_read import read_axis_align_matrix, load_json, reverse_121_mapping
+from utils_read import read_axis_align_matrix, load_json, reverse_121_mapping,read_annotation_pickle
+
 
 def compute_extrinsic_matrix(lookat_point, camera_coords):
     """
@@ -14,7 +15,7 @@ def compute_extrinsic_matrix(lookat_point, camera_coords):
     """
     camera_direction = lookat_point - camera_coords
     camera_direction_normalized = camera_direction / np.linalg.norm(camera_direction)
-    up_vector = np.array([0, 0, -1])  
+    up_vector = np.array([0, 0, -1])
     if np.allclose(camera_direction_normalized, up_vector) or np.allclose(camera_direction_normalized, -up_vector):
         up_vector = np.array([0, -1, 0])
     right_vector = np.cross(up_vector, camera_direction_normalized)
@@ -27,6 +28,7 @@ def compute_extrinsic_matrix(lookat_point, camera_coords):
     extrinsic[3, 3] = 1
     return extrinsic
 
+
 # testing_scannet_file = "./data/scannet/scene0000_00/lidar/main.pcd"
 # testing_mp3d_file = "./data/mp3d/1mp3d_0000_region0/lidar/main.pcd"
 # testing_3rscan_dir = "./data/3rscan/3rscan0041/lidar/" # contains mesh.refined_0.png, mesh.refined.mtl, mesh.refined.v2.obj, axis_align_matrix.npy
@@ -36,24 +38,33 @@ def load_point_cloud(pcd_file):
     pcd = o3d.io.read_point_cloud(pcd_file)
     return pcd
 
+
 def load_mesh(mesh_dir):
     mesh = o3d.io.read_triangle_mesh(mesh_dir + "mesh.refined.v2.obj", enable_post_processing=True)
     axis_align_matrix = np.load(mesh_dir + "axis_align_matrix.npy")
     mesh.transform(axis_align_matrix)
     return mesh
+def process_mesh(mesh,axis_align_matrix):
+    return mesh.transform(axis_align_matrix)
 
-def take_bev_screenshot(o3d_obj, filename):
+
+def take_bev_screenshot(o3d_obj, filename,axis_align_matrix=None,get_data=False):
+    #print(np.array(o3d_obj.mesh).shape)
     min_x, min_y, min_z = np.min(o3d_obj.vertices, axis=0)
     max_x, max_y, max_z = np.max(o3d_obj.vertices, axis=0)
-    print("x range: ", min_x, max_x)
-    print("y range: ", min_y, max_y)
-    print("z range: ", min_z, max_z)
+    # print("x range: ", min_x, max_x)
+    # print("y range: ", min_y, max_y)
+    # print("z range: ", min_z, max_z)
     width = max_x - min_x
     height = max_y - min_y
     center_x, center_y = (min_x + max_x) / 2, (min_y + max_y) / 2
-    num_pixels_per_meter = 200
+    num_pixels_per_meter = 100
     width_in_pixels = int(width * num_pixels_per_meter)
     height_in_pixels = int(height * num_pixels_per_meter)
+    if get_data:
+        return center_x,center_y,num_pixels_per_meter
+
+
     print("pixels: WxH ", width_in_pixels, height_in_pixels)
     vis = o3d.visualization.Visualizer()
     vis.create_window(width=width_in_pixels, height=height_in_pixels)
@@ -61,29 +72,30 @@ def take_bev_screenshot(o3d_obj, filename):
     #     o3d_obj.compute_vertex_normals()
     ctr = vis.get_view_control()
     camera_param = ctr.convert_to_pinhole_camera_parameters()
-    print(camera_param.intrinsic.intrinsic_matrix)
-    print(camera_param.extrinsic)
+    # print(camera_param.intrinsic.intrinsic_matrix)
+    # print(camera_param.extrinsic)
 
     vis.add_geometry(o3d_obj)
     ctr.set_zoom(0.5)
-    Z_HEIGHT = 50
+    Z_HEIGHT = 30
     f = Z_HEIGHT * num_pixels_per_meter
-    new_intrinsic = np.array([[f, 0, (width_in_pixels-1)/2], [0, f, (height_in_pixels-1)/2], [0, 0, 1]])
+    new_intrinsic = np.array([[f, 0, (width_in_pixels/2.0)-0.5], [0, f, (height_in_pixels/2.0)-0.5], [0, 0, 1]])
     camera_param.intrinsic.intrinsic_matrix = new_intrinsic
-    
-    camera_param.extrinsic = compute_extrinsic_matrix(lookat_point=np.array([center_x, center_y, 0]), camera_coords=np.array([center_x, center_y, Z_HEIGHT]))
-    print(camera_param.intrinsic.intrinsic_matrix)
-    print(camera_param.extrinsic)
-    ctr.convert_from_pinhole_camera_parameters(camera_param)
-    camera_param = ctr.convert_to_pinhole_camera_parameters()
-    print(camera_param.intrinsic.intrinsic_matrix)
-    print(camera_param.extrinsic)
 
-    vis.poll_events()    
+    camera_param.extrinsic = compute_extrinsic_matrix(lookat_point=np.array([center_x, center_y, 0]),
+                                                      camera_coords=np.array([center_x, center_y, Z_HEIGHT]))
+
+    ctr.convert_from_pinhole_camera_parameters(camera_param)
+    #camera_param = ctr.convert_to_pinhole_camera_parameters()
+
+
+    vis.poll_events()
     vis.update_renderer()
-    import time; time.sleep(2)
+
     vis.capture_screen_image(filename)
     vis.destroy_window()
+
+
 
 def _render_3d_bev(ply_path, output_path, axis_align_matrix=None, resolution=100):
     mesh = o3d.io.read_triangle_mesh(ply_path)
@@ -92,7 +104,7 @@ def _render_3d_bev(ply_path, output_path, axis_align_matrix=None, resolution=100
         axis_align_matrix = np.eye(4)
     points = np.asarray(mesh.vertices)
     points = np.concatenate([points, np.ones_like(points[..., :1])], axis=-1)  # shape (n, 4)
-    points = axis_align_matrix @ points.T # shape (4, n)
+    points = axis_align_matrix @ points.T  # shape (4, n)
     points = (points.T)[:, :3]
     mesh.vertices = o3d.utility.Vector3dVector(points)
     # Create a visualizer object
@@ -117,16 +129,16 @@ def _render_3d_bev(ply_path, output_path, axis_align_matrix=None, resolution=100
     visualizer.capture_screen_image(output_path)
     print("Image saved!")
     visualizer.destroy_window()
-    
 
-def _render_2d_bev(point_cloud_path, output_path, axis_align_matrix=None, resolution=80, roof_percentage=0.0):
+
+def _render_2d_bev(point_cloud_path, output_path, axis_align_matrix=None, resolution=20, roof_percentage=0.0,get_data=False):
     if axis_align_matrix is None:
         axis_align_matrix = np.eye(4)
     point_cloud = o3d.io.read_point_cloud(point_cloud_path)
 
     points = np.asarray(point_cloud.points)
     points = np.concatenate([points, np.ones_like(points[..., :1])], axis=-1)  # shape (n, 4)
-    points = axis_align_matrix @ points.T # shape (4, n)
+    points = axis_align_matrix @ points.T  # shape (4, n)
     points = (points.T)[:, :3]
     colors = np.asarray(point_cloud.colors)
     colors = colors[:, [2, 1, 0]]
@@ -143,6 +155,9 @@ def _render_2d_bev(point_cloud_path, output_path, axis_align_matrix=None, resolu
 
     image_width = int((max_x - min_x) * resolution) + 1
     image_height = int((max_y - min_y) * resolution) + 1
+
+    if get_data:
+        return  min_x, min_y, max_x, max_y, resolution
 
     projection_image = np.zeros((image_height, image_width, 3), dtype=np.uint8)
 
@@ -167,9 +182,10 @@ def _render_2d_bev(point_cloud_path, output_path, axis_align_matrix=None, resolu
 
     plt.imshow(projection_image, origin='lower')
     plt.axis('off')  # hide axis ticks and labels
-    cv2.imwrite(output_path,projection_image)
+    cv2.imwrite(output_path, projection_image)
     print("Successfully saved to", output_path)
-    # plt.show()
+    plt.show()
+
 
 def render_bev_scannet(scene_id):
     """
@@ -178,24 +194,23 @@ def render_bev_scannet(scene_id):
     """
     point_cloud_path = f"/mnt/petrelfs/share_data/maoxiaohan/ScanNet_v2/scans/{scene_id}/{scene_id}_vh_clean.ply"
     output_path = "testing_scannet.png"
-    axis_align_matrix = read_axis_align_matrix(f"/mnt/petrelfs/share_data/maoxiaohan/ScanNet_v2/scans/{scene_id}/{scene_id}.txt", mode="scannet")
+    axis_align_matrix = read_axis_align_matrix(
+        f"/mnt/petrelfs/share_data/maoxiaohan/ScanNet_v2/scans/{scene_id}/{scene_id}.txt", mode="scannet")
     _render_3d_bev(point_cloud_path, output_path, axis_align_matrix, resolution=80)
+
 
 def render_bev_mp3d(scene_id):
     """
     Render the bird's eye view for a given scene, specified by scene id
     scene_id example: 1mp3d_0000_region0
     """
-    prefix_str, house_idx, reg_idx = scene_id.split("_") # prefix_str is always "1mp3d"
-    scene_mapping_dict = load_json("/mnt/petrelfs/share_data/maoxiaohan/matterport3d/meta_data/scene_mapping.json")
-    scene_mapping_dict = reverse_121_mapping(scene_mapping_dict)
-    key = prefix_str + "_" + house_idx
-    scene_hash = scene_mapping_dict[key]
-    point_cloud_path = f"/mnt/petrelfs/share_data/maoxiaohan/matterport3d/scans/{scene_hash}/region_segmentations/{reg_idx}.ply"
+    point_cloud_path = '1mp3d_0000_region0/lidar/region0.ply'
     output_path = "testing_mp3d.png"
-    axis_align_matrix = np.load(f"/mnt/petrelfs/share_data/maoxiaohan/matterport3d/matterport3d/data/{scene_id}/label/rot_matrix.npy")
+    axis_align_matrix = np.load(
+        '1mp3d_0000_region0/lidar/rot_matrix.npy')
     print(axis_align_matrix)
-    _render_3d_bev(point_cloud_path, output_path, axis_align_matrix, resolution=80, roof_percentage=0.2)
+    _render_3d_bev(point_cloud_path, output_path, axis_align_matrix, resolution=20)
+
 
 def render_bev_3rscan(scene_id):
     """
@@ -209,7 +224,30 @@ def render_bev_3rscan(scene_id):
 
 
 if __name__ == "__main__":
-    # test_load_point_cloud(testing_scannet_file)
-    # test_load_point_cloud(testing_mp3d_file)
-    mesh = test_load_mesh(testing_3rscan_dir)
-    take_bev_screenshot(mesh, "testing.png")
+    import os
+    scene_id_list = ['1mp3d_0000_region0','3rscan0041','scene0000_00']
+    #scene_id_list = ['3rscan0041']
+    for scene_id in scene_id_list:
+        if os.path.exists(f"./{scene_id}/example.npy"):
+
+            anno = np.load(f"./{scene_id}/example.npy", allow_pickle=True).item()
+        else:
+
+            anno = read_annotation_pickle('example_data/embodiedscan_infos_train_full.pkl')[f'{scene_id}']
+            np.save(f"./{scene_id}/example.npy", anno)
+        if scene_id[:6] == '3rscan':
+            mesh = o3d.io.read_triangle_mesh(f'./{scene_id}/lidar/mesh.refined.v2.obj',enable_post_processing=True)
+            matrix = np.asarray(anno['axis_align_matrix'])
+            mesh = process_mesh(mesh, matrix)
+        elif scene_id[:5] == '1mp3d':
+            ply_name = scene_id.split('_')[2] + '.ply'
+            mesh = o3d.io.read_triangle_mesh(f'./{scene_id}/lidar/{ply_name}',enable_post_processing=True)
+            matrix = np.asarray(anno['axis_align_matrix'])
+            mesh = process_mesh(mesh, matrix)
+        elif scene_id[:5] == 'scene':
+            ply_name = scene_id + '_vh_clean.ply'
+            mesh = o3d.io.read_triangle_mesh(f'./{scene_id}/lidar/{ply_name}',enable_post_processing=True)
+            matrix = np.asarray(anno['axis_align_matrix'])
+            mesh = process_mesh(mesh, matrix)
+        take_bev_screenshot(mesh, f"./{scene_id}/anno_lang/render.png")
+
