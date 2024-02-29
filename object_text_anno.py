@@ -5,7 +5,7 @@ from openai_api import mimic_chat, mimic_chat_budget, get_content_groups_from_so
 from utils_read import load_json
 
 
-def annotate_objects(image_dir, output_dir, skip_existing=True):
+def annotate_objects(image_dir, output_dir, skip_existing=True, force_invalid=True):
     """
         Uses GPT-4 to annotate objects in a directory of images.
         Returns:
@@ -30,7 +30,7 @@ def annotate_objects(image_dir, output_dir, skip_existing=True):
         if skip_existing and os.path.exists(json_path):
             annotation = load_json(json_path)
             is_valid, error_message = check_annotation(annotation)
-            if is_valid:
+            if not force_invalid or is_valid:
                 annotations[object_id] = annotation
                 print(f"Skipping existing annotation for object {object_id}")
                 continue
@@ -45,7 +45,7 @@ def annotate_object_image(image_path):
     """
         Uses GPT-4 to annotate an object in an image.
         Returns:
-            The discription of the object in the image.
+            A list of plain text descriptions. Annotation[0] should be the long version of the description, and Annotation[1] should be the short version.
     """
     image_path = image_path.replace("\\", "/")
     image_name = image_path.split("/")[-1]
@@ -66,6 +66,25 @@ def annotate_object_image(image_path):
         if message["role"] == "assistant":
             annotation.append(message["content"])
     return annotation
+
+def translate_to_chinese(text):
+    """
+        Translates text to Chinese using the OpenAI API.
+        Args:
+            text: A string of text to be translated.
+        Returns:
+            A string of the translated text.
+    """
+    user_message = text
+    system_prompt = "You are good at translating English into fluent and natural Chinese. The expected reader is a middle-school student."
+    source_groups = [
+        [user_message],
+    ]
+    content_groups = get_content_groups_from_source_groups(source_groups)
+    conversation = mimic_chat(content_groups, model="gpt-3.5-turbo", system_prompt=system_prompt)
+    for message in conversation:
+        if message["role"] == "assistant":
+            return message["content"]
 
 def check_annotation_path(json_dir):
     valid_dict = {}
@@ -89,24 +108,17 @@ def check_annotation(annotation):
         Checks if the annotation is valid.
         Args:
             annotation: A list of descriptions. Annotation[0] should be the long version of the description, and Annotation[1] should be the short version.
+            There might be a third element in the list, which is the translated version of the short description.
         Returns:
             is_valid: A boolean indicating if the annotation is valid.
             error_message: A string containing the error message if the annotation is not valid.
     """
-    if not isinstance(annotation, list):
-        return False, "Type error. Annotation should be a *list* of two strings."
-    if len(annotation)!= 2:
-        return False, "Number of elements error. Annotation should be a list of *two* strings."
-    if not isinstance(annotation[0], str) or not isinstance(annotation[1], str):
-        return False, "Type error. Annotation should be a list of two *strings*."
     long_description = annotation[0].lower()
     short_description = annotation[1].lower()
     if "sorry" in long_description or "misunderst" in long_description:
         return False, "The model may not describe objects accurately or the object we want."
     if len(short_description) > len(long_description):
         return False, "Length error. The shorthand version is longer. Hallucinations are not allowed."
-    if len(short_description) > 1200:
-        return False, "Length error. The shorthand version is too long."
     return True, ""
 
 
@@ -118,5 +130,17 @@ if __name__ == "__main__":
     #     print(line)
     image_dir = "./example_data/anno_lang/painted_images"
     output_dir = "./example_data/anno_lang/corpora_object"
-    annotations = annotate_objects(image_dir, output_dir, skip_existing=True)
-    check_annotation_path(output_dir)
+    # annotations = annotate_objects(image_dir, output_dir, skip_existing=True)
+    # check_annotation_path(output_dir)
+    for file_name in tqdm(os.listdir(output_dir)):
+        if not file_name.endswith(".json"):
+            continue
+        annotation = load_json(os.path.join(output_dir, file_name))
+        is_valid, error_message = check_annotation(annotation)
+        if not is_valid:
+            continue
+        translated_description = translate_to_chinese(annotation[1])
+        print(f"Translated description: {translated_description}")
+        annotation.append(translated_description)
+        with open(os.path.join(output_dir, file_name), "w") as f:
+            json.dump(annotation, f, indent=4)
