@@ -359,12 +359,16 @@ def draw_box3d_on_img(
         textpos = np.min(corners_pixel, axis=0).astype(np.int32)
         textpos[0] = np.clip(textpos[0], a_min=0, a_max=w)
         textpos[1] = np.clip(textpos[1], a_min=0, a_max=h)
+        if np.mean(color) > 192:
+            text_color = (0, 0, 0)
+        else:
+            text_color = (255, 255, 255)
         occupency_map = draw_text(
             img,
             label,
             pos=textpos,
             bound=(w, h),
-            text_color=(255, 255, 255),
+            text_color=text_color,
             text_color_bg=color,
             occupency_map=occupency_map,
         )
