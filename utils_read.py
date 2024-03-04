@@ -40,7 +40,7 @@ def reverse_121_mapping(mapping):
 
 
 def load_json(path):
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
     return data
 

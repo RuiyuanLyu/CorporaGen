@@ -107,14 +107,19 @@ def check_annotation(annotation):
     """
         Checks if the annotation is valid.
         Args:
-            annotation: A list of descriptions. Annotation[0] should be the long version of the description, and Annotation[1] should be the short version.
-            There might be a third element in the list, which is the translated version of the short description.
+            annotation: A list of descriptions. Annotation[0] should be a extended version of the description, and Annotation[1] should be a shorthand (original) version; there might be a third element for the translated version.
+            OR: A dictionary containing the keys:
+                 "extended_description", "original_description", "translated_description", "modified_description", and "accuracy_dict".
         Returns:
             is_valid: A boolean indicating if the annotation is valid.
             error_message: A string containing the error message if the annotation is not valid.
     """
-    long_description = annotation[0].lower()
-    short_description = annotation[1].lower()
+    if isinstance(annotation, list):
+        long_description = annotation[0].lower()
+        short_description = annotation[1].lower()
+    else:
+        long_description = annotation["extended_description"].lower()
+        short_description = annotation["original_description"].lower()
     if "sorry" in long_description or "misunderst" in long_description:
         return False, "The model may not describe objects accurately or the object we want."
     if len(short_description) > len(long_description):
@@ -139,6 +144,9 @@ if __name__ == "__main__":
         is_valid, error_message = check_annotation(annotation)
         if not is_valid:
             continue
+        if len(annotation) >= 3:
+            continue
+        print(f"Short description: {annotation[1]}")
         translated_description = translate_to_chinese(annotation[1])
         print(f"Translated description: {translated_description}")
         annotation.append(translated_description)
