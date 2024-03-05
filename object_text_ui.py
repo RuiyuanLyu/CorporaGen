@@ -13,7 +13,7 @@ QUESTIONS = {
     "state": "物体的状态（比如灯的开关/门的开关）是否准确？",
     "position": "物体的位置是否准确？",
     "placement": "物体的摆放（比如竖直/斜靠/平躺/堆叠）是否准确？",
-    "special_function": "物体的特殊功能（比如保温杯相对于普通杯子）是否准确？",
+    "special_function": "物体的特殊功能是否准确？请注意是否有编造的谎言。",
     "other_features": "物体的特点（比如椅子扶手）是否准确？"
 }
 KEYS = ["category", "appearance", "material", "size", "state", "position", "placement", "special_function", "other_features"] # Manually sorted and removed "meta"
@@ -83,17 +83,13 @@ with gr.Blocks() as demo:
         json_file = os.path.join(directory, "corpora_object", f"{object_name}.json")
         annotation = load_json(json_file)
         warning_text = gr.Textbox(label="Warning", value="", visible=False, interactive=False)
-        if isinstance(annotation, list):
-            original_description = annotation[1]
-            translated_description = annotation[2]
+        assert isinstance(annotation, dict), f"Invalid annotation type: {type(annotation)}"
+        original_description = annotation["simplified_description"]
+        if "modified_description" in annotation:
+            translated_description = annotation["modified_description"]
+            warning_text = gr.Textbox(label="Warning", value="该物体的描述此前已经被修改过。", visible=True, interactive=False)
         else:
-            assert isinstance(annotation, dict), f"Invalid annotation type: {type(annotation)}"
-            original_description = annotation["original_description"]
-            if "modified_description" in annotation:
-                translated_description = annotation["modified_description"]
-                warning_text = gr.Textbox(label="Warning", value="该物体的描述此前已经被修改过。", visible=True, interactive=False)
-            else:
-                translated_description = annotation["translated_description"]
+            translated_description = annotation["translated_description"]
         image_path = os.path.join(directory, "painted_images", f"{object_name}.jpg")
         return original_description, translated_description, image_path, warning_text
     object_name.change(fn=get_description_and_image_path, inputs=[object_name, directory], outputs=[original_description, translated_description, image, warning_text])
@@ -117,7 +113,7 @@ with gr.Blocks() as demo:
     core_question.change(fn=refresh_questions, inputs=core_question, outputs=questions_radio)
 
     def refresh_save_button(core_question):
-        visible = map_choice_to_bool(core_question)
+        visible = core_question in ["是", "否"]
         save_button = gr.Button(value="保存物体标注", visible=visible)
         return save_button
     core_question.change(fn=refresh_save_button, inputs=core_question, outputs=save_button)
@@ -132,7 +128,21 @@ with gr.Blocks() as demo:
         elif choice == "该物体具有这一属性，描述遗漏了":
             return False
         elif choice == "不要选这个选项":
-            return False
+            return None # special value if the user is lazy.
+        else:
+            raise ValueError(f"Invalid choice: {choice}")
+        
+    def map_choice_to_text(choice):
+        if choice == "是":
+            return "True"
+        elif choice == "否":
+            return "False"
+        elif choice == "该物体没有这一属性":
+            return "Inrelevant"
+        elif choice == "该物体具有这一属性，描述遗漏了":
+            return "Missing"
+        elif choice == "不要选这个选项":
+            return None # special value if the user is lazy.
         else:
             raise ValueError(f"Invalid choice: {choice}")
 
@@ -174,13 +184,8 @@ with gr.Blocks() as demo:
         json_file_path = os.path.join(directory, "corpora_object", f"{object_name}.json")
         annotation = load_json(json_file_path)
         annotation_to_save = {}
-        if isinstance(annotation, list):
-            annotation_to_save["extended_description"] = annotation[0]
-            annotation_to_save["original_description"] = annotation[1]
-            annotation_to_save["translated_description"] = annotation[2]
-        else:
-            assert isinstance(annotation, dict), f"Invalid annotation type: {type(annotation)}"
-            annotation_to_save = annotation.copy()
+        assert isinstance(annotation, dict), f"Invalid annotation type: {type(annotation)}"
+        annotation_to_save = annotation.copy()
         annotation_to_save["modified_description"] = preview_description
 
         accuracy_dict = {} # whether the attribute (key) of the original description is accurate or not
@@ -188,7 +193,10 @@ with gr.Blocks() as demo:
         if map_choice_to_bool(core_question):
             for i in range(len(questions_radio)):
                 key = KEYS[i]
-                value = map_choice_to_bool(questions_radio[i])
+                value = map_choice_to_text(questions_radio[i])
+                if value is None:
+                    save_button = gr.Button(value="有问题没回答，保存失败！")
+                    return save_button
                 accuracy_dict[key] = value
         else:
             for i in range(len(questions_radio)):
@@ -198,7 +206,7 @@ with gr.Blocks() as demo:
         
         with open(json_file_path, "w", encoding="utf-8") as f:
             json.dump(annotation_to_save, f, ensure_ascii=False, indent=4)
-        save_button = gr.Button(value="保存成功！")
+        save_button = gr.Button(value="保存成功！请选择下一物体。")
         return save_button
     save_button.click(fn=save_annotations, inputs=[directory, object_name, core_question, preview_description, *questions_radio], outputs=save_button)
 
