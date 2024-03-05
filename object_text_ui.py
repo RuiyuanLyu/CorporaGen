@@ -1,7 +1,7 @@
 import gradio as gr  # gradio==3.50.2
 import os
 import json
-from object_text_anno import check_annotation
+from object_text_anno import check_annotation_validity, map_choice_to_bool, map_choice_to_text
 from utils_read import load_json
 
 QUESTIONS = {
@@ -13,8 +13,8 @@ QUESTIONS = {
     "state": "物体的状态（比如灯的开关/门的开关）是否准确？",
     "position": "物体的位置是否准确？",
     "placement": "物体的摆放（比如竖直/斜靠/平躺/堆叠）是否准确？",
-    "special_function": "物体的特殊功能是否准确？请注意是否有编造的谎言。",
-    "other_features": "物体的特点（比如椅子扶手）是否准确？"
+    "special_function": "物体的特殊功能是否准确？请注意是否有编造的内容。",
+    "other_features": "物体的其它特点（比如椅子扶手）是否准确？"
 }
 KEYS = ["category", "appearance", "material", "size", "state", "position", "placement", "special_function", "other_features"] # Manually sorted and removed "meta"
 
@@ -70,7 +70,7 @@ with gr.Blocks() as demo:
         for json_file in os.listdir(os.path.join(directory, "corpora_object")):
             if json_file.endswith(".json"):
                 annotation = load_json(os.path.join(directory, "corpora_object", json_file))
-                is_valid, error_message = check_annotation(annotation)
+                is_valid, error_message = check_annotation_validity(annotation)
                 if is_valid:
                     valid_objects.append(json_file.split(".")[0])
         return gr.Dropdown(label="Select an object", choices=valid_objects, allow_custom_value=True)
@@ -118,33 +118,6 @@ with gr.Blocks() as demo:
         return save_button
     core_question.change(fn=refresh_save_button, inputs=core_question, outputs=save_button)
 
-    def map_choice_to_bool(choice):
-        if choice == "是":
-            return True
-        elif choice == "否":
-            return False
-        elif choice == "该物体没有这一属性":
-            return True
-        elif choice == "该物体具有这一属性，描述遗漏了":
-            return False
-        elif choice == "不要选这个选项":
-            return None # special value if the user is lazy.
-        else:
-            raise ValueError(f"Invalid choice: {choice}")
-        
-    def map_choice_to_text(choice):
-        if choice == "是":
-            return "True"
-        elif choice == "否":
-            return "False"
-        elif choice == "该物体没有这一属性":
-            return "Inrelevant"
-        elif choice == "该物体具有这一属性，描述遗漏了":
-            return "Missing"
-        elif choice == "不要选这个选项":
-            return None # special value if the user is lazy.
-        else:
-            raise ValueError(f"Invalid choice: {choice}")
 
     def parse_description(description):
         """
@@ -201,7 +174,7 @@ with gr.Blocks() as demo:
         else:
             for i in range(len(questions_radio)):
                 key = KEYS[i]
-                accuracy_dict[key] = False
+                accuracy_dict[key] = "False"
         annotation_to_save["accuracy_dict"] = accuracy_dict
         
         with open(json_file_path, "w", encoding="utf-8") as f:

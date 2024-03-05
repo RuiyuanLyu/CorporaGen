@@ -35,7 +35,7 @@ def annotate_objects(image_dir, output_dir, skip_existing=True, force_invalid=Tr
         pbar.set_description(f"Annotating object {object_id}")
         if skip_existing and os.path.exists(json_path):
             annotation = load_json(json_path)
-            is_valid, error_message = check_annotation(annotation)
+            is_valid, error_message = check_annotation_validity(annotation)
             if is_valid or not force_invalid:
                 annotations[object_id] = annotation
                 print(f"Skipping existing annotation for object {object_id}")
@@ -100,7 +100,7 @@ def translate_to_chinese(text):
         if message["role"] == "assistant":
             return message["content"]
 
-def check_annotation_path(json_dir):
+def check_annotation_validity_path(json_dir):
     valid_dict = {}
     num_invalid = 0
     for file_name in os.listdir(json_dir):
@@ -109,7 +109,7 @@ def check_annotation_path(json_dir):
         with open(os.path.join(json_dir, file_name), "r", encoding="utf-8") as f:
             object_id, object_type, image_id = file_name.split(".")[0].split("_")
             data = json.load(f) 
-            is_valid, error_message = check_annotation(data)
+            is_valid, error_message = check_annotation_validity(data)
             if not is_valid:
                 num_invalid += 1
                 print(f"Invalid annotation for object {object_id}: {error_message}")
@@ -117,7 +117,7 @@ def check_annotation_path(json_dir):
     print(f"Checked {len(valid_dict)} annotations. {num_invalid} annotations are invalid.")
     return valid_dict
 
-def check_annotation(annotation):
+def check_annotation_validity(annotation):
     """
         Checks if the annotation is valid.
         Args:
@@ -136,25 +136,113 @@ def check_annotation(annotation):
         return False, "Length error. The shorthand version is longer. Hallucinations are not allowed."
     return True, ""
 
+def map_choice_to_bool(choice):
+    if choice == "是":
+        return True
+    elif choice == "否":
+        return False
+    elif choice == "该物体没有这一属性":
+        return True
+    elif choice == "该物体具有这一属性，描述遗漏了":
+        return False
+    elif choice == "不要选这个选项":
+        return None # special value if the user is lazy.
+    else:
+        raise ValueError(f"Invalid choice: {choice}")    
+def map_choice_to_text(choice):
+    if choice == "是":
+        return "True"
+    elif choice == "否":
+        return "False"
+    elif choice == "该物体没有这一属性":
+        return "Inrelevant"
+    elif choice == "该物体具有这一属性，描述遗漏了":
+        return "Missing"
+    elif choice == "不要选这个选项":
+        return None # special value if the user is lazy.
+    else:
+        raise ValueError(f"Invalid choice: {choice}")
+def map_text_to_bool(text):
+    if isinstance(text, bool):
+        return text
+    if text == "True":
+        return True
+    elif text == "False":
+        return False
+    elif text == "Inrelevant":
+        return True
+    elif text == "Missing":
+        return False
+    else:
+        raise ValueError(f"Invalid text: {text}")
+
+
+def check_annotation_quality(annotations, display_stats=True):
+    """
+        Reads the accuracy_dict from the annotations and calculates the quality for a list of annotations. 
+        Args:
+            a list of dictionaries containing the keys:
+                 "original_description", "simplified_description", "translated_description", "modified_description", and "accuracy_dict".
+            The accuracy_dict is a dictionary containing the keys: "meta", "category", "appearance", "material", "size", "state", "position", "placement", "special_function", "other_features". The values are in ["True", "False", "Inrelevant", "Missing"]
+        Returns:
+            A dict containing the keys:
+                "meta", "category", "appearance", "material", "size", "state", "position", "placement", "special_function", "other_features"
+    """
+    quality_dict = {"meta":0, "category":0, "appearance":0, "material":0, "size":0, "state":0, "position":0, "placement":0, "special_function":0, "other_features":0}
+    for annotation in annotations:
+        assert isinstance(annotation, dict)
+        if "accuracy_dict" not in annotation:
+            continue
+        accuracy_dict = annotation["accuracy_dict"]
+        for key in quality_dict:
+            if key in accuracy_dict:
+                quality_dict[key] += map_text_to_bool(accuracy_dict[key])
+    for key in quality_dict:
+        quality_dict[key] /= len(annotations)
+    for key in quality_dict:
+        if key == "meta":
+            continue
+        quality_dict[key] /= quality_dict["meta"]
+
+    if display_stats:
+        sum = 0
+        for key in quality_dict:
+            if key == "meta":
+                continue
+            print("{}: {:.2f}%".format(key, quality_dict[key]*100))
+            sum += quality_dict[key] 
+        print("Overall quality meta: {:.2f}%".format(quality_dict["meta"]*100))
+        print("Overall quality other: {:.2f}%".format(sum/(len(quality_dict)-1)*100))
+        print("Overall quality meta * other: {:.2f}%".format((quality_dict["meta"] * sum/(len(quality_dict)-1)) * 100))
+    return quality_dict
 
 if __name__ == "__main__":
     image_dir = "./example_data/anno_lang/painted_images"
     output_dir = "./example_data/anno_lang/corpora_object"
     # annotations = annotate_objects(image_dir, output_dir, skip_existing=True, force_invalid=True, max_additional_attempts=3)
-    check_annotation_path(output_dir)
-    for file_name in tqdm(os.listdir(output_dir)):
+    check_annotation_validity_path(output_dir)
+    # for file_name in tqdm(os.listdir(output_dir)):
+    #     if not file_name.endswith(".json"):
+    #         continue
+    #     annotation = load_json(os.path.join(output_dir, file_name))
+    #     is_valid, error_message = check_annotation_validity(annotation)
+    #     if not is_valid:
+    #         continue
+    #     if "translated_description" in annotation:
+    #         continue
+    #     # print("Short description: ", annotation["simplified_description"])
+    #     # print("Original description: ", annotation["original_description"])
+    #     translated_description = translate_to_chinese(annotation["simplified_description"])
+    #     # print(f"Translated description: {translated_description}")
+    #     annotation["translated_description"] = translated_description
+    #     with open(os.path.join(output_dir, file_name), "w") as f:
+    #         json.dump(annotation, f, indent=4)
+
+    annotations = []
+    for file_name in os.listdir(output_dir):
         if not file_name.endswith(".json"):
             continue
         annotation = load_json(os.path.join(output_dir, file_name))
-        is_valid, error_message = check_annotation(annotation)
-        if not is_valid:
-            continue
-        if "translated_description" in annotation:
-            continue
-        # print("Short description: ", annotation["simplified_description"])
-        # print("Original description: ", annotation["original_description"])
-        translated_description = translate_to_chinese(annotation["simplified_description"])
-        # print(f"Translated description: {translated_description}")
-        annotation["translated_description"] = translated_description
-        with open(os.path.join(output_dir, file_name), "w") as f:
-            json.dump(annotation, f, indent=4)
+        annotations.append(annotation)
+    quality_dict = check_annotation_quality(annotations)
+    # print(quality_dict)
