@@ -89,7 +89,7 @@ with gr.Blocks() as demo:
             translated_description = annotation["modified_description"]
             warning_text = gr.Textbox(label="Warning", value="该物体的描述此前已经被修改过。", visible=True, interactive=False)
         else:
-            translated_description = annotation["translated_description"]
+            translated_description = annotation.get("translated_description", '没有可用的中文描述.请在Q0选择"否"。')
         image_path = os.path.join(directory, "painted_images", f"{object_name}.jpg")
         return original_description, translated_description, image_path, warning_text
     object_name.change(fn=get_description_and_image_path, inputs=[object_name, directory], outputs=[original_description, translated_description, image, warning_text])
