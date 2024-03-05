@@ -8,7 +8,7 @@ from openai import OpenAI
 KEY_ACTIVATED = True
 
 
-def mimic_chat_budget(user_content_groups, system_prompt=None):
+def mimic_chat_budget(user_content_groups, system_prompt=None, max_additional_attempts=0):
     """
         budget version of mimic_chat(). The first round of conversation is done by GPT-4 model, and the remaining rounds are done by GPT-3.5-turbo model.
         NOTE: need to convert into content groups first using get_content_groups_from_source_groups()
@@ -42,9 +42,15 @@ def mimic_chat_budget(user_content_groups, system_prompt=None):
             messages=messages,
             max_tokens=2000,
         )
-        response = response.choices[0].message.content.strip()
+        response = response.choices[0].message.content.strip()            
         messages.append({"role": "assistant", "content": response})
         print(response)
+        if "sorry" in response.lower():
+            print(f"Additional attempt(s) left: {max_additional_attempts}")
+            if max_additional_attempts > 0:
+                return mimic_chat_budget(user_content_groups, system_prompt=system_prompt, max_additional_attempts=max_additional_attempts-1)
+            else:
+                print("WARNING: Maximum additional attempts reached. The result may not be accurate.")
     return messages
  
 
