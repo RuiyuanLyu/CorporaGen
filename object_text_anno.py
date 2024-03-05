@@ -89,7 +89,7 @@ def translate_to_chinese(text):
         Returns:
             A string of the translated text.
     """
-    user_message = "Hello, can you help me translate the following text about indoor furniture into Chinese: " + text
+    user_message = text
     system_prompt = "You are an excellent translator, who does more than rigidly translating English into Chinese. Your choice of words and phrases are natural and fluent. The expressions are easy to understand. The expected reader is a middle-school student."
     source_groups = [
         [user_message],
@@ -106,7 +106,7 @@ def check_annotation_path(json_dir):
     for file_name in os.listdir(json_dir):
         if not file_name.endswith(".json"):
             continue
-        with open(os.path.join(json_dir, file_name), "r") as f:
+        with open(os.path.join(json_dir, file_name), "r", encoding="utf-8") as f:
             object_id, object_type, image_id = file_name.split(".")[0].split("_")
             data = json.load(f) 
             is_valid, error_message = check_annotation(data)
@@ -140,21 +140,21 @@ def check_annotation(annotation):
 if __name__ == "__main__":
     image_dir = "./example_data/anno_lang/painted_images"
     output_dir = "./example_data/anno_lang/corpora_object"
-    annotations = annotate_objects(image_dir, output_dir, skip_existing=True, force_invalid=True, max_additional_attempts=3)
+    # annotations = annotate_objects(image_dir, output_dir, skip_existing=True, force_invalid=True, max_additional_attempts=3)
     check_annotation_path(output_dir)
-    # for file_name in tqdm(os.listdir(output_dir)):
-    #     if not file_name.endswith(".json"):
-    #         continue
-    #     annotation = load_json(os.path.join(output_dir, file_name))
-    #     is_valid, error_message = check_annotation(annotation)
-    #     if not is_valid:
-    #         continue
-    #     if len(annotation) >= 3:
-    #         continue
-    #     print("Short description: ", annotation["simplified_description"])
-    #     print("Original description: ", annotation["original_description"])
-    #     translated_description = translate_to_chinese(annotation["simplified_description"])
-    #     print(f"Translated description: {translated_description}")
-    #     annotation.append(translated_description)
-    #     with open(os.path.join(output_dir, file_name), "w") as f:
-    #         json.dump(annotation, f, indent=4)
+    for file_name in tqdm(os.listdir(output_dir)):
+        if not file_name.endswith(".json"):
+            continue
+        annotation = load_json(os.path.join(output_dir, file_name))
+        is_valid, error_message = check_annotation(annotation)
+        if not is_valid:
+            continue
+        if "translated_description" in annotation:
+            continue
+        # print("Short description: ", annotation["simplified_description"])
+        # print("Original description: ", annotation["original_description"])
+        translated_description = translate_to_chinese(annotation["simplified_description"])
+        # print(f"Translated description: {translated_description}")
+        annotation["translated_description"] = translated_description
+        with open(os.path.join(output_dir, file_name), "w") as f:
+            json.dump(annotation, f, indent=4)
