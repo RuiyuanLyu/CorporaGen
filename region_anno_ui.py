@@ -61,8 +61,8 @@ anno_full = read_annotation_pickles(['embodiedscan_infos_train_full.pkl', 'embod
 
 scene_list = []
 
-global to_fix_bug
-to_fix_bug = False
+global to_rotate_clockwise_90
+to_rotate_clockwise_90 = False
 
 for scene_id in anno_full.keys():
     scene_list.append(scene_id)
@@ -75,8 +75,9 @@ REGIONS = {"起居室/客厅区": "living region",
             "厨房/烹饪区": "cooking region",
             "浴室/洗澡区": "bathing region",
             "储藏区": "storage region",
-            "厕所": "restroom region",
-            "走廊/楼梯": "corridor region",
+            "厕所": "toliet region",
+            "走廊/通道": "corridor region",
+            "空地": "open area region",
             "其它": "other region"}
 
 def lang_translation(region_name):
@@ -89,9 +90,9 @@ with gr.Blocks() as demo:
     scene_anno_info = gr.Textbox('', visible=True, interactive=False)
     total_vertex_num = gr.Slider(
         label="Vertex Number", 
-        info="How different corners can be in a segment.", 
+        info="拖动滑块选择多边形的顶点个数", 
         minimum=3, 
-        maximum=10, 
+        maximum=20, 
         step=1, 
         value=4, 
     )
@@ -114,6 +115,7 @@ with gr.Blocks() as demo:
         if os.path.exists(scene_info[scene_id]["output_dir"]+'/region_segmentation.txt'):
 
             scene_anno_state = scene_id+' 已经被标注过 ! ! ! ! !'
+            gr.Info("该场景已经被标注过，若非必要请不要重复标注")
         else:
             scene_anno_state = scene_id+' 需要标注'
 
@@ -313,17 +315,17 @@ with gr.Blocks() as demo:
             max(p[1] - size, 0) : min(p[1] + size, out.shape[1] - 1), 
         ] = np.array([0, 0, 255]).astype(np.uint8)
         detail_img = gr.update(value=scene_info[scene_id]['useful_object'][min_object_id])
-        global to_fix_bug
+        global to_rotate_clockwise_90
         if scene_id[:6]=='3rscan':
-            to_fix_bug = True
+            to_rotate_clockwise_90 = True
 
 
         return out, detail_img
 
-    def fix_bug(detail_img):
-        global to_fix_bug
-        if to_fix_bug:
-            to_fix_bug = False
+    def rotate_clockwise_90(detail_img):
+        global to_rotate_clockwise_90
+        if to_rotate_clockwise_90:
+            to_rotate_clockwise_90 = False
             detail_img = cv2.rotate(detail_img, cv2.ROTATE_90_CLOCKWISE)
         return detail_img
 
@@ -433,13 +435,15 @@ with gr.Blocks() as demo:
 
         return None, None, None, None, None, None
 
-    annotate_btn = gr.Button("Annotate")
-    clear_btn = gr.Button("Clear")
-    undo_btn = gr.Button("Undo")
-    save_btn = gr.Button("Save to file")
+    with gr.Row():
+        annotate_btn = gr.Button("标注")
+        undo_btn = gr.Button("回退一步")
+        save_btn = gr.Button("所有区域都已经标注完成，保存")
+        clear_btn = gr.Button("清空当前场景所有标注（谨慎操作）")
+
 
     with gr.Row():
-        object_postion_img = gr.Image(label="Object Position", interactive=True)
+        object_postion_img = gr.Image(label="辅助查看区", interactive=True)
         detail_show_img = gr.Image(label="Posed Image")
 
 
@@ -454,7 +458,7 @@ with gr.Blocks() as demo:
         new_draw_dot, [scene, input_img], [object_postion_img, detail_show_img]
     )
     detail_show_img.change(
-        fix_bug, [detail_show_img], [detail_show_img]
+        rotate_clockwise_90, [detail_show_img], [detail_show_img]
     )
     clear_btn.click(fn=clear, inputs=[scene, output_img], outputs=[output_img, show_json])
     undo_btn.click(fn=undo, inputs=[output_img], outputs=[output_img, show_json])
