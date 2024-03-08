@@ -40,14 +40,14 @@ def annotate_objects(image_dir, output_dir, skip_existing=True, force_invalid=Tr
                 annotations[object_id] = annotation
                 print(f"Skipping existing annotation for object {object_id}")
                 continue
-        annotation = annotate_object_image(image_path, max_additional_attempts)
+        annotation = annotate_object_by_image(image_path, max_additional_attempts)
         annotations[object_id] = annotation
         with open(json_path, "w") as f:
             json.dump(annotation, f, indent=4)
     return annotations
 
 
-def annotate_object_image(image_path, max_additional_attempts=0):
+def annotate_object_by_image(image_path, max_additional_attempts=0):
     """
         Uses GPT-4 to annotate an object in an image.
         Args:
@@ -81,16 +81,20 @@ def annotate_object_image(image_path, max_additional_attempts=0):
     annotation = {"original_description": raw_annotation[0], "simplified_description": raw_annotation[1]}
     return annotation
 
-def translate_to_chinese(text):
+def translate(text, src_lang="English", tgt_lang="Chinese"):
     """
-        Translates text to Chinese using the OpenAI API.
+        Translates text using the OpenAI API.
         Args:
             text: A string of text to be translated.
+            src_lang: A string of the source language code.
+            tgt_lang: A string of the target language code.
         Returns:
             A string of the translated text.
     """
     user_message = text
-    system_prompt = "You are an excellent translator, who does more than rigidly translating English into Chinese. Your choice of words and phrases are natural and fluent. The expressions are easy to understand. The expected reader is a middle-school student."
+    src_lang = src_lang.capitalize()
+    tgt_lang = tgt_lang.capitalize()
+    system_prompt = f"You are an excellent translator, who does more than rigidly translating {src_lang} into {tgt_lang}. Your choice of words and phrases are natural and fluent. The expressions are easy to understand. The expected reader is a middle-school student."
     source_groups = [
         [user_message],
     ]
@@ -129,12 +133,24 @@ def check_annotation_validity(annotation):
     """
     assert isinstance(annotation, dict)
     long_description = annotation["original_description"].lower()
-    short_description = annotation["simplified_description"].lower()
+    short_description = annotation.get("simplified_description", "").lower()
+    accuracy_dict = annotation.get("accuracy_dict", None)
+    if accuracy_dict:
+        meta = map_text_to_bool(accuracy_dict.get("meta", "False"))
+        if not meta:
+            return False, "The model is not describing the object we want."
     if "sorry" in long_description or "misunderst" in long_description:
         return False, "The model may not describe objects accurately or the object we want."
     if len(short_description) > len(long_description):
         return False, "Length error. The shorthand version is longer. Hallucinations are not allowed."
     return True, ""
+
+def num_tokens_from_string(string: str, encoding_name: str = "cl100k_base") -> int:
+    """Returns the number of tokens in a text string."""
+    import tiktoken
+    encoding = tiktoken.get_encoding(encoding_name)
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
 
 def map_choice_to_bool(choice):
     if choice == "是":
@@ -213,7 +229,7 @@ def check_annotation_quality(annotations, display_stats=True):
             sum += quality_dict[key] 
         print("Overall quality meta: {:.2f}%".format(quality_dict["meta"]*100))
         print("Overall quality other: {:.2f}%".format(sum/(len(quality_dict)-1)*100))
-        print("Overall quality meta * other: {:.2f}%".format((quality_dict["meta"] * sum/(len(quality_dict)-1)) * 100))
+        print("Overall quality meta*other: {:.2f}%".format((quality_dict["meta"] * sum/(len(quality_dict)-1)) * 100))
     return quality_dict
 
 if __name__ == "__main__":
