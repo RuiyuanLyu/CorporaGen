@@ -75,10 +75,10 @@ def process_data(region_with_label, scene_id, object_ids, bboxes, center_x, cent
 
 if __name__ == "__main__":
 
-    scene_id = '1mp3d_0000_region0'
+    scene_id = '1mp3d_0000_region1'
 
     all_scene_info = np.load('all_render_param.npy', allow_pickle=True).item()
-    region_with_label = get_data(f'region_anno_result/{scene_id}/annotation.txt')
+    region_with_label = get_data(f'data/{scene_id}/region_segmentation.txt')
     scene_info = all_scene_info[scene_id]
 
     from utils_read import read_annotation_pickles

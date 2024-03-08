@@ -8,7 +8,7 @@ from utils_read import (
     read_bboxes_json,
     read_intrinsic,
     read_extrinsic,
-    read_annotation_pickle,
+    read_annotation_pickles,
     EXCLUDED_OBJECTS,
 )
 
@@ -579,9 +579,7 @@ def visualize_distribution_hist(data, num_bins=20):
 def annotate_images_with_visible_objects(img_ids):
     pickle_file_val = "./example_data/embodiedscan_infos_val_full.pkl"
     pickle_file_train = "./example_data/embodiedscan_infos_train_full.pkl"
-    anno_dict1 = read_annotation_pickle(pickle_file_val)
-    anno_dict2 = read_annotation_pickle(pickle_file_train)
-    anno_dict = {**anno_dict1, **anno_dict2}
+    anno_dict = read_annotation_pickles([pickle_file_val, pickle_file_train])
     keys = sorted(list(anno_dict.keys()))
     for key_index in range(len(keys)):
         key = keys[key_index]

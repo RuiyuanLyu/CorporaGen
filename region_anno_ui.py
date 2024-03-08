@@ -23,7 +23,7 @@ import numpy as np
 from math import ceil
 import json
 import open3d as o3d
-from utils_read import read_annotation_pickle
+from utils_read import read_annotation_pickles
 from render_bev import load_mesh, _render_2d_bev, take_bev_screenshot, process_mesh
 global file_name
 global click_evt_list
@@ -57,17 +57,14 @@ init_item_dict['annotation_list'] = []
 
 item_dict_list.append(init_item_dict)
 
-anno_train = read_annotation_pickle('embodiedscan_infos_train_full.pkl')
-anno_val = read_annotation_pickle('embodiedscan_infos_val_full.pkl')
+anno = read_annotation_pickles(['embodiedscan_infos_train_full.pkl', 'embodiedscan_infos_val_full.pkl'])
 
 scene_list = []
 
 global to_fix_bug
 to_fix_bug = False
 
-for scene_id in anno_train.keys():
-    scene_list.append(scene_id)
-for scene_id in anno_val.keys():
+for scene_id in anno.keys():
     scene_list.append(scene_id)
 scene_list.sort()
 
@@ -97,7 +94,7 @@ def lang_translation(region_name):
 with gr.Blocks() as demo:
 
 
-    scene = gr.Dropdown(scene_list)
+    scene = gr.Dropdown(scene_list, label="在此选择待标注的场景")
     scene_anno_info = gr.Textbox('', visible=True, interactive=False)
     total_vertex_num = gr.Slider(
         label="Vertex Number", 
@@ -123,7 +120,7 @@ with gr.Blocks() as demo:
         global item_dict_list
         item_dict_list = [init_item_dict]
 
-        if os.path.exists(scene_info[scene_id]["output_dir"]+'/annotation.txt'):
+        if os.path.exists(scene_info[scene_id]["output_dir"]+'/region_segmentation.txt'):
 
             scene_anno_state = scene_id+' 已经被标注过 ! ! ! ! !'
         else:
@@ -376,7 +373,7 @@ with gr.Blocks() as demo:
             return None, None, annotation_list
         else:
 
-            gr.Info('Vertex num not match or have no label!Unable to annotation.')
+            gr.Info('多边形顶点数不匹配或没有标签！请重新（继续）标注。')
 
             return label, output_img, annotation_list
 
@@ -428,7 +425,7 @@ with gr.Blocks() as demo:
         global annotation_list
 
         os.makedirs(scene_info[scene_id]['output_dir'], exist_ok=True)
-        with open(f"{scene_info[scene_id]['output_dir']}/annotation.txt", "w") as file:
+        with open(f"{scene_info[scene_id]['output_dir']}/region_segmentation.txt", "w") as file:
             file.write(str(annotation_list))
         annotation_list = []
         global click_evt_list
@@ -499,7 +496,7 @@ if __name__ == "__main__":
     # 存储渲染参数的文件（坐标变换要用到）
     all_scene_info = np.load('all_render_param.npy', allow_pickle=True).item()
     # 输出文件夹
-    output_dir = 'region_anno_result'
+    output_dir = 'data'
     # 辅助查看图文件夹
     painted_dir = './data'
 
@@ -523,12 +520,6 @@ if __name__ == "__main__":
         scene_info[scene_id]["object_ids"] = anno["object_ids"]
         scene_info[scene_id]["object_types"] = anno["object_types"]
         scene_info[scene_id]["visible_view_object_dict"] = anno["visible_view_object_dict"]
-
-
-        ##todo 这里文件地址要对齐!!
-
-
-
         scene_info[scene_id]["output_dir"] = f"{output_dir}/{scene_id}"
         painted_img_dir = f"{painted_dir}/{scene_id}/painted_objects"
         scene_info[scene_id]["useful_object"] = {}

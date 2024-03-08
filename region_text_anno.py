@@ -73,10 +73,8 @@ def get_visible_objects_dict(dataset_tar, scene_id_tar):
     """
     pickle_file_val = './example_data/embodiedscan_infos_val_full.pkl'
     pickle_file_train = './example_data/embodiedscan_infos_train_full.pkl'
-    from utils_read import read_annotation_pickle
-    anno_dict1 = read_annotation_pickle(pickle_file_val)
-    anno_dict2 = read_annotation_pickle(pickle_file_train)
-    anno_dict = {**anno_dict1, **anno_dict2}
+    from utils_read import read_annotation_pickles
+    anno_dict = read_annotation_pickles([pickle_file_val, pickle_file_train])
     keys = sorted(list(anno_dict.keys()))
     for key_index in range(len(keys)):
         key = keys[key_index]

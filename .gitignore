@@ -2,7 +2,7 @@ example_data/
 example_data2/
 deprecations/
 data/
-region_anno_result/
+data/
 openai_api_key.txt
 
 **.pkl

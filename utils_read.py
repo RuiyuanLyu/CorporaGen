@@ -282,6 +282,8 @@ def read_annotation_pickles(paths):
         Returns: Please refer to the return value of read_annotation_pickle()
     """
     output_data = {}
+    if isinstance(paths, str):
+        paths = [paths]
     for path in paths:
         data = read_annotation_pickle(path)
         output_data.update(data)

@@ -7,9 +7,8 @@ from tqdm import tqdm
 from scipy.spatial import ConvexHull
 import scipy
 from shapely.geometry import Polygon
-from utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_depth_map, read_bboxes_json, load_json, reverse_multi2multi_mapping, read_annotation_pickle, EXCLUDED_OBJECTS
+from utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_depth_map, read_bboxes_json, load_json, reverse_multi2multi_mapping, read_annotation_pickles, EXCLUDED_OBJECTS
 from utils_3d import check_bboxes_visibility, check_point_visibility, interpolate_bbox_points
-from utils_read import read_annotation_pickle
 import shutil
 import json
 from region_matching import get_data,process_data
@@ -226,7 +225,7 @@ if __name__ == '__main__':
         anno = np.load(f"./{scene_id}/example.npy", allow_pickle=True).item()
     else:
 
-        anno = read_annotation_pickle('example_data/embodiedscan_infos_train_full.pkl')[f'{scene_id}']
+        anno = read_annotation_pickles('example_data/embodiedscan_infos_train_full.pkl')[f'{scene_id}']
         np.save(f"./{scene_id}/example.npy", anno)
 
 

@@ -16,7 +16,7 @@ from utils_read import (
     read_bboxes_json,
     load_json,
     reverse_multi2multi_mapping,
-    read_annotation_pickle,
+    read_annotation_pickles,
     EXCLUDED_OBJECTS,
 )
 from utils_3d import (
@@ -696,9 +696,7 @@ def single_scene_test_local():
 def single_scene_test_by_pickle():
     pickle_file_val = "./example_data/embodiedscan_infos_val_full.pkl"
     pickle_file_train = "./example_data/embodiedscan_infos_train_full.pkl"
-    anno_dict1 = read_annotation_pickle(pickle_file_val)
-    anno_dict2 = read_annotation_pickle(pickle_file_train)
-    anno_dict = {**anno_dict1, **anno_dict2}
+    anno_dict = read_annotation_pickles([pickle_file_val, pickle_file_train])
     keys = sorted(list(anno_dict.keys()))
     for key in keys:
         anno = anno_dict[key]
@@ -749,9 +747,7 @@ def select_for_all_scenes_single_thread():
     pickle_file_train = "/mnt/petrelfs/share_data/wangtai/data/full_10_visible/embodiedscan_infos_train_full.pkl"
     data_real_dir = "/mnt/petrelfs/share_data/maoxiaohan"
     out_real_dir = "/mnt/petrelfs/share_data/lvruiyuan"
-    anno_dict1 = read_annotation_pickle(pickle_file_val)
-    anno_dict2 = read_annotation_pickle(pickle_file_train)
-    anno_dict = {**anno_dict1, **anno_dict2}
+    anno_dict = read_annotation_pickles([pickle_file_val, pickle_file_train])
     keys = sorted(list(anno_dict.keys()))
     pbar = tqdm(range(len(keys)))
     for key_index in pbar:
@@ -805,9 +801,7 @@ def select_for_all_scenes_multi_threads():
     pickle_file_train = "/mnt/petrelfs/share_data/wangtai/data/full_10_visible/embodiedscan_infos_train_full.pkl"
     data_real_dir = "/mnt/petrelfs/share_data/maoxiaohan"
     out_real_dir = "/mnt/petrelfs/share_data/lvruiyuan"
-    anno_dict1 = read_annotation_pickle(pickle_file_val)
-    anno_dict2 = read_annotation_pickle(pickle_file_train)
-    anno_dict = {**anno_dict1, **anno_dict2}
+    anno_dict = read_annotation_pickles([pickle_file_val, pickle_file_train])
     keys = sorted(list(anno_dict.keys()))
     inputs = []
     for key_index in range(len(keys)):
