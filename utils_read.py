@@ -274,6 +274,20 @@ def read_annotation_pickle(path):
         }
     return output_data
 
+def read_annotation_pickles(paths):
+    """
+        Read multiple annotation pickles and merge them into one dictionary.
+        Args:
+            paths: a list of paths to annotation pickles.
+        Returns: Please refer to the return value of read_annotation_pickle()
+    """
+    output_data = {}
+    for path in paths:
+        data = read_annotation_pickle(path)
+        output_data.update(data)
+    output_data = dict(sorted(output_data.items()))
+    return output_data
+        
 
 if __name__ == "__main__":
     pickle_file = "./example_data/embodiedscan_infos_val_full.pkl"

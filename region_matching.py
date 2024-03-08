@@ -1,7 +1,5 @@
 import numpy as np
-import open3d as o3d
 import json
-import os
 import cv2
 
 
@@ -16,29 +14,27 @@ def is_in_poly(p, poly):
             is_in = True
             break
         if min(y1, y2) < py <= max(y1, y2):
-            x = x1 + (py - y1) * (x2 - x1) / (y2 - y1) # find the point on the line, with y=py
+            x = x1 + (py - y1) * (x2 - x1) / (y2 - y1)
             if x == px:
                 is_in = True
                 break
             elif x > px:
                 is_in = not is_in
     return is_in
+def get_position_in_mesh_render_image(point, center_x, center_y, num_pixels_per_meter, photo_pixel):
 
-def get_position_in_render_image(point,min_x, min_y,ratio=20):
-    x, y= point
-    pixel_x = int((x - min_x) * ratio)
-    pixel_y = int((y - min_y) * ratio)
-    return pixel_y,pixel_x
+    dx = point[0] - center_x
+    dy = point[1] - center_y
 
-def get_data(input_annotation_path,point_cloud_path):
-    '''
-    extracts the min_x, min_y, and region_with_label from input data
-    Returns:
-        min_x,min_y: the minimum x and y coordinates of the point cloud
-        region_with_label: a list of dict [{id:int, label:str, vertex:[(x1,y1),(x2,y2),...,(xn,yn)]]
-    '''
+    ox = (int(num_pixels_per_meter * dx) + photo_pixel[1] // 2)
+    oy = photo_pixel[0] // 2 - (int(num_pixels_per_meter * dy))
 
-    point_cloud = o3d.io.read_point_cloud(point_cloud_path)
+    return oy, ox
+
+
+def get_data(input_annotation_path):
+    '''extract data from input files'''
+
 
     region_with_label_file = open(input_annotation_path, "r", encoding="UTF-8")
 
@@ -51,21 +47,13 @@ def get_data(input_annotation_path,point_cloud_path):
             s += l
     region_with_label = json.loads(s)
 
-    points = np.asarray(point_cloud.points)
-    sorted_indices = np.argsort(points[:, 2])
-    points = points[sorted_indices]
+    return region_with_label
 
-    min_x, min_y, _ = np.min(points, axis=0)
-    max_x, max_y, _ = np.max(points, axis=0)
+def process_data(region_with_label, scene_id, object_ids, bboxes, center_x, center_y, num_pixels_per_meter):
+    '''process the annotation data'''
 
-    return min_x,min_y,region_with_label
-
-def update_objects(region_with_label,object_ids,bboxes,min_x, min_y):
-    '''
-    update the object_ids for each region in the region_with_label 
-    Returns:
-        region_with_label (list(dict)): updated dict with object_ids for each region
-    '''
+    img = cv2.imread(f'data/{scene_id}/render.png')
+    print(img.shape)
 
     for region in region_with_label:
 
@@ -75,39 +63,30 @@ def update_objects(region_with_label,object_ids,bboxes,min_x, min_y):
         for _index in range(len(object_ids)):
             object_x = bboxes[_index][0]
             object_y = bboxes[_index][1]
-            #print(get_position_in_render_image((object_x,object_y)))
-            if is_in_poly(get_position_in_render_image((object_x,object_y),min_x, min_y),poly):
+            x, y = get_position_in_mesh_render_image((object_x, object_y), center_x, center_y, num_pixels_per_meter, img.shape[:2])
+            img[x-3:x+3, y-3:y+3] = (255, 0, 0)
+            #print(get_position_in_render_image((object_x, object_y)))
+            if is_in_poly((x, y), poly):
                 region['object_ids'].append(object_ids[_index])
+                print(object_data['object_types'][_index])
+    cv2.imwrite('out1.png', img)
     return region_with_label
 
 
 if __name__ == "__main__":
-    file_name = 'point_cloud_top_view.png'
-    input_annotation_path = f"./example_data/anno_lang/region_anno/{file_name}.txt" #The result of manual annotation
-    point_cloud_path = "./example_data/lidar/main.pcd"
-    output_annotation_dir = "./example_data/anno_lang/region_anno"
 
-    ratio = 20 #ratio of point to render image
+    scene_id = '1mp3d_0000_region0'
 
-    min_x, min_y, region_with_label = get_data(input_annotation_path,point_cloud_path)
+    all_scene_info = np.load('all_render_param.npy', allow_pickle=True).item()
+    region_with_label = get_data(f'region_anno_result/{scene_id}/annotation.txt')
+    scene_info = all_scene_info[scene_id]
 
-    object_data = np.load("example_data/example.npy",allow_pickle=True).item()
+    from utils_read import read_annotation_pickles
+    annotation_data = read_annotation_pickles(["embodiedscan_infos_train_full.pkl", "embodiedscan_infos_val_full.pkl"])
+    object_data = annotation_data[scene_id]
     bboxes = object_data['bboxes']
     object_ids = object_data['object_ids']
 
-    region_with_label = update_objects(region_with_label,object_ids,bboxes,min_x, min_y)
-
-    os.makedirs(output_annotation_dir, exist_ok=True)
-    with open(f"{output_annotation_dir}/{file_name}_updated.txt", 'w') as file:
-        file.write(str(region_with_label))
-
-
-
-
-
-
-
-
-
-
+    region_with_label = process_data(region_with_label, scene_id, object_ids, bboxes, scene_info['center_x'], scene_info['center_y'], scene_info['num_pixels_per_meter'])
+    print(region_with_label)
 

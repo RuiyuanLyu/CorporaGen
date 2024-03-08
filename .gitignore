@@ -2,8 +2,10 @@ example_data/
 example_data2/
 deprecations/
 data/
+region_anno_result/
 openai_api_key.txt
 
+**.pkl
 **.png
 **.jpg
 **.jpeg

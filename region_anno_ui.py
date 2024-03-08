@@ -24,7 +24,7 @@ from math import ceil
 import json
 import open3d as o3d
 from utils_read import read_annotation_pickle
-from render_bev import load_mesh,_render_2d_bev,take_bev_screenshot,process_mesh
+from render_bev import load_mesh, _render_2d_bev, take_bev_screenshot, process_mesh
 global file_name
 global click_evt_list
 global vertex_list
@@ -50,7 +50,6 @@ init_item_dict = {}
 
 
 init_item_dict['out_image'] = None
-init_item_dict['show_json'] = None
 init_item_dict['poly_done'] = False
 
 init_item_dict['vertex_list'] = []
@@ -58,7 +57,21 @@ init_item_dict['annotation_list'] = []
 
 item_dict_list.append(init_item_dict)
 
-scene_list = ['scene0000_00','3rscan0041','1mp3d_0000_region0']
+anno_train = read_annotation_pickle('embodiedscan_infos_train_full.pkl')
+anno_val = read_annotation_pickle('embodiedscan_infos_val_full.pkl')
+
+scene_list = []
+
+global to_fix_bug
+to_fix_bug = False
+
+for scene_id in anno_train.keys():
+    scene_list.append(scene_id)
+for scene_id in anno_val.keys():
+    scene_list.append(scene_id)
+scene_list.sort()
+
+
 
 def lang_translation(region_name):
     if region_name=="起居室":
@@ -85,18 +98,19 @@ with gr.Blocks() as demo:
 
 
     scene = gr.Dropdown(scene_list)
+    scene_anno_info = gr.Textbox('', visible=True, interactive=False)
     total_vertex_num = gr.Slider(
-        label="Vertex Number",
-        info="How different corners can be in a segment.",
-        minimum=3,
-        maximum=10,
-        step=1,
-        value=4,
+        label="Vertex Number", 
+        info="How different corners can be in a segment.", 
+        minimum=3, 
+        maximum=10, 
+        step=1, 
+        value=4, 
     )
 
     def get_file(scene_id):
         if scene_id == None or scene_id=='None':
-            return None,None,None,None,None
+            return None, None, None, None, None, ''
 
         global annotation_list
         annotation_list = []
@@ -109,10 +123,16 @@ with gr.Blocks() as demo:
         global item_dict_list
         item_dict_list = [init_item_dict]
 
+        if os.path.exists(scene_info[scene_id]["output_dir"]+'/annotation.txt'):
+
+            scene_anno_state = scene_id+' 已经被标注过 ! ! ! ! !'
+        else:
+            scene_anno_state = scene_id+' 需要标注'
 
 
-        return gr.update(value=f'{scene_id}/anno_lang/render.png'), gr.update(value=f'{scene_id}/anno_lang/render.png'),\
-               None,None,None
+
+        return gr.update(value=f'{render_image_path}/{scene_id}/render.png'), gr.update(value=f'{render_image_path}/{scene_id}/render.png'), \
+               None, None, None, scene_anno_state
 
 
     with gr.Row():
@@ -122,10 +142,10 @@ with gr.Blocks() as demo:
 
     label = gr.Radio(
         [
-            "起居室","书房","卧室","饭厅","厨房","浴室","储藏室","厕所","其它"
-        ],
-        label="label",
-        info="definition of this region",
+            "起居室", "书房", "卧室", "饭厅", "厨房", "浴室", "储藏室", "厕所", "其它"
+        ], 
+        label="label", 
+        info="definition of this region", 
     )
 
     def is_in_poly(p, poly):
@@ -153,13 +173,15 @@ with gr.Blocks() as demo:
                 img[i][j][0] += is_in_poly((i, j), vertex_list) * int(255 * 0.4)
         return img
 
-    def draw_dot(scene_id,img,out_img,vertex_num, evt: gr.SelectData):
+    def draw_dot(scene_id, img, out_img, vertex_num, evt: gr.SelectData):
         global click_evt_list
         global poly_done
         global poly_image
         global vertex_list
+        global annotation_list
 
         global enable_undo
+        # import pdb; pdb.set_trace()
         w, h, c = img.shape
         size = ceil(max([w, h]) * 0.01)
 
@@ -167,11 +189,11 @@ with gr.Blocks() as demo:
 
 
         if not poly_done:
-            #print(item_dict_list[-1]['vertex_list'],item_dict_list[-1]['poly_done'],vertex_list,poly_done)
+            #print(item_dict_list[-1]['vertex_list'], item_dict_list[-1]['poly_done'], vertex_list, poly_done)
             new_item_dict = copy.deepcopy(item_dict_list[-1])
             new_item_dict['poly_done'] = poly_done
             new_item_dict['out_image'] = out_img
-
+            new_item_dict['annotation_list'] = copy.deepcopy(annotation_list)
 
             new_item_dict['vertex_list'] = copy.deepcopy(vertex_list)
             item_dict_list.append(new_item_dict)
@@ -180,17 +202,17 @@ with gr.Blocks() as demo:
 
 
             if len(vertex_list) == vertex_num:
-                #print("OK!")
+
 
                 for vertex in vertex_list:
 
                     out[
                         max(vertex[0] - size, 0) : min(
                             vertex[0] + size, out.shape[0] - 1
-                        ),
+                        ), 
                         max(vertex[1] - size, 0) : min(
                             vertex[1] + size, out.shape[1] - 1
-                        ),
+                        ), 
                     ] = np.array([255, 0, 0]).astype(np.uint8)
 
                 new_out = draw_polygon(out.copy())
@@ -201,15 +223,15 @@ with gr.Blocks() as demo:
                     o_x = scene_info[scene_id]['bboxes'][k][0]
                     o_y = scene_info[scene_id]['bboxes'][k][1]
                     draw_size_of_object = 1
-                    if scene_id[:6]!='3rsscan':
+                    if scene_id[:6]!='xxxxxx':
                         draw_size_of_object = 5
-                        o_x,o_y = get_position_in_mesh_render_image((o_x,o_y),scene_info[scene_id]['center_x'],
-                                                                scene_info[scene_id]['center_y'],
-                                                                scene_info[scene_id]['num_pixels_per_meter'],
+                        o_x, o_y = get_position_in_mesh_render_image((o_x, o_y), scene_info[scene_id]['center_x'], 
+                                                                scene_info[scene_id]['center_y'], 
+                                                                scene_info[scene_id]['num_pixels_per_meter'], 
                                                                 img.shape[:2])
                     else:
-                        o_x, o_y = get_position_in_pcd_render_image((o_x, o_y), scene_info[scene_id]['min_x'],
-                                                                scene_info[scene_id]['min_y'],
+                        o_x, o_y = get_position_in_pcd_render_image((o_x, o_y), scene_info[scene_id]['min_x'], 
+                                                                scene_info[scene_id]['min_y'], 
                                                                 scene_info[scene_id]['resolution'])
                     # global vertex_list
                     if scene_info[scene_id]['object_types'][k] not in exclude_type and is_in_poly(
@@ -217,8 +239,8 @@ with gr.Blocks() as demo:
                     ):
 
                         new_out[
-                            max(o_x - draw_size_of_object, 0) : min(o_x + draw_size_of_object, out.shape[0] - 1),
-                            max(o_y - draw_size_of_object, 0) : min(o_y + draw_size_of_object, out.shape[1] - 1),
+                            max(o_x - draw_size_of_object, 0) : min(o_x + draw_size_of_object, out.shape[0] - 1), 
+                            max(o_y - draw_size_of_object, 0) : min(o_y + draw_size_of_object, out.shape[1] - 1), 
                         ] = np.array([0, 0, 255]).astype(np.uint8)
                 poly_image = new_out
                 global store_vertex_list
@@ -232,27 +254,27 @@ with gr.Blocks() as demo:
                 out[
                 max(vertex[0] - size, 0): min(
                     vertex[0] + size, out.shape[0] - 1
-                ),
+                ), 
                 max(vertex[1] - size, 0): min(
                     vertex[1] + size, out.shape[1] - 1
-                ),
+                ), 
                 ] = np.array([255, 0, 0]).astype(np.uint8)
             out = out.astype(np.uint8)
-            #print('before return',poly_done,vertex_list)
+            #print('before return', poly_done, vertex_list)
             return out
 
 
         else:
             return poly_image
 
-    def get_position_in_pcd_render_image(point,min_x,min_y, ratio=20):
+    def get_position_in_pcd_render_image(point, min_x, min_y, ratio=20):
 
         x, y = point
         pixel_x = int((x - min_x) * ratio)
         pixel_y = int((y - min_y) * ratio)
         return pixel_y, pixel_x
 
-    def get_position_in_mesh_render_image(point,center_x,center_y,num_pixels_per_meter,photo_pixel):
+    def get_position_in_mesh_render_image(point, center_x, center_y, num_pixels_per_meter, photo_pixel):
 
         dx = point[0] - center_x
         dy = point[1] - center_y
@@ -260,14 +282,17 @@ with gr.Blocks() as demo:
         ox = (int(num_pixels_per_meter * dx) + photo_pixel[1] // 2)
         oy = photo_pixel[0] // 2 - (int(num_pixels_per_meter * dy))
 
-        return oy,ox
+        return oy, ox
 
-    def new_draw_dot(scene_id,img, evt: gr.SelectData):
+    def new_draw_dot(scene_id, img, evt: gr.SelectData):
+        # import pdb; pdb.set_trace()
         out = img.copy()
         min_distance = np.inf
         min_object_id = 0
         m_x = evt.index[1]
         m_y = evt.index[0]
+        if m_x is None or m_y is None:
+            return out, None
         w, h, c = img.shape
         size = ceil(max([w, h]) * 0.01)
         for object_id in scene_info[scene_id]['useful_object'].keys():
@@ -280,14 +305,14 @@ with gr.Blocks() as demo:
 
             o_x = scene_info[scene_id]['bboxes'][kkk][0]
             o_y = scene_info[scene_id]['bboxes'][kkk][1]
-            if scene_id[:6] != '3rscsan':
-                o_x, o_y = get_position_in_mesh_render_image((o_x, o_y), scene_info[scene_id]['center_x'],
-                                                             scene_info[scene_id]['center_y'],
-                                                             scene_info[scene_id]['num_pixels_per_meter'],
+            if scene_id[:6] != 'xxxxxx':
+                o_x, o_y = get_position_in_mesh_render_image((o_x, o_y), scene_info[scene_id]['center_x'], 
+                                                             scene_info[scene_id]['center_y'], 
+                                                             scene_info[scene_id]['num_pixels_per_meter'], 
                                                              img.shape[:2])
             else:
-                o_x, o_y = get_position_in_pcd_render_image((o_x, o_y), scene_info[scene_id]['min_x'],
-                                                            scene_info[scene_id]['min_y'],
+                o_x, o_y = get_position_in_pcd_render_image((o_x, o_y), scene_info[scene_id]['min_x'], 
+                                                            scene_info[scene_id]['min_y'], 
                                                             scene_info[scene_id]['resolution'])
             if (o_x - m_x) ** 2 + (o_y - m_y) ** 2 < min_distance:
                 min_distance = (o_x - m_x) ** 2 + (o_y - m_y) ** 2
@@ -295,29 +320,45 @@ with gr.Blocks() as demo:
                 p = (o_x, o_y)
 
         out[
-            max(p[0] - size, 0) : min(p[0] + size, out.shape[0] - 1),
-            max(p[1] - size, 0) : min(p[1] + size, out.shape[1] - 1),
+            max(p[0] - size, 0) : min(p[0] + size, out.shape[0] - 1), 
+            max(p[1] - size, 0) : min(p[1] + size, out.shape[1] - 1), 
         ] = np.array([0, 0, 255]).astype(np.uint8)
         detail_img = gr.update(value=scene_info[scene_id]['useful_object'][min_object_id])
+        global to_fix_bug
+        if scene_id[:6]=='3rscan':
+            to_fix_bug = True
+
+
         return out, detail_img
 
-    def annotate(label, output_img,show_json):
+    def fix_bug(detail_img):
+        global to_fix_bug
+        if to_fix_bug:
+            to_fix_bug = False
+            return detail_img.transpose(1, 0, 2)
+        else:
+            return detail_img
+
+    def annotate(scene_id, label, output_img):
         global poly_done
         global vertex_list
         global click_evt_list
         global annotation_list
-        new_item_dict = copy.deepcopy(item_dict_list[-1])
-        new_item_dict['poly_done'] = poly_done
-        new_item_dict['out_image'] = output_img
-        new_item_dict['show_json'] = show_json
-        new_item_dict['annotation_list'] = annotation_list
         global store_vertex_list
 
+        if scene_id == None or scene_id == 'None':
+            return None, None, None
 
-        new_item_dict['vertex_list'] = vertex_list
-        item_dict_list.append(new_item_dict)
 
         if poly_done and label != None:
+            new_item_dict = copy.deepcopy(item_dict_list[-1])
+            new_item_dict['poly_done'] = poly_done
+            new_item_dict['out_image'] = output_img
+            new_item_dict['annotation_list'] = copy.deepcopy(annotation_list)
+
+
+            new_item_dict['vertex_list'] = copy.deepcopy(vertex_list)
+            item_dict_list.append(new_item_dict)
 
 
             annotation = {}
@@ -325,11 +366,12 @@ with gr.Blocks() as demo:
             annotation["label"] = lang_translation(label)
 
 
-            annotation["vertex"] = store_vertex_list
+            annotation["vertex"] = copy.deepcopy(store_vertex_list)
             annotation_list.append(annotation)
             vertex_list = []
 
             poly_done = False
+
 
             return None, None, annotation_list
         else:
@@ -338,46 +380,51 @@ with gr.Blocks() as demo:
 
             return label, output_img, annotation_list
 
-    def clear(output_img, show_json):
+    def clear(scene_id, output_img):
         global annotation_list
         global poly_done
         global click_evt_list
         global vertex_list
+        if scene_id == None or scene_id == 'None':
+            return None, None
 
         new_item_dict = copy.deepcopy(item_dict_list[-1])
         new_item_dict['poly_done'] = poly_done
         new_item_dict['out_image'] = output_img
-        new_item_dict['show_json'] = show_json
-        new_item_dict['annotation_list'] = annotation_list
 
-        new_item_dict['vertex_list'] = vertex_list
+        new_item_dict['annotation_list'] = copy.deepcopy(annotation_list)
+
+        new_item_dict['vertex_list'] = copy.deepcopy(vertex_list)
         item_dict_list.append(new_item_dict)
         annotation_list = []
         vertex_list = []
 
         poly_done = False
-        return None, None
+        return None, annotation_list
 
-    def undo(output_img, show_json):
+    def undo(output_img):
         #print('undo!!!!')
+        global annotation_list
+        #print(len(item_dict_list), item_dict_list[-1]['annotation_list'], item_dict_list[-1]['show_json'])
         if len(item_dict_list)==1:
-            return output_img, show_json
+            return output_img, annotation_list
         else:
-            global annotation_list
+
             global poly_done
             global vertex_list
             global click_evt_list
             output_img = item_dict_list[-1]['out_image']
-            show_json = item_dict_list[-1]['show_json']
-            annotation_list = item_dict_list[-1]['annotation_list']
+            annotation_list = copy.deepcopy(item_dict_list[-1]['annotation_list'])
             poly_done = item_dict_list[-1]['poly_done']
             vertex_list = item_dict_list[-1]['vertex_list']
             del item_dict_list[-1]
-            #print('get:',poly_done,vertex_list)
 
-            return output_img,show_json
+
+            return output_img, annotation_list
 
     def save_to_file(scene_id):
+        if scene_id == None or scene_id=='None':
+            return None, None, None, None, None, None
         global annotation_list
 
         os.makedirs(scene_info[scene_id]['output_dir'], exist_ok=True)
@@ -396,70 +443,79 @@ with gr.Blocks() as demo:
 
 
 
-        return None,None, None, None, None, None
+        return None, None, None, None, None, None
 
     annotate_btn = gr.Button("Annotate")
     clear_btn = gr.Button("Clear")
     undo_btn = gr.Button("Undo")
     save_btn = gr.Button("Save to file")
 
-
-
     with gr.Row():
-        object_postion_img = gr.Image(label="Object Position")
+        object_postion_img = gr.Image(label="Object Position", interactive=True)
         detail_show_img = gr.Image(label="Posed Image")
-
 
 
     show_json = gr.JSON(label="Annotate History")
     scene.change(
-        get_file, inputs=[scene], outputs=[input_img, object_postion_img,output_img,
-            show_json,detail_show_img]
+        get_file, inputs=[scene], outputs=[input_img, object_postion_img, output_img, 
+                                           show_json, detail_show_img, scene_anno_info]
     )
 
-    input_img.select(draw_dot, [scene,input_img,output_img,total_vertex_num], output_img)
+    input_img.select(draw_dot, [scene, input_img, output_img, total_vertex_num], output_img)
     object_postion_img.select(
-        new_draw_dot, [scene,input_img], [object_postion_img, detail_show_img]
+        new_draw_dot, [scene, input_img], [object_postion_img, detail_show_img]
     )
-    clear_btn.click(fn=clear, inputs=[output_img, show_json], outputs=[output_img, show_json])
-    undo_btn.click(fn=undo, inputs=[output_img, show_json], outputs=[output_img, show_json])
+    detail_show_img.change(
+        fix_bug, [detail_show_img], [detail_show_img]
+    )
+    clear_btn.click(fn=clear, inputs=[scene, output_img], outputs=[output_img, show_json])
+    undo_btn.click(fn=undo, inputs=[output_img], outputs=[output_img, show_json])
     annotate_btn.click(
-        fn=annotate, inputs=[label,output_img,show_json], outputs=[label, output_img, show_json]
+        fn=annotate, inputs=[scene, label, output_img], outputs=[label, output_img, show_json]
     )
     save_btn.click(
-        fn=save_to_file,
-        inputs=[scene],
+        fn=save_to_file, 
+        inputs=[scene], 
         outputs=[
-            scene,
+            scene, 
+            output_img, 
+            show_json, 
+            object_postion_img, 
+            detail_show_img, 
+            scene_anno_info
 
-
-            output_img,
-            show_json,
-            object_postion_img,
-            detail_show_img,
-
-        ],
+        ], 
     )
-
 demo.queue()
+
 if __name__ == "__main__":
 
     import os
 
-
-
+    # 存储所有render images的文件夹目录
+    render_image_path = 'data'
+    # 不用显示的类型（但会记录）
     exclude_type = ["wall"]
+    # 存储渲染参数的文件（坐标变换要用到）
+    all_scene_info = np.load('all_render_param.npy', allow_pickle=True).item()
+    # 输出文件夹
+    output_dir = 'region_anno_result'
+    # 辅助查看图文件夹
+    painted_dir = './data'
+
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+
 
     scene_info = {}
-
-    for scene_id in scene_list:
-        if os.path.exists(f"./{scene_id}/example.npy"):
-
-            anno = np.load(f"./{scene_id}/example.npy", allow_pickle=True).item()
+    from tqdm import tqdm
+    for scene_id in tqdm(scene_list):
+        if scene_id in anno_train:
+            anno = anno_train[scene_id]
+        elif scene_id in anno_val:
+            anno = anno_val[scene_id]
         else:
-
-            anno = read_annotation_pickle('example_data/embodiedscan_infos_train_full.pkl')[f'{scene_id}']
-            np.save(f"./{scene_id}/example.npy", anno)
+            print('not exist')
 
         scene_info[scene_id] = {}
 
@@ -467,27 +523,20 @@ if __name__ == "__main__":
         scene_info[scene_id]["object_ids"] = anno["object_ids"]
         scene_info[scene_id]["object_types"] = anno["object_types"]
         scene_info[scene_id]["visible_view_object_dict"] = anno["visible_view_object_dict"]
-        scene_info[scene_id]["output_dir"] = f"{scene_id}/anno_lang/region_anno"
-        painted_img_dir = f"{scene_id}/anno_lang/painted_images"  # where is the color data
+
+
+        ##todo 这里文件地址要对齐!!
+
+
+
+        scene_info[scene_id]["output_dir"] = f"{output_dir}/{scene_id}"
+        painted_img_dir = f"{painted_dir}/{scene_id}/painted_objects"
         scene_info[scene_id]["useful_object"] = {}
         for img_file in os.listdir(painted_img_dir):
             scene_info[scene_id]["useful_object"][int(img_file[:3])] = painted_img_dir + "/" + img_file
-        if scene_id[:6] == '3rscan':
-            mesh = o3d.io.read_triangle_mesh(f'./{scene_id}/lidar/mesh.refined.v2.obj')
-            matrix = np.asarray(anno['axis_align_matrix'])
-            mesh = process_mesh(mesh,matrix)
-        elif scene_id[:5] == '1mp3d':
-            ply_name = scene_id.split('_')[2]+'.ply'
-            mesh = o3d.io.read_triangle_mesh(f'./{scene_id}/lidar/{ply_name}')
-            matrix = np.asarray(anno['axis_align_matrix'])
-            mesh = process_mesh(mesh, matrix)
-        elif scene_id[:5] == 'scene':
-            ply_name = scene_id+'_vh_clean.ply'
-            mesh = o3d.io.read_triangle_mesh(f'./{scene_id}/lidar/{ply_name}')
-            matrix = np.asarray(anno['axis_align_matrix'])
-            mesh = process_mesh(mesh, matrix)
-        scene_info[scene_id]["center_x"],scene_info[scene_id]["center_y"],scene_info[scene_id]["num_pixels_per_meter"] \
-            = take_bev_screenshot(mesh, f"./{scene_id}/anno_lang/render.png",get_data=True)
+
+        scene_info[scene_id]["center_x"], scene_info[scene_id]["center_y"], scene_info[scene_id]["num_pixels_per_meter"] \
+            = all_scene_info[scene_id]["center_x"], all_scene_info[scene_id]["center_y"], all_scene_info[scene_id]["num_pixels_per_meter"], 
 
 
     demo.launch(show_error=True)
