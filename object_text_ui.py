@@ -25,7 +25,7 @@ def get_valid_directories():
     """
     valid_directories = []
     for dir_path, dir_names, file_names in os.walk("."):
-        if "corpora_object" in dir_names and "painted_images" in dir_names:
+        if "corpora_object" in dir_names and ("painted_images" in dir_names or "painted_objects" in dir_names):
             valid_directories.append(dir_path)
     return valid_directories
 
@@ -72,7 +72,9 @@ with gr.Blocks() as demo:
                 annotation = load_json(os.path.join(directory, "corpora_object", json_file))
                 is_valid, error_message = check_annotation_validity(annotation)
                 if is_valid:
-                    valid_objects.append(json_file.split(".")[0])
+                    object_name = json_file.split(".")[0]
+                    object_name = "_".join(object_name.split("_")[:3]) # object name can be like: 001_table_05100 or 001_table_05100_cogvlm. We only need the first 3 parts.
+                    valid_objects.append(object_name)
         return gr.Dropdown(label="Select an object", choices=valid_objects, allow_custom_value=True)
     directory.change(fn=update_object_name_choices, inputs=directory, outputs=[object_name])
 
@@ -81,10 +83,15 @@ with gr.Blocks() as demo:
         Returns the description and image path of the given object.
         """
         json_file = os.path.join(directory, "corpora_object", f"{object_name}.json")
+        if not os.path.exists(json_file):
+            json_file = os.path.join(directory, "corpora_object", f"{object_name}_cogvlm.json")
         annotation = load_json(json_file)
         warning_text = gr.Textbox(label="Warning", value="", visible=False, interactive=False)
         assert isinstance(annotation, dict), f"Invalid annotation type: {type(annotation)}"
-        original_description = annotation["simplified_description"]
+        if "simplified_description" in annotation:
+            original_description = annotation["simplified_description"]
+        else:
+            original_description = annotation["original_description"]
         if "modified_description" in annotation:
             translated_description = annotation["modified_description"]
             warning_text = gr.Textbox(label="Warning", value="该物体的描述此前已经被修改过。", visible=True, interactive=False)
