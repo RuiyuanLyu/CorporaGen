@@ -69,7 +69,10 @@ def process_data(region_with_label, scene_id, object_ids, bboxes, center_x, cent
             if is_in_poly((x, y), poly):
                 region['object_ids'].append(object_ids[_index])
                 print(object_data['object_types'][_index])
-    cv2.imwrite('out1.png', img)
+    
+    show_objects_in_bev = True
+    if show_objects_in_bev:
+        cv2.imwrite('testing.png', img)
     return region_with_label
 
 

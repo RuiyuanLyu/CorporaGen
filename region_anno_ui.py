@@ -57,39 +57,30 @@ init_item_dict['annotation_list'] = []
 
 item_dict_list.append(init_item_dict)
 
-anno = read_annotation_pickles(['embodiedscan_infos_train_full.pkl', 'embodiedscan_infos_val_full.pkl'])
+anno_full = read_annotation_pickles(['embodiedscan_infos_train_full.pkl', 'embodiedscan_infos_val_full.pkl'])
 
 scene_list = []
 
 global to_fix_bug
 to_fix_bug = False
 
-for scene_id in anno.keys():
+for scene_id in anno_full.keys():
     scene_list.append(scene_id)
 scene_list.sort()
 
-
+REGIONS = {"起居室/客厅区": "living region",
+            "书房/工作学习区": "study region",
+            "卧室/休息区": "sleeping region",
+            "饭厅/进食区": "dinning region",
+            "厨房/烹饪区": "cooking region",
+            "浴室/洗澡区": "bathing region",
+            "储藏区": "storage region",
+            "厕所": "restroom region",
+            "走廊/楼梯": "corridor region",
+            "其它": "other region"}
 
 def lang_translation(region_name):
-    if region_name=="起居室":
-        return "living region"
-    if region_name=="书房":
-        return "study region"
-    if region_name=="卧室":
-        return "sleeping region"
-    if region_name=="饭厅":
-        return "dinning region"
-    if region_name=="厨房":
-        return "cooking region"
-    if region_name=="浴室":
-        return "bathing region"
-    if region_name=="储藏室":
-        return "storage region"
-    if region_name=="厕所":
-        return "restroom region"
-    if region_name=="其它":
-        return "others"
-    return None
+    return REGIONS.get(region_name, None)
 
 with gr.Blocks() as demo:
 
@@ -137,12 +128,9 @@ with gr.Blocks() as demo:
 
         output_img = gr.Image(label="Selected Polygon")
 
-    label = gr.Radio(
-        [
-            "起居室", "书房", "卧室", "饭厅", "厨房", "浴室", "储藏室", "厕所", "其它"
-        ], 
+    label = gr.Radio(REGIONS.keys(),
         label="label", 
-        info="definition of this region", 
+        info="在此选择该区域发挥的功能", 
     )
 
     def is_in_poly(p, poly):
@@ -219,17 +207,11 @@ with gr.Blocks() as demo:
                     k = list(scene_info[scene_id]['object_ids']).index(object_id)
                     o_x = scene_info[scene_id]['bboxes'][k][0]
                     o_y = scene_info[scene_id]['bboxes'][k][1]
-                    draw_size_of_object = 1
-                    if scene_id[:6]!='xxxxxx':
-                        draw_size_of_object = 5
-                        o_x, o_y = get_position_in_mesh_render_image((o_x, o_y), scene_info[scene_id]['center_x'], 
-                                                                scene_info[scene_id]['center_y'], 
-                                                                scene_info[scene_id]['num_pixels_per_meter'], 
-                                                                img.shape[:2])
-                    else:
-                        o_x, o_y = get_position_in_pcd_render_image((o_x, o_y), scene_info[scene_id]['min_x'], 
-                                                                scene_info[scene_id]['min_y'], 
-                                                                scene_info[scene_id]['resolution'])
+                    draw_size_of_object = 5
+                    o_x, o_y = get_position_in_mesh_render_image((o_x, o_y), scene_info[scene_id]['center_x'], 
+                                                            scene_info[scene_id]['center_y'], 
+                                                            scene_info[scene_id]['num_pixels_per_meter'], 
+                                                            img.shape[:2])
                     # global vertex_list
                     if scene_info[scene_id]['object_types'][k] not in exclude_type and is_in_poly(
                         (o_x, o_y), vertex_list
@@ -299,23 +281,33 @@ with gr.Blocks() as demo:
                     kkk = index_
 
                     break
-
             o_x = scene_info[scene_id]['bboxes'][kkk][0]
             o_y = scene_info[scene_id]['bboxes'][kkk][1]
-            if scene_id[:6] != 'xxxxxx':
-                o_x, o_y = get_position_in_mesh_render_image((o_x, o_y), scene_info[scene_id]['center_x'], 
-                                                             scene_info[scene_id]['center_y'], 
-                                                             scene_info[scene_id]['num_pixels_per_meter'], 
-                                                             img.shape[:2])
-            else:
-                o_x, o_y = get_position_in_pcd_render_image((o_x, o_y), scene_info[scene_id]['min_x'], 
-                                                            scene_info[scene_id]['min_y'], 
-                                                            scene_info[scene_id]['resolution'])
+            o_x, o_y = get_position_in_mesh_render_image((o_x, o_y), scene_info[scene_id]['center_x'], 
+                                                            scene_info[scene_id]['center_y'], 
+                                                            scene_info[scene_id]['num_pixels_per_meter'], 
+                                                            img.shape[:2])
             if (o_x - m_x) ** 2 + (o_y - m_y) ** 2 < min_distance:
                 min_distance = (o_x - m_x) ** 2 + (o_y - m_y) ** 2
                 min_object_id = object_id
                 p = (o_x, o_y)
 
+        view_id = scene_info[scene_id]['useful_object_view_id'][min_object_id]
+        view_id_idx = list(scene_info[scene_id]['view_ids']).index(view_id)
+        extrinsics_c2w = scene_info[scene_id]['camera_extrinsics_c2w'][view_id_idx] 
+        front = extrinsics_c2w[:3, 2]
+        pos = extrinsics_c2w[:3, 3]
+        s_x, s_y = pos[0], pos[1]
+        e_x, e_y = pos[0] + front[0], pos[1] + front[1]
+        s_x, s_y = get_position_in_mesh_render_image((s_x, s_y), scene_info[scene_id]['center_x'], 
+                                                            scene_info[scene_id]['center_y'], 
+                                                            scene_info[scene_id]['num_pixels_per_meter'], 
+                                                            img.shape[:2])
+        e_x, e_y = get_position_in_mesh_render_image((e_x, e_y), scene_info[scene_id]['center_x'], 
+                                                            scene_info[scene_id]['center_y'], 
+                                                            scene_info[scene_id]['num_pixels_per_meter'], 
+                                                            img.shape[:2])
+        out = cv2.arrowedLine(out, (s_y, s_x), (e_y, e_x), (255, 0, 0), 2)
         out[
             max(p[0] - size, 0) : min(p[0] + size, out.shape[0] - 1), 
             max(p[1] - size, 0) : min(p[1] + size, out.shape[1] - 1), 
@@ -332,9 +324,8 @@ with gr.Blocks() as demo:
         global to_fix_bug
         if to_fix_bug:
             to_fix_bug = False
-            return detail_img.transpose(1, 0, 2)
-        else:
-            return detail_img
+            detail_img = cv2.rotate(detail_img, cv2.ROTATE_90_CLOCKWISE)
+        return detail_img
 
     def annotate(scene_id, label, output_img):
         global poly_done
@@ -507,11 +498,8 @@ if __name__ == "__main__":
     scene_info = {}
     from tqdm import tqdm
     for scene_id in tqdm(scene_list):
-        if scene_id in anno_train:
-            anno = anno_train[scene_id]
-        elif scene_id in anno_val:
-            anno = anno_val[scene_id]
-        else:
+        anno = anno_full.get(scene_id, None)
+        if anno is None:
             print('not exist')
 
         scene_info[scene_id] = {}
@@ -523,9 +511,13 @@ if __name__ == "__main__":
         scene_info[scene_id]["output_dir"] = f"{output_dir}/{scene_id}"
         painted_img_dir = f"{painted_dir}/{scene_id}/painted_objects"
         scene_info[scene_id]["useful_object"] = {}
+        scene_info[scene_id]["useful_object_view_id"] = {}
         for img_file in os.listdir(painted_img_dir):
-            scene_info[scene_id]["useful_object"][int(img_file[:3])] = painted_img_dir + "/" + img_file
-
+            if img_file.endswith(".png") or img_file.endswith(".jpg"):
+                scene_info[scene_id]["useful_object"][int(img_file[:3])] = painted_img_dir + "/" + img_file
+                scene_info[scene_id]["useful_object_view_id"][int(img_file[:3])] = "_".join(img_file.split(".")[0].split("_")[2:])
+        scene_info[scene_id]["view_ids"] = [path.split("/")[-1].split(".")[0] for path in anno["image_paths"]]
+        scene_info[scene_id]["camera_extrinsics_c2w"] = [(anno["axis_align_matrix"] @ extrinsic) for extrinsic in anno["extrinsics_c2w"]]
         scene_info[scene_id]["center_x"], scene_info[scene_id]["center_y"], scene_info[scene_id]["num_pixels_per_meter"] \
             = all_scene_info[scene_id]["center_x"], all_scene_info[scene_id]["center_y"], all_scene_info[scene_id]["num_pixels_per_meter"], 
 
