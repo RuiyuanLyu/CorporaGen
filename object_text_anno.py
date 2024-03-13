@@ -5,7 +5,7 @@ from openai_api import mimic_chat, mimic_chat_budget, get_content_groups_from_so
 from utils_read import load_json
 
 
-def annotate_objects(image_dir, output_dir, skip_existing=True, force_invalid=True, max_additional_attempts=0):
+def annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=True, max_additional_attempts=0):
     """
         Uses GPT-4 to annotate objects in a directory of images.
         Args:
@@ -17,35 +17,35 @@ def annotate_objects(image_dir, output_dir, skip_existing=True, force_invalid=Tr
         Returns:
             A dictionary of object annotations, where the keys are object ids and the values are lists of object descriptions.
     """
-    annotations = {}
     file_names = []
-    object_ids = []
     for file_name in os.listdir(image_dir):
         if not file_name.endswith(".jpg"):
             continue
         object_id, object_type, image_id = file_name.split("_") # example file name: 068_chair_00232.jpg
         # the line is used to prevent unwanted files from being annotated
         file_names.append(file_name)
-    pbar = tqdm(range(len(file_names)))
-    for i in pbar:
-        file_name = file_names[i]
-        object_id, object_type, image_id = file_name.split(".")[0].split("_")
-        image_path = os.path.join(image_dir, file_name)
-        json_path = os.path.join(output_dir, f"{object_id}_{object_type}_{image_id}.json")
-        pbar.set_description(f"Annotating object {object_id}")
-        if skip_existing and os.path.exists(json_path):
-            annotation = load_json(json_path)
-            is_valid, error_message = check_annotation_validity(annotation)
-            if is_valid or not force_invalid:
-                annotations[object_id] = annotation
-                print(f"Skipping existing annotation for object {object_id}")
-                continue
-        annotation = annotate_object_by_image(image_path, max_additional_attempts)
-        annotations[object_id] = annotation
-        with open(json_path, "w") as f:
-            json.dump(annotation, f, indent=4)
-    return annotations
+    inputs = [(file_name, image_dir, output_dir, skip_existing, force_invalid, max_additional_attempts) for file_name in file_names]
+    import mmengine
+    results = mmengine.track_parallel_progress(annotate_object_parallel, inputs, nproc=8)
+    return results
 
+def annotate_object_parallel(inputs):
+    return annotate_object(*inputs)
+
+def annotate_object(file_name, image_dir, output_dir, skip_existing, force_invalid, max_additional_attempts):
+    object_id, object_type, image_id = file_name.split(".")[0].split("_")
+    image_path = os.path.join(image_dir, file_name)
+    json_path = os.path.join(output_dir, f"{object_id}_{object_type}_{image_id}.json")
+    if skip_existing and os.path.exists(json_path):
+        annotation = load_json(json_path)
+        is_valid, error_message = check_annotation_validity(annotation)
+        if is_valid or not force_invalid:
+            print(f"Skipping existing annotation for object {object_id}")
+            return annotation
+    annotation = annotate_object_by_image(image_path, max_additional_attempts)
+    with open(json_path, "w") as f:
+        json.dump(annotation, f, indent=4)
+    return annotation
 
 def annotate_object_by_image(image_path, max_additional_attempts=0):
     """
@@ -64,8 +64,8 @@ def annotate_object_by_image(image_path, max_additional_attempts=0):
     image_name = image_path.split("/")[-1]
     object_id, object_type, image_id = image_name.split(".")[0].split("_")
     
-    system_prompt = "You are an expert interior designer, who is very sensitive at room furnitures and their placements. You are visiting some ordinary rooms that conform to the daily life of an average person. You neither overly boast about the items in the room nor harshly criticize them. Instead, you use your professional expertise to truthfully point out their various aspects. The expected reader is a high-school student with average knowledge of furniture design."
-    user_message1 = "Please describe the {} in the highlighted box, mainly including the following aspects: appearance (shape, color), material, size (e.g., larger or smaller compared to similar items), condition (e.g., whether a door is open or closed), placement (e.g.,vertical/leaning/slanting/stacked), functionality (compared to similar items), and design features (e.g., whether a chair has armrests/backrest). Please aim for a roughly 300-word description".format(object_type) 
+    system_prompt = "You are an expert interior designer, who is very sensitive at room furnitures and their placements. You are visiting some ordinary rooms that conform to the daily life of an average person. The expected reader is a high-school student with average knowledge of furniture design."
+    user_message1 = "Please describe the {} in the highlighted box, mainly including the following aspects: appearance (shape, color), material, size (e.g., larger or smaller compared to similar items), condition (e.g., whether a door is open or closed), placement (e.g.,vertical/leaning/slanting/stacked), functionality (compared to similar items), and design features (e.g., whether a chair has armrests/backrest). Please aim for a roughly 300-word description".format(object_type).replace("highlighted box", "image")
     user_message2 = "Please omit the plain and ordinary parts of the description, only retaining the unique characteristics of the objects; rewrite and recombine the retained descriptions to make the language flow naturally, without being too rigid. Make the descriptions about 150 words."
     source_groups = [
         [user_message1, image_path],
@@ -135,10 +135,10 @@ def check_annotation_validity(annotation):
     long_description = annotation["original_description"].lower()
     short_description = annotation.get("simplified_description", "").lower()
     accuracy_dict = annotation.get("accuracy_dict", None)
-    if accuracy_dict:
-        meta = map_text_to_bool(accuracy_dict.get("meta", "False"))
-        if not meta:
-            return False, "The model is not describing the object we want."
+    # if accuracy_dict:
+    #     meta = map_text_to_bool(accuracy_dict.get("meta", "False"))
+    #     if not meta:
+    #         return False, "The model is not describing the object we want."
     if "sorry" in long_description or "misunderst" in long_description:
         return False, "The model may not describe objects accurately or the object we want."
     if len(short_description) > len(long_description):
@@ -204,7 +204,7 @@ def check_annotation_quality(annotations, display_stats=True):
             A dict containing the keys:
                 "meta", "category", "appearance", "material", "size", "state", "position", "placement", "special_function", "other_features"
     """
-    quality_dict = {"meta":0, "category":0, "appearance":0, "material":0, "size":0, "state":0, "position":0, "placement":0, "special_function":0, "other_features":0}
+    quality_dict = {"meta":0, "visual_info_sufficient":0, "category":0, "appearance":0, "material":0, "size":0, "state":0, "position":0, "placement":0, "special_function":0, "other_features":0}
     for annotation in annotations:
         assert isinstance(annotation, dict)
         if "accuracy_dict" not in annotation:
@@ -212,53 +212,70 @@ def check_annotation_quality(annotations, display_stats=True):
         accuracy_dict = annotation["accuracy_dict"]
         for key in quality_dict:
             if key in accuracy_dict:
-                quality_dict[key] += map_text_to_bool(accuracy_dict[key])
+                quality_dict[key] += map_text_to_bool(accuracy_dict[key]) and accuracy_dict.get("visual_info_sufficient", 1)
+            elif key == "visual_info_sufficient":
+                quality_dict[key] += 1
     for key in quality_dict:
         quality_dict[key] /= len(annotations)
     for key in quality_dict:
         if key == "meta":
+            continue
+        if key == "visual_info_sufficient":
             continue
         quality_dict[key] /= quality_dict["meta"]
 
     if display_stats:
         sum = 0
         for key in quality_dict:
-            if key == "meta":
-                continue
             print("{}: {:.2f}%".format(key, quality_dict[key]*100))
+            if key in ["meta", "visual_info_sufficient"]:
+                continue
             sum += quality_dict[key] 
         print("Overall quality meta: {:.2f}%".format(quality_dict["meta"]*100))
-        print("Overall quality other: {:.2f}%".format(sum/(len(quality_dict)-1)*100))
-        print("Overall quality meta*other: {:.2f}%".format((quality_dict["meta"] * sum/(len(quality_dict)-1)) * 100))
+        print("Overall quality other: {:.2f}%".format(sum/(len(quality_dict)-2)*100))
+        print("Overall quality meta*other: {:.2f}%".format((quality_dict["meta"] * sum/(len(quality_dict)-2)) * 100))
     return quality_dict
 
+def translate_annotation_from_file(json_path, src_lang="English", tgt_lang="Chinese"):
+    """
+        Translates the "original_description" field of an annotation from a file.
+        Returns:
+            A dictionary of the translated annotation.
+    """
+    if not json_path.endswith(".json"):
+        return
+    annotation = load_json(json_path)
+    is_valid, error_message = check_annotation_validity(annotation)
+    if not is_valid:
+        return
+    if "translated_description" in annotation:
+        return annotation
+    translated_description = translate(annotation["original_description"], src_lang=src_lang, tgt_lang=tgt_lang)
+    annotation["translated_description"] = translated_description
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(annotation, f, indent=4)
+    return annotation
+
+def translate_annotation_from_file_parallel(inputs):
+    return translate_annotation_from_file(*inputs)
+
 if __name__ == "__main__":
-    image_dir = "./example_data/anno_lang/painted_images"
-    output_dir = "./example_data/anno_lang/corpora_object"
-    # annotations = annotate_objects(image_dir, output_dir, skip_existing=True, force_invalid=True, max_additional_attempts=3)
+    image_dir = "data//scene0000_00//cropped_objects"
+    output_dir = "data//scene0000_00//corpora_object"
+    os.makedirs(output_dir, exist_ok=True)
+    annotations = annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=True, max_additional_attempts=1)
     check_annotation_validity_path(output_dir)
-    # for file_name in tqdm(os.listdir(output_dir)):
+    json_paths = [os.path.join(output_dir, file_name) for file_name in os.listdir(output_dir) if file_name.endswith(".json")]
+    inputs = [(json_path, "English", "Chinese") for json_path in json_paths]
+    import mmengine
+    results = mmengine.track_parallel_progress(translate_annotation_from_file_parallel, inputs, nproc=8)
+
+
+    # annotations = []
+    # for file_name in os.listdir(output_dir):
     #     if not file_name.endswith(".json"):
     #         continue
     #     annotation = load_json(os.path.join(output_dir, file_name))
-    #     is_valid, error_message = check_annotation_validity(annotation)
-    #     if not is_valid:
-    #         continue
-    #     if "translated_description" in annotation:
-    #         continue
-    #     # print("Short description: ", annotation["simplified_description"])
-    #     # print("Original description: ", annotation["original_description"])
-    #     translated_description = translate_to_chinese(annotation["simplified_description"])
-    #     # print(f"Translated description: {translated_description}")
-    #     annotation["translated_description"] = translated_description
-    #     with open(os.path.join(output_dir, file_name), "w") as f:
-    #         json.dump(annotation, f, indent=4)
-
-    annotations = []
-    for file_name in os.listdir(output_dir):
-        if not file_name.endswith(".json"):
-            continue
-        annotation = load_json(os.path.join(output_dir, file_name))
-        annotations.append(annotation)
-    quality_dict = check_annotation_quality(annotations)
+    #     annotations.append(annotation)
+    # quality_dict = check_annotation_quality(annotations)
     # print(quality_dict)
