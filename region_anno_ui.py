@@ -31,20 +31,17 @@ import copy
 global init_item_dict
 init_item_dict = {}
 
-init_item_dict['out_image'] = None
-init_item_dict['poly_done'] = False
+init_item_dict["out_image"] = None
+init_item_dict["poly_done"] = False
 
-init_item_dict['vertex_list'] = []
-init_item_dict['annotation_list'] = []
+init_item_dict["vertex_list"] = []
+init_item_dict["annotation_list"] = []
 
-scene_list = []
-anno_full = read_annotation_pickles(['embodiedscan_infos_train_full.pkl', 'embodiedscan_infos_val_full.pkl'])
+RENDER_IMAGE_PATH = "data"
 
-for scene_id in anno_full.keys():
-    scene_list.append(scene_id)
+
+scene_list = os.listdir(RENDER_IMAGE_PATH)
 scene_list.sort()
-
-scene_list = os.listdir('data')
 
 REGIONS = {"起居室/客厅区": "living region", 
            "书房/工作学习区": "study region", 
@@ -89,12 +86,6 @@ with gr.Blocks() as demo:
     store_vertex_list = gr.State([])
     to_rotate_clockwise_90 = gr.State(False)
     to_show_areas = gr.State(False)
-
-
-
-
-
-
 
     scene = gr.Dropdown(scene_list, label="在此选择待标注的场景")
     scene_anno_info = gr.Textbox('', visible=True, interactive=False)
@@ -164,28 +155,30 @@ with gr.Blocks() as demo:
                      )
 
 
-    def is_in_poly(p, poly):
-        px, py = p
-        is_in = False
-        for i, corner in enumerate(poly):
-            next_i = i + 1 if i + 1 < len(poly) else 0
-            x1, y1 = corner
-            x2, y2 = poly[next_i]
-            if (x1 == px and y1 == py) or (x2 == px and y2 == py):
-                is_in = True
-                break
-            if min(y1, y2) < py <= max(y1, y2):
-                x = x1 + (py - y1) * (x2 - x1) / (y2 - y1)
-                if x == px:
-                    is_in = True
-                    break
-                elif x > px:
-                    is_in = not is_in
-        return is_in
+    def is_in_poly(ps, poly):
+        """
+            ps: a numpy array of shape (N, 2)
+            poly: a polygon represented as a list of (x, y) tuples
+        """
+        if isinstance(ps, tuple):
+            ps = np.array([ps])
+        if len(ps.shape) == 1:
+            ps = np.expand_dims(ps, axis=0)
+        assert ps.shape[1] == 2
+        assert len(ps.shape) == 2
+        path = matplotlib.path.Path(poly)
+        return path.contains_points(ps)
 
+    def get_coverage_mask(h, w, poly):
+        x, y = np.meshgrid(np.arange(w), np.arange(h))
+        x, y = x.flatten(), y.flatten()
+        pixel_points = np.vstack((y, x)).T
+        p = matplotlib.path.Path(poly)
+        mask = p.contains_points(pixel_points).reshape((h, w))
+        return mask
 
     def draw_polygon(img, vertex_list):
-
+        img = img.copy()
         coverage_mask = get_coverage_mask(img.shape[0], img.shape[1], vertex_list)
         img[coverage_mask] = img[coverage_mask] * 0.6 + np.array([255, 0, 0]) * 0.4
         return img
@@ -202,15 +195,15 @@ with gr.Blocks() as demo:
         out = img.copy() * 0.6
 
         if not poly_done:
-            # print(item_dict_list[-1]['vertex_list'], item_dict_list[-1]['poly_done'], vertex_list, poly_done)
+            # print(item_dict_list[-1]["vertex_list"], item_dict_list[-1]["poly_done"], vertex_list, poly_done)
             new_item_dict = copy.deepcopy(item_dict_list[-1])
-            new_item_dict['poly_done'] = poly_done
-            new_item_dict['out_image'] = out_img
-            new_item_dict['annotation_list'] = copy.deepcopy(annotation_list)
+            new_item_dict["poly_done"] = poly_done
+            new_item_dict["out_image"] = out_img
+            new_item_dict["annotation_list"] = copy.deepcopy(annotation_list)
 
-            new_item_dict['vertex_list'] = copy.deepcopy(vertex_list)
+            new_item_dict["vertex_list"] = copy.deepcopy(vertex_list)
             item_dict_list.append(new_item_dict)
-            vertex_list.append([evt.index[1], evt.index[0]])
+            vertex_list.append([evt.index[1], evt.index[0]]) # evt index is in h, w order
 
             if len(vertex_list) == vertex_num:
 
@@ -227,24 +220,20 @@ with gr.Blocks() as demo:
                 new_out = draw_polygon(out.copy(), vertex_list)
                 poly_done = True
                 new_out = new_out.astype(np.uint8)
-                for object_id in scene_info[scene_id]['object_ids']:
-                    k = list(scene_info[scene_id]['object_ids']).index(object_id)
-                    o_x = scene_info[scene_id]['bboxes'][k][0]
-                    o_y = scene_info[scene_id]['bboxes'][k][1]
-                    draw_size_of_object = 5
-                    o_x, o_y = get_position_in_mesh_render_image((o_x, o_y), scene_info[scene_id]['center_x'], 
-                                                                 scene_info[scene_id]['center_y'], 
-                                                                 scene_info[scene_id]['num_pixels_per_meter'], 
-                                                                 img.shape[:2])
-                    # global vertex_list
-                    if scene_info[scene_id]['object_types'][k] not in exclude_type and is_in_poly(
-                            (o_x, o_y), vertex_list
-                    ):
+                ks = np.arange(len(scene_info[scene_id]["object_ids"]))
+                xys_in_world = scene_info[scene_id]["bboxes"][:, :2]
+                draw_size_of_object = 5
+                ys, xs = get_position_in_mesh_render_image(xys_in_world, scene_info[scene_id]["center_x"], 
+                                                         scene_info[scene_id]["center_y"], 
+                                                         scene_info[scene_id]["num_pixels_per_meter"], 
+                                                         img.shape[:2])
+                is_in = is_in_poly(np.array([ys, xs]).T, vertex_list)
+                for k, is_in_k in enumerate(is_in):
+                    if is_in_k and scene_info[scene_id]["object_types"][k] not in exclude_type:
                         new_out[
-                        max(o_x - draw_size_of_object, 0): min(o_x + draw_size_of_object, out.shape[0] - 1), 
-                        max(o_y - draw_size_of_object, 0): min(o_y + draw_size_of_object, out.shape[1] - 1), 
+                        max(ys[k] - draw_size_of_object, 0): min(ys[k] + draw_size_of_object, out.shape[0] - 1), 
+                        max(xs[k] - draw_size_of_object, 0): min(xs[k] + draw_size_of_object, out.shape[1] - 1), 
                         ] = np.array([0, 0, 255]).astype(np.uint8)
-
 
                 store_vertex_list = copy.deepcopy(vertex_list)
                 # print(store_vertex_list)
@@ -272,24 +261,27 @@ with gr.Blocks() as demo:
             return poly_image, click_evt_list, poly_done, poly_image, vertex_list, annotation_list, enable_undo, item_dict_list, store_vertex_list, 
 
 
-
-    def get_position_in_pcd_render_image(point, min_x, min_y, ratio=20):
-
-        x, y = point
-        pixel_x = int((x - min_x) * ratio)
-        pixel_y = int((y - min_y) * ratio)
-        return pixel_y, pixel_x
-
-
-    def get_position_in_mesh_render_image(point, center_x, center_y, num_pixels_per_meter, photo_pixel):
-
-        dx = point[0] - center_x
-        dy = point[1] - center_y
-
-        ox = (int(num_pixels_per_meter * dx) + photo_pixel[1] // 2)
-        oy = photo_pixel[0] // 2 - (int(num_pixels_per_meter * dy))
-
-        return oy, ox
+    def get_position_in_mesh_render_image(points, center_x, center_y, num_pixels_per_meter, photo_pixel):
+        """
+            Args:
+            points: a numpy array of shape (N, 2) IN WORLD COORDINATE
+            phote_pixel: a tuple of (h, w)
+            return: a numpy array of shape (N, 2) IN RENDER IMAGE COORDINATE, in y, x order
+        """
+        if isinstance(points, tuple):
+            points = np.array([points])
+        if len(points.shape) == 1:
+            points = np.expand_dims(points, axis=0)
+        assert points.shape[1] == 2
+        assert len(points.shape) == 2
+        dxs = points[:, 0] - center_x
+        dys = points[:, 1] - center_y
+        xs = (dxs * num_pixels_per_meter + photo_pixel[1] // 2).astype(int)
+        ys = (photo_pixel[0] // 2 - dys * num_pixels_per_meter).astype(int)
+        if len(xs) == 1:
+            xs = xs[0]
+            ys = ys[0]
+        return ys, xs
 
 
     def new_draw_dot(scene_id, img, to_rotate_clockwise_90, evt: gr.SelectData):
@@ -303,45 +295,43 @@ with gr.Blocks() as demo:
             return out, None
         w, h, c = img.shape
         size = ceil(max([w, h]) * 0.01)
-        for object_id in scene_info[scene_id]['useful_object'].keys():
-
-            for index_ in range(len(scene_info[scene_id]['object_ids'])):
-                if scene_info[scene_id]['object_ids'][index_] == object_id:
-                    kkk = index_
-
-                    break
-            o_x = scene_info[scene_id]['bboxes'][kkk][0]
-            o_y = scene_info[scene_id]['bboxes'][kkk][1]
-            o_x, o_y = get_position_in_mesh_render_image((o_x, o_y), scene_info[scene_id]['center_x'], 
-                                                         scene_info[scene_id]['center_y'], 
-                                                         scene_info[scene_id]['num_pixels_per_meter'], 
-                                                         img.shape[:2])
-            if (o_x - m_x) ** 2 + (o_y - m_y) ** 2 < min_distance:
-                min_distance = (o_x - m_x) ** 2 + (o_y - m_y) ** 2
-                min_object_id = object_id
-                p = (o_x, o_y)
+        useful_object_ids = list(scene_info[scene_id]["useful_object"].keys())
+        useful_object_index = []
+        for object_id in useful_object_ids:
+            index = np.where(scene_info[scene_id]["object_ids"] == object_id)[0]
+            useful_object_index.extend(index)
+        useful_object_index = np.array(useful_object_index)
+        xys_in_world = scene_info[scene_id]["bboxes"][useful_object_index, :2]
+        xs, ys = get_position_in_mesh_render_image(xys_in_world, scene_info[scene_id]["center_x"], 
+                                                 scene_info[scene_id]["center_y"], 
+                                                 scene_info[scene_id]["num_pixels_per_meter"], 
+                                                 img.shape[:2])
+        distances = (xs - m_x) ** 2 + (ys - m_y) ** 2
+        min_distance_index = np.argmin(distances)
+        min_object_id = useful_object_ids[min_distance_index]
+        p = (xs[min_distance_index], ys[min_distance_index])
 
         view_id = scene_info[scene_id]['useful_object_view_id'][min_object_id]
         view_id_idx = list(scene_info[scene_id]['view_ids']).index(view_id)
         extrinsics_c2w = scene_info[scene_id]['camera_extrinsics_c2w'][view_id_idx]
         front = extrinsics_c2w[:3, 2]
         pos = extrinsics_c2w[:3, 3]
-        s_x, s_y = pos[0], pos[1]
-        e_x, e_y = pos[0] + front[0], pos[1] + front[1]
-        s_x, s_y = get_position_in_mesh_render_image((s_x, s_y), scene_info[scene_id]['center_x'], 
-                                                     scene_info[scene_id]['center_y'], 
-                                                     scene_info[scene_id]['num_pixels_per_meter'], 
+        sx_in_world, sy_in_world = pos[0], pos[1]
+        ex_in_world, ey_in_world = pos[0] + front[0], pos[1] + front[1]
+        s_x, s_y = get_position_in_mesh_render_image((sx_in_world, sy_in_world), scene_info[scene_id]["center_x"], 
+                                                     scene_info[scene_id]["center_y"], 
+                                                     scene_info[scene_id]["num_pixels_per_meter"], 
                                                      img.shape[:2])
-        e_x, e_y = get_position_in_mesh_render_image((e_x, e_y), scene_info[scene_id]['center_x'], 
-                                                     scene_info[scene_id]['center_y'], 
-                                                     scene_info[scene_id]['num_pixels_per_meter'], 
+        e_x, e_y = get_position_in_mesh_render_image((ex_in_world, ey_in_world), scene_info[scene_id]["center_x"], 
+                                                     scene_info[scene_id]["center_y"], 
+                                                     scene_info[scene_id]["num_pixels_per_meter"], 
                                                      img.shape[:2])
         out = cv2.arrowedLine(out, (s_y, s_x), (e_y, e_x), (255, 0, 0), 2)
         out[
         max(p[0] - size, 0): min(p[0] + size, out.shape[0] - 1), 
         max(p[1] - size, 0): min(p[1] + size, out.shape[1] - 1), 
         ] = np.array([0, 0, 255]).astype(np.uint8)
-        detail_img = gr.update(value=scene_info[scene_id]['useful_object'][min_object_id])
+        detail_img = gr.update(value=scene_info[scene_id]["useful_object"][min_object_id])
 
         if scene_id[:6] == '3rscan':
             to_rotate_clockwise_90 = True
@@ -357,13 +347,6 @@ with gr.Blocks() as demo:
         return detail_img, to_rotate_clockwise_90
 
 
-    def get_coverage_mask(h, w, poly):
-        x, y = np.meshgrid(np.arange(w), np.arange(h))
-        x, y = x.flatten(), y.flatten()
-        pixel_points = np.vstack((y, x)).T
-        p = matplotlib.path.Path(poly)
-        mask = p.contains_points(pixel_points).reshape((h, w))
-        return mask
 
 
     def show_areas(anno_img, to_show_areas, anno_result):
@@ -373,8 +356,8 @@ with gr.Blocks() as demo:
             anno_img = 0.6 * anno_img.copy()
             for anno_ in anno_result:
                 print(anno_)
-                label_ = anno_['label']
-                poly_ = anno_['vertex']
+                label_ = anno_["label"]
+                poly_ = anno_["vertex"]
                 color_ = REGIONS_COLOR[label_]
                 coverage_mask = get_coverage_mask(anno_img.shape[0], anno_img.shape[1], poly_)
                 anno_img[coverage_mask] = anno_img[coverage_mask] + 0.4 * color_
@@ -387,8 +370,8 @@ with gr.Blocks() as demo:
         m_x = evt.index[1]
         m_y = evt.index[0]
         for anno_ in anno_result:
-            label_ = anno_['label']
-            poly_ = anno_['vertex']
+            label_ = anno_["label"]
+            poly_ = anno_["vertex"]
             if is_in_poly((m_x, m_y), poly_):
                 return label_, anno_result
         return "no annotation", anno_result
@@ -403,11 +386,11 @@ with gr.Blocks() as demo:
 
         if poly_done and label != None:
             new_item_dict = copy.deepcopy(item_dict_list[-1])
-            new_item_dict['poly_done'] = poly_done
-            new_item_dict['out_image'] = output_img
-            new_item_dict['annotation_list'] = copy.deepcopy(annotation_list)
+            new_item_dict["poly_done"] = poly_done
+            new_item_dict["out_image"] = output_img
+            new_item_dict["annotation_list"] = copy.deepcopy(annotation_list)
 
-            new_item_dict['vertex_list'] = copy.deepcopy(vertex_list)
+            new_item_dict["vertex_list"] = copy.deepcopy(vertex_list)
             item_dict_list.append(new_item_dict)
 
             annotation = {}
@@ -440,12 +423,12 @@ with gr.Blocks() as demo:
             return None, None
 
         new_item_dict = copy.deepcopy(item_dict_list[-1])
-        new_item_dict['poly_done'] = poly_done
-        new_item_dict['out_image'] = output_img
+        new_item_dict["poly_done"] = poly_done
+        new_item_dict["out_image"] = output_img
 
-        new_item_dict['annotation_list'] = copy.deepcopy(annotation_list)
+        new_item_dict["annotation_list"] = copy.deepcopy(annotation_list)
 
-        new_item_dict['vertex_list'] = copy.deepcopy(vertex_list)
+        new_item_dict["vertex_list"] = copy.deepcopy(vertex_list)
         item_dict_list.append(new_item_dict)
         annotation_list = []
         vertex_list = []
@@ -457,16 +440,16 @@ with gr.Blocks() as demo:
     def undo(output_img, annotation_list, poly_done, vertex_list, click_evt_list, item_dict_list):
         # print('undo!!!!')
 
-        # print(len(item_dict_list), item_dict_list[-1]['annotation_list'], item_dict_list[-1]['show_json'])
+        # print(len(item_dict_list), item_dict_list[-1]["annotation_list"], item_dict_list[-1]['show_json'])
         if len(item_dict_list) == 1:
             return output_img, annotation_list, poly_done, vertex_list, click_evt_list
         else:
 
 
-            output_img = item_dict_list[-1]['out_image']
-            annotation_list = copy.deepcopy(item_dict_list[-1]['annotation_list'])
-            poly_done = item_dict_list[-1]['poly_done']
-            vertex_list = item_dict_list[-1]['vertex_list']
+            output_img = item_dict_list[-1]["out_image"]
+            annotation_list = copy.deepcopy(item_dict_list[-1]["annotation_list"])
+            poly_done = item_dict_list[-1]["poly_done"]
+            vertex_list = item_dict_list[-1]["vertex_list"]
             del item_dict_list[-1]
 
             return output_img, annotation_list, annotation_list, poly_done, vertex_list, click_evt_list
@@ -557,20 +540,22 @@ with gr.Blocks() as demo:
 
         ], 
     )
-demo.queue()
+demo.queue(concurrency_count=20)
 
 if __name__ == "__main__":
 
     import os
 
     # 存储所有render images的文件夹目录
-    render_image_path = 'data'
+    render_image_path = RENDER_IMAGE_PATH
     # 不用显示的类型（但会记录）
-    exclude_type = ["wall"]
+    exclude_type = ["wall", "ceiling", "floor"]
+    # 存储所有场景标注信息的列表
+    anno_full = read_annotation_pickles(['embodiedscan_infos_train_full.pkl', 'embodiedscan_infos_val_full.pkl'])
     # 存储渲染参数的文件（坐标变换要用到）
     all_scene_info = np.load('all_render_param.npy', allow_pickle=True).item()
     # 输出文件夹
-    output_dir = 'data'
+    output_dir = './region_annos/'
     # 辅助查看图文件夹
     painted_dir = './data'
 
@@ -598,8 +583,8 @@ if __name__ == "__main__":
         scene_info[scene_id]["useful_object_view_id"] = {}
         for img_file in os.listdir(painted_img_dir):
             if img_file.endswith(".png") or img_file.endswith(".jpg"):
-                scene_info[scene_id]["useful_object"][int(img_file[:3])] = painted_img_dir + "/" + img_file
-                scene_info[scene_id]["useful_object_view_id"][int(img_file[:3])] = "_".join(
+                scene_info[scene_id]["useful_object"][int(img_file.split("_")[0])] = painted_img_dir + "/" + img_file
+                scene_info[scene_id]["useful_object_view_id"][int(img_file.split("_")[0])] = "_".join(
                     img_file.split(".")[0].split("_")[2:])
         scene_info[scene_id]["view_ids"] = [path.split("/")[-1].split(".")[0] for path in anno["image_paths"]]
         scene_info[scene_id]["camera_extrinsics_c2w"] = [(anno["axis_align_matrix"] @ extrinsic) for extrinsic in
@@ -608,5 +593,5 @@ if __name__ == "__main__":
             = all_scene_info[scene_id]["center_x"], all_scene_info[scene_id]["center_y"], all_scene_info[scene_id][
             "num_pixels_per_meter"], 
 
-    demo.launch(show_error=True)
+    demo.launch(show_error=True, share=True)
 
