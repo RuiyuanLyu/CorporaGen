@@ -78,6 +78,13 @@ def annotate_object_by_image(image_path, max_additional_attempts=0):
     for message in conversation:
         if message["role"] == "assistant":
             raw_annotation.append(message["content"])
+    if len(raw_annotation) == 0:
+        # In case the GPT-model refusing to generate any output. (triggered by safety mechanism)
+        return {"original_description": "", "simplified_description": ""}
+    if len(raw_annotation) == 1:
+        # In case the GPT-model only generates one output. (triggered by safety mechanism)
+        return {"original_description": raw_annotation[0], "simplified_description": ""}
+    
     annotation = {"original_description": raw_annotation[0], "simplified_description": raw_annotation[1]}
     return annotation
 
@@ -139,6 +146,8 @@ def check_annotation_validity(annotation):
     #     meta = map_text_to_bool(accuracy_dict.get("meta", "False"))
     #     if not meta:
     #         return False, "The model is not describing the object we want."
+    if len(long_description) < 100:
+        return False, "The description is too short."
     if "sorry" in long_description or "misunderst" in long_description:
         return False, "The model may not describe objects accurately or the object we want."
     if len(short_description) > len(long_description):
@@ -250,7 +259,10 @@ def translate_annotation_from_file(json_path, src_lang="English", tgt_lang="Chin
         return
     if "translated_description" in annotation:
         return annotation
-    translated_description = translate(annotation["original_description"], src_lang=src_lang, tgt_lang=tgt_lang)
+    annotation_to_translate = annotation["original_description"]
+    if "simplified_description" in annotation:
+        annotation_to_translate = annotation["simplified_description"]
+    translated_description = translate(annotation_to_translate, src_lang=src_lang, tgt_lang=tgt_lang)
     annotation["translated_description"] = translated_description
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(annotation, f, indent=4)
@@ -263,7 +275,7 @@ if __name__ == "__main__":
     image_dir = "data//scene0000_00//cropped_objects"
     output_dir = "data//scene0000_00//corpora_object"
     os.makedirs(output_dir, exist_ok=True)
-    annotations = annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=True, max_additional_attempts=1)
+    # annotations = annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=False, max_additional_attempts=1)
     check_annotation_validity_path(output_dir)
     json_paths = [os.path.join(output_dir, file_name) for file_name in os.listdir(output_dir) if file_name.endswith(".json")]
     inputs = [(json_path, "English", "Chinese") for json_path in json_paths]

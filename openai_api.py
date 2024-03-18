@@ -37,20 +37,28 @@ def mimic_chat_budget(user_content_groups, system_prompt=None, max_additional_at
                     if content_component["type"] == "image_url":
                         message["content"].remove(content_component)
         messages.append({"role": "user", "content": content_group})
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=2000,
-        )
-        response = response.choices[0].message.content.strip()            
-        messages.append({"role": "assistant", "content": response})
-        print(response)
-        if "sorry" in response.lower():
-            print(f"Additional attempt(s) left: {max_additional_attempts}")
+        try:
+            full_response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=2000,
+            )
+        except Exception as e:
+            print(f"Error: {e}")
             if max_additional_attempts > 0:
                 return mimic_chat_budget(user_content_groups, system_prompt=system_prompt, max_additional_attempts=max_additional_attempts-1)
             else:
-                print("WARNING: Maximum additional attempts reached. The result may not be accurate.")
+                return messages
+        response = full_response.choices[0].message.content.strip()            
+        messages.append({"role": "assistant", "content": response})
+        # print(response)
+        if "sorry" in response.lower():
+            # print(f"Additional attempt(s) left: {max_additional_attempts}")
+            if max_additional_attempts > 0:
+                return mimic_chat_budget(user_content_groups, system_prompt=system_prompt, max_additional_attempts=max_additional_attempts-1)
+            else:
+                # print("WARNING: Maximum additional attempts reached. The result may not be accurate.")
+                pass
     return messages
  
 
