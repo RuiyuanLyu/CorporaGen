@@ -225,4 +225,4 @@ with gr.Blocks() as demo:
 demo.queue(concurrency_count=20)
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(server_port=7859)

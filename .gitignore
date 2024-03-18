@@ -2,7 +2,7 @@ example_data/
 example_data2/
 deprecations/
 data/
-data/
+data_zip/
 openai_api_key.txt
 
 **.pkl
