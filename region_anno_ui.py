@@ -86,9 +86,14 @@ with gr.Blocks() as demo:
     store_vertex_list = gr.State([])
     to_rotate_clockwise_90 = gr.State(False)
     to_show_areas = gr.State(False)
+    user_name_is_valid = gr.State(False)
 
+    user_name = gr.Textbox(label='user name', value='', placeholder='在此输入用户名，首位必须为字母，不要带空格。')
     scene = gr.Dropdown(scene_list, label="在此选择待标注的场景")
     scene_anno_info = gr.Textbox('', visible=True, interactive=False)
+    anno_img = gr.Image(label="result of annotation", interactive=True)
+    show_label_box = gr.Textbox(label='label from annotation')
+
     total_vertex_num = gr.Slider(
         label="Vertex Number", 
         info="拖动滑块选择多边形的顶点个数", 
@@ -98,35 +103,34 @@ with gr.Blocks() as demo:
         value=4, 
     )
 
+    def check_user_name_validity(user_name):
+        if len(user_name) == 0 or ' ' in user_name or not user_name[0].isalpha():
+            gr.Warning("用户名不合法。请首位必须为字母，并不要带空格。请重新输入。")
+            return False
+        return True
+    user_name.blur(check_user_name_validity, inputs=[user_name], outputs=[user_name_is_valid])
 
-    def get_file(scene_id):
+    def get_file(scene_id, user_name):
         annotation_list = []
-
         click_evt_list = []
-
         vertex_list = []
-
         poly_done = False
-
         item_dict_list = [init_item_dict]
-
         anno_result = []
-
         to_show_areas = False
+
+        if not check_user_name_validity(user_name):
+            return None, None, None, None, None, '', None, annotation_list, click_evt_list, vertex_list, poly_done, item_dict_list, anno_result, to_show_areas
+
         if scene_id == None or scene_id == 'None':
             return None, None, None, None, None, '', None, annotation_list, click_evt_list, vertex_list, poly_done, item_dict_list, anno_result, to_show_areas
 
-
-
-
-
-
+        file_path_to_save = os.path.join(scene_info[scene_id]["output_dir"], f'region_segmentation_{user_name}.txt')
         anno_img_path = gr.update(value=f'{render_image_path}/{scene_id}/render.png')
-        if os.path.exists(scene_info[scene_id]["output_dir"] + '/region_segmentation.txt'):
-
+        if os.path.exists(file_path_to_save):
             scene_anno_state = scene_id + ' 已经被标注过 ! ! ! ! !'
             gr.Info("该场景已经被标注过，若非必要请不要重复标注")
-            anno_result = get_data(scene_info[scene_id]["output_dir"] + '/region_segmentation.txt')
+            anno_result = get_data(file_path_to_save)
             if os.path.exists(f'{render_image_path}/{scene_id}/render_anno.png'):
                 anno_img_path = f'{render_image_path}/{scene_id}/render_anno.png'
             else:
@@ -141,8 +145,6 @@ with gr.Blocks() as demo:
 
 
 
-    anno_img = gr.Image(label="result of annotation", interactive=True)
-    show_label_box = gr.Textbox(label='label from annotation')
 
     with gr.Row():
         input_img = gr.Image(label="Image")
@@ -188,7 +190,6 @@ with gr.Blocks() as demo:
                  click_evt_list, poly_done, poly_image, vertex_list, annotation_list, enable_undo, item_dict_list, store_vertex_list, 
                  evt: gr.SelectData
                  ):
-
         w, h, c = img.shape
         size = ceil(max([w, h]) * 0.01)
 
@@ -420,14 +421,12 @@ with gr.Blocks() as demo:
     def clear(scene_id, output_img, annotation_list, poly_done, click_evt_list, vertex_list):
 
         if scene_id == None or scene_id == 'None':
-            return None, None
+            return [None]*6
 
         new_item_dict = copy.deepcopy(item_dict_list[-1])
         new_item_dict["poly_done"] = poly_done
         new_item_dict["out_image"] = output_img
-
         new_item_dict["annotation_list"] = copy.deepcopy(annotation_list)
-
         new_item_dict["vertex_list"] = copy.deepcopy(vertex_list)
         item_dict_list.append(new_item_dict)
         annotation_list = []
@@ -455,20 +454,17 @@ with gr.Blocks() as demo:
             return output_img, annotation_list, annotation_list, poly_done, vertex_list, click_evt_list
 
 
-    def save_to_file(scene_id, annotation_list, click_evt_list, vertex_list, poly_done, item_dict_list):
+    def save_to_file(scene_id, annotation_list, click_evt_list, vertex_list, poly_done, item_dict_list, user_name):
         if scene_id == None or scene_id == 'None':
-            return None, None, None, None, None, None, annotation_list, click_evt_list, vertex_list, poly_done, item_dict_list
+            return None, None, None, None, None, None, None, None, annotation_list, click_evt_list, vertex_list, poly_done, item_dict_list
 
 
         os.makedirs(scene_info[scene_id]['output_dir'], exist_ok=True)
-        with open(f"{scene_info[scene_id]['output_dir']}/region_segmentation.txt", "w") as file:
+        with open(f"{scene_info[scene_id]['output_dir']}/region_segmentation_{user_name}.txt", "w") as file:
             file.write(str(annotation_list))
         annotation_list = []
-
         click_evt_list = []
-
         vertex_list = []
-
         poly_done = False
         item_dict_list = [init_item_dict]
 
@@ -487,7 +483,7 @@ with gr.Blocks() as demo:
 
     show_json = gr.JSON(label="Annotate History")
     scene.change(
-        get_file, inputs=[scene], outputs=[input_img, object_postion_img, output_img, 
+        get_file, inputs=[scene, user_name], outputs=[input_img, object_postion_img, output_img, 
                                            show_json, detail_show_img, scene_anno_info, anno_img, 
                                            annotation_list, click_evt_list, vertex_list, poly_done, item_dict_list, 
                                            anno_result, to_show_areas
@@ -526,7 +522,7 @@ with gr.Blocks() as demo:
 
     save_btn.click(
         fn=save_to_file, 
-        inputs=[scene, annotation_list, click_evt_list, vertex_list, poly_done, item_dict_list], 
+        inputs=[scene, annotation_list, click_evt_list, vertex_list, poly_done, item_dict_list, user_name], 
         outputs=[
             scene, 
             output_img, 
@@ -557,7 +553,7 @@ if __name__ == "__main__":
     # 输出文件夹
     output_dir = './region_annos/'
     # 辅助查看图文件夹
-    painted_dir = './data'
+    painted_dir = RENDER_IMAGE_PATH
 
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
@@ -593,5 +589,5 @@ if __name__ == "__main__":
             = all_scene_info[scene_id]["center_x"], all_scene_info[scene_id]["center_y"], all_scene_info[scene_id][
             "num_pixels_per_meter"], 
 
-    demo.launch(show_error=True, share=True)
+    demo.launch(show_error=True, allowed_paths=[painted_dir], server_port=7859)
 
