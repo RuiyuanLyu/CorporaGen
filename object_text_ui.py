@@ -1,6 +1,7 @@
 import gradio as gr  # gradio==3.50.2
 import os
 import json
+import numpy as np
 from object_text_anno import check_annotation_validity, map_choice_to_bool, map_choice_to_text
 from utils_read import load_json
 
@@ -18,22 +19,27 @@ QUESTIONS = {
     "other_features": "物体的其它特点（比如椅子扶手）是否准确？"
 }
 KEYS = ["category", "appearance", "material", "size", "state", "position", "placement", "special_function", "other_features"] # Manually sorted and removed "meta"
-
+DATA_ROOT = "/mnt/data/embodiedscan/"
+SUPER_USERNAMES = ["openrobotlab", "lvruiyuan"]
 
 def get_valid_directories():
     """
     Returns a list of valid directories in the current working directory or subdirectories.
     """
     valid_directories = []
-    for dir_path, dir_names, file_names in os.walk("."):
+    for dir_path, dir_names, file_names in os.walk(DATA_ROOT):
         if any(name.startswith("corpora_object") for name in dir_names) and "painted_objects" in dir_names:
             valid_directories.append(dir_path)
     return valid_directories
 
 with gr.Blocks() as demo:
     valid_directories = get_valid_directories()
+    user_name = gr.Textbox(label="用户名，您的标注会保存在这里", value="", placeholder="在此输入用户名，首位必须为字母，不要带空格。")
+    user_name_is_valid = gr.State(False)
+
     with gr.Row():
         directory = gr.Dropdown(label="Select a directory", choices=valid_directories)
+        previous_user = gr.Dropdown(label="Select which user's annotations to load", choices=[], visible=False, allow_custom_value=True)
         object_name = gr.Dropdown(label="Select an object", value="Select an object", allow_custom_value=True, interactive=True)
 
     with gr.Row():
@@ -70,20 +76,42 @@ with gr.Blocks() as demo:
     
     save_button = gr.Button(value="保存物体标注", visible=False)
 
-    def update_object_name_choices(directory):
+    def check_user_name_validity(user_name):
+        if len(user_name) == 0 or ' ' in user_name or not user_name[0].isalpha():
+            gr.Warning("用户名不合法。请首位必须为字母，并不要带空格。请重新输入。")
+            return False
+        return True
+    user_name.blur(fn=check_user_name_validity, inputs=[user_name], outputs=[user_name_is_valid])
+
+    def update_previous_user_choices(directory, user_name):
+        dir_to_view = os.path.join(DATA_ROOT, directory, "corpora_object")
+        previous_users = [name for name in os.listdir(dir_to_view) if os.path.isdir(os.path.join(dir_to_view, name))]
+        previous_users = [name.strip("user_") for name in previous_users]
+        if len(previous_users) == 0 or not user_name in SUPER_USERNAMES:
+            return gr.Dropdown(label="Select which user's annotations to load", choices=[], value="", visible=False)
+        return gr.Dropdown(label="Select which user's annotations to load", choices=previous_users, value="", visible=True)
+    directory.change(fn=update_previous_user_choices, inputs=[directory, user_name], outputs=[previous_user])
+    user_name.change(fn=update_previous_user_choices, inputs=[directory, user_name], outputs=[previous_user])
+
+    def update_object_name_choices(directory, previous_user):
         """
         Updates the choices of the object_name input based on the selected directory.
         """
         valid_objects = []
-        for json_file in os.listdir(os.path.join(directory, "corpora_object")):
+        if previous_user:
+            dir_to_load = os.path.join(DATA_ROOT, directory, "corpora_object", f"user_{previous_user}")
+        else:
+            dir_to_load = os.path.join(DATA_ROOT, directory, "corpora_object")
+        for json_file in os.listdir(dir_to_load):
             if json_file.endswith(".json"):
-                annotation = load_json(os.path.join(directory, "corpora_object", json_file))
+                annotation = load_json(os.path.join(dir_to_load, json_file))
                 is_valid, error_message = check_annotation_validity(annotation)
                 if is_valid:
                     object_name = json_file.split(".")[0]
                     valid_objects.append(object_name)
         return gr.Dropdown(label="Select an object", choices=valid_objects, allow_custom_value=True)
-    directory.change(fn=update_object_name_choices, inputs=directory, outputs=[object_name])
+    directory.change(fn=update_object_name_choices, inputs=[directory, previous_user], outputs=[object_name])
+    previous_user.change(fn=update_object_name_choices, inputs=[directory, previous_user], outputs=[object_name])
 
     def get_description(json_file_path, is_aux=False):
         """
@@ -111,13 +139,18 @@ with gr.Blocks() as demo:
             warning_text = None
         return original_description, translated_description, warning_text
 
-    def get_description_and_image_path(object_name, directory):
+    def get_description_and_image_path(object_name, directory, user_name, previous_user):
         """
         Returns the description and image path of the given object.
         """
-        json_file = os.path.join(directory, "corpora_object", f"{object_name}.json")
+        json_file = os.path.join(DATA_ROOT, directory, "corpora_object", f"{object_name}.json")
+        user_json_file = os.path.join(DATA_ROOT, directory, "corpora_object", f"user_{user_name}", f"{object_name}.json")
+        if os.path.exists(user_json_file):
+            json_file = user_json_file
+        if previous_user:
+            json_file = os.path.join(DATA_ROOT, directory, "corpora_object", f"user_{previous_user}", f"{object_name}.json")
         original_description, translated_description, warning_text = get_description(json_file)
-        backup_json_file = os.path.join(directory, "corpora_object_gpt4v", f"{object_name}.json")
+        backup_json_file = os.path.join(DATA_ROOT, directory, "corpora_object_gpt4v", f"{object_name}.json")
         if os.path.exists(backup_json_file):
             backup_description, backup_translated_description, _ = get_description(backup_json_file, is_aux=True)
             backup_description = gr.Textbox(label="Backup Description", value=backup_description, visible=True, interactive=False)
@@ -126,10 +159,10 @@ with gr.Blocks() as demo:
             backup_description = gr.Textbox(label="Backup Description", value="", visible=False, interactive=False)
             backup_translated_description = gr.Textbox(label="Backup Translated Description", value="", visible=False, interactive=False)
         warning_text = gr.Textbox(label="Warning", value=warning_text, visible=bool(warning_text), interactive=False)
-        image_path = os.path.join(directory, "painted_objects", f"{object_name}.jpg")
-        image_path2 = os.path.join(directory, "cropped_objects", f"{object_name}.jpg")
-        return original_description, translated_description, backup_description, backup_translated_description, image_path, image_path2, warning_text
-    object_name.change(fn=get_description_and_image_path, inputs=[object_name, directory], outputs=[original_description, translated_description, backup_description, backup_translated_description, image, aux_image, warning_text])
+        image_path = os.path.join(DATA_ROOT, directory, "painted_objects", f"{object_name}.jpg")
+        aux_image_path = os.path.join(DATA_ROOT, directory, "cropped_objects", f"{object_name}.jpg")
+        return original_description, translated_description, backup_description, backup_translated_description, image_path, aux_image_path, warning_text
+    object_name.change(fn=get_description_and_image_path, inputs=[object_name, directory, user_name, previous_user], outputs=[original_description, translated_description, backup_description, backup_translated_description, image, aux_image, warning_text])
 
     def refresh_core_questions():
         core_question = "不要选这个选项"
@@ -144,7 +177,8 @@ with gr.Blocks() as demo:
         questions = [QUESTIONS.get(k, "") for k in KEYS]
         choices = ["是", "否", "该物体没有这一属性", "该物体具有这一属性，描述遗漏了", "不要选这个选项"]
         for i in range(len(questions)):
-            r = gr.Radio(label=f"Question {i+1}", choices=choices, value=choices[-1], info=questions[i], interactive=True, visible=visible)
+            value = choices[-1] if np.random.rand() < 0.1 else choices[0] # to check the user is not too lazy
+            r = gr.Radio(label=f"Question {i+1}", choices=choices, value=value, info=questions[i], interactive=True, visible=visible)
             questions_radio.append(r)
         return questions_radio
     object_name.change(fn=refresh_questions, inputs=[core_question, core_question2], outputs=questions_radio)
@@ -189,12 +223,12 @@ with gr.Blocks() as demo:
         t.change(fn=update_preview_description, inputs=[*textboxes], outputs=preview_description)
     save_button.click(fn=update_preview_description, inputs=[*textboxes], outputs=preview_description)
 
-    def save_annotations(directory, object_name, core_question, core_question2, preview_description, *questions_radio):
+    def save_annotations(directory, user_name, object_name, core_question, core_question2, preview_description, *questions_radio):
         """
         Saves the annotations to the given directory.
         """
-        json_file_path = os.path.join(directory, "corpora_object", f"{object_name}.json")
-        annotation = load_json(json_file_path)
+        json_file_path_raw = os.path.join(DATA_ROOT, directory, "corpora_object", f"{object_name}.json")
+        annotation = load_json(json_file_path_raw)
         annotation_to_save = {}
         assert isinstance(annotation, dict), f"Invalid annotation type: {type(annotation)}"
         annotation_to_save = annotation.copy()
@@ -217,12 +251,14 @@ with gr.Blocks() as demo:
                 accuracy_dict[key] = "False"
         annotation_to_save["accuracy_dict"] = accuracy_dict
         
-        with open(json_file_path, "w", encoding="utf-8") as f:
+        json_file_path_to_save = os.path.join(DATA_ROOT, directory, "corpora_object", f"user_{user_name}" , f"{object_name}.json")
+        os.makedirs(os.path.dirname(json_file_path_to_save), exist_ok=True)
+        with open(json_file_path_to_save, "w", encoding="utf-8") as f:
             json.dump(annotation_to_save, f, ensure_ascii=False, indent=4)
         save_button = gr.Button(value="保存成功！请选择下一物体。")
         return save_button
-    save_button.click(fn=save_annotations, inputs=[directory, object_name, core_question, core_question2, preview_description, *questions_radio], outputs=save_button)
+    save_button.click(fn=save_annotations, inputs=[directory, user_name, object_name, core_question, core_question2, preview_description, *questions_radio], outputs=save_button)
 demo.queue(concurrency_count=20)
 
 if __name__ == "__main__":
-    demo.launch(server_port=7859)
+    demo.launch(server_port=7858)

@@ -66,7 +66,7 @@ def annotate_object_by_image(image_path, max_additional_attempts=0):
     
     system_prompt = "You are an expert interior designer, who is very sensitive at room furnitures and their placements. You are visiting some ordinary rooms that conform to the daily life of an average person. The expected reader is a high-school student with average knowledge of furniture design."
     user_message1 = "Please describe the {} in the highlighted box, mainly including the following aspects: appearance (shape, color), material, size (e.g., larger or smaller compared to similar items), condition (e.g., whether a door is open or closed), placement (e.g.,vertical/leaning/slanting/stacked), functionality (compared to similar items), and design features (e.g., whether a chair has armrests/backrest). Please aim for a roughly 300-word description".format(object_type).replace("highlighted box", "image")
-    user_message2 = "Please omit the plain and ordinary parts of the description, only retaining the unique characteristics of the objects; rewrite and recombine the retained descriptions to make the language flow naturally, without being too rigid. Make the descriptions about 150 words."
+    user_message2 = "Please omit the plain and ordinary parts of the description, only retaining the unique characteristics of the objects; rewrite and recombine the retained descriptions to make the language flow naturally, without being too rigid. Make the description about 150 words."
     source_groups = [
         [user_message1, image_path],
         [user_message2]
@@ -101,7 +101,7 @@ def translate(text, src_lang="English", tgt_lang="Chinese"):
     user_message = text
     src_lang = src_lang.capitalize()
     tgt_lang = tgt_lang.capitalize()
-    system_prompt = f"You are an excellent translator, who does more than rigidly translating {src_lang} into {tgt_lang}. Your choice of words and phrases are natural and fluent. The expressions are easy to understand. The expected reader is a middle-school student."
+    system_prompt = f"You are an excellent translator, who does more than rigidly translating {src_lang} into {tgt_lang}. Your choice of words and phrases is natural and fluent. The expressions are easy to understand. The expected reader is a middle-school student."
     source_groups = [
         [user_message],
     ]
@@ -272,20 +272,32 @@ def translate_annotation_from_file_parallel(inputs):
     return translate_annotation_from_file(*inputs)
 
 if __name__ == "__main__":
-    image_dir = "data//scene0000_00//cropped_objects"
-    output_dir = "data//scene0000_00//corpora_object"
+    DATA_ROOT = "/mnt/data/embodiedscan"
+    SCENE_ID = "scene0000_00"
+    image_dir = os.path.join(DATA_ROOT, SCENE_ID, "cropped_objects")
+    output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object")
     os.makedirs(output_dir, exist_ok=True)
+    # output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object_gpt4v_paint")
+    # output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object_cogvlm_crop")
+    # os.makedirs(output_dir, exist_ok=True)
     # annotations = annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=False, max_additional_attempts=1)
-    check_annotation_validity_path(output_dir)
-    json_paths = [os.path.join(output_dir, file_name) for file_name in os.listdir(output_dir) if file_name.endswith(".json")]
+    # check_annotation_validity_path(output_dir)
+    my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 169, 172, 178, 180]
+    my_ids = set(my_ids)
+    file_names = [file for file in os.listdir(output_dir) if int(file.split("_")[0]) in my_ids and file.endswith(".json")]
+    json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
     inputs = [(json_path, "English", "Chinese") for json_path in json_paths]
     import mmengine
     results = mmengine.track_parallel_progress(translate_annotation_from_file_parallel, inputs, nproc=8)
 
 
     # annotations = []
+    # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 169, 172, 178, 180]
+    # my_ids = set(my_ids)
     # for file_name in os.listdir(output_dir):
     #     if not file_name.endswith(".json"):
+    #         continue
+    #     if not int(file_name.split('_')[0]) in my_ids:
     #         continue
     #     annotation = load_json(os.path.join(output_dir, file_name))
     #     annotations.append(annotation)
