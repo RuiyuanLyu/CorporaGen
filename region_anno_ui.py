@@ -37,7 +37,7 @@ init_item_dict["poly_done"] = False
 init_item_dict["vertex_list"] = []
 init_item_dict["annotation_list"] = []
 
-RENDER_IMAGE_PATH = "/mnt/data/embodiedscan"
+RENDER_IMAGE_PATH = "data"
 
 
 scene_list = os.listdir(RENDER_IMAGE_PATH)
@@ -91,7 +91,7 @@ with gr.Blocks() as demo:
     user_name = gr.Textbox(label="用户名", value="", placeholder="在此输入用户名，首位必须为字母，不要带空格。")
     scene = gr.Dropdown(scene_list, label="在此选择待标注的场景")
     scene_anno_info = gr.Textbox(label="提示信息" ,value="", visible=True, interactive=False)
-    anno_img = gr.Image(label="result of annotation", interactive=True)
+    anno_img = gr.Image(label="result of annotation", interactive=True, tool=[])
     show_label_box = gr.Textbox(label="根据标注文件，点选区域的类别。")
 
     total_vertex_num = gr.Slider(
@@ -147,9 +147,8 @@ with gr.Blocks() as demo:
 
 
     with gr.Row():
-        input_img = gr.Image(label="Image")
-
-        output_img = gr.Image(label="Selected Polygon")
+        input_img = gr.Image(label="Image", tool=[])
+        output_img = gr.Image(label="Selected Polygon", tool=[])
 
     label = gr.Radio(REGIONS.keys(), 
                      label="label", 
@@ -478,8 +477,8 @@ with gr.Blocks() as demo:
         clear_btn = gr.Button("清空当前场景所有标注（谨慎操作）")
 
     with gr.Row():
-        object_postion_img = gr.Image(label="辅助查看区", interactive=True)
-        detail_show_img = gr.Image(label="Posed Image")
+        object_postion_img = gr.Image(label="辅助查看区", interactive=True, tool=[])
+        detail_show_img = gr.Image(label="Posed Image", tool=[])
 
     show_json = gr.JSON(label="Annotate History")
     scene.change(
