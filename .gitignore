@@ -1,8 +1,10 @@
 example_data/
 example_data2/
 deprecations/
+data
 data/
 data_zip/
+region_annos/
 data_link
 openai_api_key.txt
 

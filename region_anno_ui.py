@@ -131,10 +131,7 @@ with gr.Blocks() as demo:
             scene_anno_state = scene_id + ' 已经被标注过 ! ! ! ! !'
             gr.Info("该场景已经被标注过，若非必要请不要重复标注")
             anno_result = get_data(file_path_to_save)
-            if os.path.exists(f'{render_image_path}/{scene_id}/render_anno.png'):
-                anno_img_path = f'{render_image_path}/{scene_id}/render_anno.png'
-            else:
-                to_show_areas = True
+            to_show_areas = True
         else:
             scene_anno_state = scene_id + ' 需要标注'
             anno_result = []
