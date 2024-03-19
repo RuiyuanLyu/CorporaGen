@@ -272,17 +272,24 @@ def translate_annotation_from_file_parallel(inputs):
     return translate_annotation_from_file(*inputs)
 
 if __name__ == "__main__":
-    DATA_ROOT = "/mnt/data/embodiedscan"
+    DATA_ROOT = "./data"
     SCENE_ID = "scene0000_00"
     image_dir = os.path.join(DATA_ROOT, SCENE_ID, "cropped_objects")
-    output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object")
+    output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object_cogvlm_crop")
     os.makedirs(output_dir, exist_ok=True)
     # output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object_gpt4v_paint")
+    # output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object_gpt4v_crop")
     # output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object_cogvlm_crop")
     # os.makedirs(output_dir, exist_ok=True)
+
+    ###################################################################
+    # Annotation usage here.
     # annotations = annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=False, max_additional_attempts=1)
     # check_annotation_validity_path(output_dir)
-    my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 169, 172, 178, 180]
+
+    ##################################################################
+    # Translate usage here.
+    my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
     my_ids = set(my_ids)
     file_names = [file for file in os.listdir(output_dir) if int(file.split("_")[0]) in my_ids and file.endswith(".json")]
     json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
@@ -290,9 +297,10 @@ if __name__ == "__main__":
     import mmengine
     results = mmengine.track_parallel_progress(translate_annotation_from_file_parallel, inputs, nproc=8)
 
-
+    ###################################################################
+    # Quality check usage here.
     # annotations = []
-    # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 169, 172, 178, 180]
+    # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
     # my_ids = set(my_ids)
     # for file_name in os.listdir(output_dir):
     #     if not file_name.endswith(".json"):
@@ -303,3 +311,25 @@ if __name__ == "__main__":
     #     annotations.append(annotation)
     # quality_dict = check_annotation_quality(annotations)
     # print(quality_dict)
+
+    ###################################################################
+    # Another quality check usage here.
+    # annotations = []
+    # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
+    # my_ids = set(my_ids)
+    # for file_name in os.listdir(output_dir):
+    #     if not file_name.endswith(".json"):
+    #         continue
+    #     if not int(file_name.split('_')[0]) in my_ids:
+    #         continue
+    #     annotation = load_json(os.path.join(output_dir, file_name))
+    #     acc_dict = {}
+    #     acc_dict["id"] = ' '.join(file_name.split("_")[:2])
+    #     acc_dict.update(annotation.get("accuracy_dict", {}))
+    #     acc_dict["position"] = acc_dict["position"] and acc_dict["placement"]
+    #     del acc_dict["placement"]
+    #     annotations.append(acc_dict)
+    # import pandas as pd
+    # df = pd.DataFrame(annotations)
+    # df.to_csv("accuracy_dict.csv", index=False)
+    # print(df)
