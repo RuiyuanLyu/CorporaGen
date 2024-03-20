@@ -19,7 +19,7 @@ QUESTIONS = {
     "other_features": "物体的其它特点（比如椅子扶手）是否准确？"
 }
 KEYS = ["category", "appearance", "material", "size", "state", "position", "placement", "special_function", "other_features"] # Manually sorted and removed "meta"
-DATA_ROOT = "/mnt/data/embodiedscan/"
+DATA_ROOT = "data"
 SUPER_USERNAMES = ["openrobotlab", "lvruiyuan"]
 
 def get_valid_directories():
@@ -84,14 +84,14 @@ with gr.Blocks() as demo:
     user_name.blur(fn=check_user_name_validity, inputs=[user_name], outputs=[user_name_is_valid])
 
     def update_previous_user_choices(directory, user_name):
-        dir_to_view = os.path.join(DATA_ROOT, directory, "corpora_object")
+        dir_to_view = os.path.join(directory, "corpora_object")
         previous_users = [name for name in os.listdir(dir_to_view) if os.path.isdir(os.path.join(dir_to_view, name))]
         previous_users = [name.strip("user_") for name in previous_users]
         if len(previous_users) == 0 or not user_name in SUPER_USERNAMES:
             return gr.Dropdown(label="Select which user's annotations to load", choices=[], value="", visible=False)
         return gr.Dropdown(label="Select which user's annotations to load", choices=previous_users, value="", visible=True)
     directory.change(fn=update_previous_user_choices, inputs=[directory, user_name], outputs=[previous_user])
-    user_name.change(fn=update_previous_user_choices, inputs=[directory, user_name], outputs=[previous_user])
+    user_name.blur(fn=update_previous_user_choices, inputs=[directory, user_name], outputs=[previous_user])
 
     def update_object_name_choices(directory, previous_user):
         """
@@ -99,9 +99,9 @@ with gr.Blocks() as demo:
         """
         valid_objects = []
         if previous_user:
-            dir_to_load = os.path.join(DATA_ROOT, directory, "corpora_object", f"user_{previous_user}")
+            dir_to_load = os.path.join(directory, "corpora_object", f"user_{previous_user}")
         else:
-            dir_to_load = os.path.join(DATA_ROOT, directory, "corpora_object")
+            dir_to_load = os.path.join(directory, "corpora_object")
         for json_file in os.listdir(dir_to_load):
             if json_file.endswith(".json"):
                 annotation = load_json(os.path.join(dir_to_load, json_file))
@@ -143,14 +143,14 @@ with gr.Blocks() as demo:
         """
         Returns the description and image path of the given object.
         """
-        json_file = os.path.join(DATA_ROOT, directory, "corpora_object", f"{object_name}.json")
-        user_json_file = os.path.join(DATA_ROOT, directory, "corpora_object", f"user_{user_name}", f"{object_name}.json")
+        json_file = os.path.join(directory, "corpora_object", f"{object_name}.json")
+        user_json_file = os.path.join(directory, "corpora_object", f"user_{user_name}", f"{object_name}.json")
         if os.path.exists(user_json_file):
             json_file = user_json_file
         if previous_user:
-            json_file = os.path.join(DATA_ROOT, directory, "corpora_object", f"user_{previous_user}", f"{object_name}.json")
+            json_file = os.path.join(directory, "corpora_object", f"user_{previous_user}", f"{object_name}.json")
         original_description, translated_description, warning_text = get_description(json_file)
-        backup_json_file = os.path.join(DATA_ROOT, directory, "corpora_object_gpt4v", f"{object_name}.json")
+        backup_json_file = os.path.join(directory, "corpora_object_gpt4v", f"{object_name}.json")
         if os.path.exists(backup_json_file):
             backup_description, backup_translated_description, _ = get_description(backup_json_file, is_aux=True)
             backup_description = gr.Textbox(label="Backup Description", value=backup_description, visible=True, interactive=False)
@@ -159,8 +159,8 @@ with gr.Blocks() as demo:
             backup_description = gr.Textbox(label="Backup Description", value="", visible=False, interactive=False)
             backup_translated_description = gr.Textbox(label="Backup Translated Description", value="", visible=False, interactive=False)
         warning_text = gr.Textbox(label="Warning", value=warning_text, visible=bool(warning_text), interactive=False)
-        image_path = os.path.join(DATA_ROOT, directory, "painted_objects", f"{object_name}.jpg")
-        aux_image_path = os.path.join(DATA_ROOT, directory, "cropped_objects", f"{object_name}.jpg")
+        image_path = os.path.join(directory, "painted_objects", f"{object_name}.jpg")
+        aux_image_path = os.path.join(directory, "cropped_objects", f"{object_name}.jpg")
         return original_description, translated_description, backup_description, backup_translated_description, image_path, aux_image_path, warning_text
     object_name.change(fn=get_description_and_image_path, inputs=[object_name, directory, user_name, previous_user], outputs=[original_description, translated_description, backup_description, backup_translated_description, image, aux_image, warning_text])
 
@@ -227,7 +227,7 @@ with gr.Blocks() as demo:
         """
         Saves the annotations to the given directory.
         """
-        json_file_path_raw = os.path.join(DATA_ROOT, directory, "corpora_object", f"{object_name}.json")
+        json_file_path_raw = os.path.join(directory, "corpora_object", f"{object_name}.json")
         annotation = load_json(json_file_path_raw)
         annotation_to_save = {}
         assert isinstance(annotation, dict), f"Invalid annotation type: {type(annotation)}"
@@ -251,7 +251,7 @@ with gr.Blocks() as demo:
                 accuracy_dict[key] = "False"
         annotation_to_save["accuracy_dict"] = accuracy_dict
         
-        json_file_path_to_save = os.path.join(DATA_ROOT, directory, "corpora_object", f"user_{user_name}" , f"{object_name}.json")
+        json_file_path_to_save = os.path.join(directory, "corpora_object", f"user_{user_name}" , f"{object_name}.json")
         os.makedirs(os.path.dirname(json_file_path_to_save), exist_ok=True)
         with open(json_file_path_to_save, "w", encoding="utf-8") as f:
             json.dump(annotation_to_save, f, ensure_ascii=False, indent=4)
