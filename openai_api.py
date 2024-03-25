@@ -2,11 +2,32 @@ import base64
 import requests
 import os
 import json
+import openai
 from openai import OpenAI
-
+openai.api_base = "https://api.chatweb.plus/v1"
 # prevent accidential activation of API key
 KEY_ACTIVATED = True
 
+def get_api_key():
+    with open("openai_api_key.txt", "r") as f:
+        api_key = f.read().strip()
+    if not KEY_ACTIVATED:
+        api_key = " "
+        print("WARNING: API key not ACTIVATED. Please activate it in the code.")
+    return api_key
+
+def get_client():
+    return OpenAI(api_key=get_api_key(), base_url=openai.api_base)
+
+def get_response(messages, model="gpt-3.5-turbo", max_tokens=1000):
+    client = get_client()
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        max_tokens=max_tokens
+    )
+    return response.choices[0].message.content.strip()   
+        
 
 def mimic_chat_budget(user_content_groups, system_prompt=None, max_additional_attempts=0):
     """
@@ -19,7 +40,7 @@ def mimic_chat_budget(user_content_groups, system_prompt=None, max_additional_at
         Returns:
             messages (list): The mimic chat with multi-round conversation.
     """
-    client = OpenAI(api_key=get_api_key())
+    client = get_client()
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
@@ -27,7 +48,7 @@ def mimic_chat_budget(user_content_groups, system_prompt=None, max_additional_at
         if i == 0:
             model = "gpt-4-vision-preview"
         else:
-            model = "gpt-3.5-turbo"
+            model = "gpt-3.5-turbo-0125"
             # remove the image urls from the previous rounds
             for message in messages:
                 for content_component in reversed(message["content"]):
@@ -49,6 +70,7 @@ def mimic_chat_budget(user_content_groups, system_prompt=None, max_additional_at
                 return mimic_chat_budget(user_content_groups, system_prompt=system_prompt, max_additional_attempts=max_additional_attempts-1)
             else:
                 return messages
+        
         response = full_response.choices[0].message.content.strip()            
         messages.append({"role": "assistant", "content": response})
         # print(response)
@@ -74,7 +96,7 @@ def mimic_chat(user_content_groups, model=None, system_prompt=None):
         Returns:
             messages (list): The mimic chat with multi-round conversation.
     """
-    client = OpenAI(api_key=get_api_key())
+    client = get_client()
     model = model if model else "gpt-3.5-turbo"
     messages = []
     if system_prompt:
@@ -91,7 +113,7 @@ def mimic_chat(user_content_groups, model=None, system_prompt=None):
     return messages
 
     
-def get_content_groups_from_source_groups(source_groups):
+def get_content_groups_from_source_groups(source_groups, high_detail=False):
     """
         Change the format of the input data to the format required by the OpenAI API.
         Args:
@@ -104,7 +126,7 @@ def get_content_groups_from_source_groups(source_groups):
         content_group = []
         for source in source_group:
             if os.path.exists(source):
-                content_group.append(_get_image_content_for_api(source, high_detail=False))
+                content_group.append(_get_image_content_for_api(source, high_detail=high_detail))
             else:
                 content_group.append(_get_text_content_for_api(source))
         content_groups.append(content_group)
@@ -166,13 +188,6 @@ def get_payload(content, model="gpt-4-vision-preview"):
 def get_messages_from_single_content(content, role="user"):
     return [{"role": role, "content": content}]
     
-def get_api_key():
-    with open("openai_api_key.txt", "r") as f:
-        api_key = f.read().strip()
-    if not KEY_ACTIVATED:
-        api_key = " "
-        print("WARNING: API key not ACTIVATED. Please activate it in the code.")
-    return api_key
 
 
 def encode_image(image_path):
@@ -216,6 +231,13 @@ def _get_image_content_for_api(image_path, high_detail=False):
     }
     return content
 
+import tiktoken
+def num_tokens_from_string(string: str, encoding_name: str = "cl100k_base") -> int:
+    """Returns the number of tokens in a text string."""
+    encoding = tiktoken.get_encoding(encoding_name)
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
+
 if __name__ == "__main__":
     api_key = get_api_key()
     image_path = "02300_annotated.jpg"
@@ -239,3 +261,4 @@ if __name__ == "__main__":
                 if content_component["type"] == "image_url":
                     del content_component["image_url"]
     print(conversation)
+
