@@ -25,7 +25,7 @@ import json
 import open3d as o3d
 from utils_read import read_annotation_pickles
 from render_bev import load_mesh, _render_2d_bev, take_bev_screenshot, process_mesh
-from region_matching import get_data
+from region_matching import get_data, get_position_in_mesh_render_image, is_in_poly
 import matplotlib
 import copy
 global init_item_dict
@@ -153,19 +153,6 @@ with gr.Blocks() as demo:
                      )
 
 
-    def is_in_poly(ps, poly):
-        """
-            ps: a numpy array of shape (N, 2)
-            poly: a polygon represented as a list of (x, y) tuples
-        """
-        if isinstance(ps, tuple):
-            ps = np.array([ps])
-        if len(ps.shape) == 1:
-            ps = np.expand_dims(ps, axis=0)
-        assert ps.shape[1] == 2
-        assert len(ps.shape) == 2
-        path = matplotlib.path.Path(poly)
-        return path.contains_points(ps)
 
     def get_coverage_mask(h, w, poly):
         x, y = np.meshgrid(np.arange(w), np.arange(h))
@@ -258,27 +245,6 @@ with gr.Blocks() as demo:
             return poly_image, click_evt_list, poly_done, poly_image, vertex_list, annotation_list, enable_undo, item_dict_list, store_vertex_list, 
 
 
-    def get_position_in_mesh_render_image(points, center_x, center_y, num_pixels_per_meter, photo_pixel):
-        """
-            Args:
-            points: a numpy array of shape (N, 2) IN WORLD COORDINATE
-            phote_pixel: a tuple of (h, w)
-            return: a numpy array of shape (N, 2) IN RENDER IMAGE COORDINATE, in y, x order
-        """
-        if isinstance(points, tuple):
-            points = np.array([points])
-        if len(points.shape) == 1:
-            points = np.expand_dims(points, axis=0)
-        assert points.shape[1] == 2
-        assert len(points.shape) == 2
-        dxs = points[:, 0] - center_x
-        dys = points[:, 1] - center_y
-        xs = (dxs * num_pixels_per_meter + photo_pixel[1] // 2).astype(int)
-        ys = (photo_pixel[0] // 2 - dys * num_pixels_per_meter).astype(int)
-        if len(xs) == 1:
-            xs = xs[0]
-            ys = ys[0]
-        return ys, xs
 
 
     def new_draw_dot(scene_id, img, to_rotate_clockwise_90, evt: gr.SelectData):

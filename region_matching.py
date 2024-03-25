@@ -1,41 +1,49 @@
 import numpy as np
 import json
 import cv2
+import matplotlib
 
 
-def is_in_poly(p, poly):
-    px, py = p
-    is_in = False
-    for i, corner in enumerate(poly):
-        next_i = i + 1 if i + 1 < len(poly) else 0
-        x1, y1 = corner
-        x2, y2 = poly[next_i]
-        if (x1 == px and y1 == py) or (x2 == px and y2 == py):
-            is_in = True
-            break
-        if min(y1, y2) < py <= max(y1, y2):
-            x = x1 + (py - y1) * (x2 - x1) / (y2 - y1)
-            if x == px:
-                is_in = True
-                break
-            elif x > px:
-                is_in = not is_in
-    return is_in
-def get_position_in_mesh_render_image(point, center_x, center_y, num_pixels_per_meter, photo_pixel):
+def is_in_poly(ps, poly):
+    """
+        ps: a numpy array of shape (N, 2)
+        poly: a polygon represented as a list of (x, y) tuples
+    """
+    if isinstance(ps, tuple):
+        ps = np.array([ps])
+    if len(ps.shape) == 1:
+        ps = np.expand_dims(ps, axis=0)
+    assert ps.shape[1] == 2
+    assert len(ps.shape) == 2
+    path = matplotlib.path.Path(poly)
+    return path.contains_points(ps)
 
-    dx = point[0] - center_x
-    dy = point[1] - center_y
 
-    ox = (int(num_pixels_per_meter * dx) + photo_pixel[1] // 2)
-    oy = photo_pixel[0] // 2 - (int(num_pixels_per_meter * dy))
-
-    return oy, ox
+def get_position_in_mesh_render_image(points, center_x, center_y, num_pixels_per_meter, photo_pixel):
+    """
+        Args:
+        points: a numpy array of shape (N, 2) IN WORLD COORDINATE
+        phote_pixel: a tuple of (h, w)
+        return: a numpy array of shape (N, 2) IN RENDER IMAGE COORDINATE, in y, x order
+    """
+    if isinstance(points, tuple):
+        points = np.array([points])
+    if len(points.shape) == 1:
+        points = np.expand_dims(points, axis=0)
+    assert points.shape[1] == 2
+    assert len(points.shape) == 2
+    dxs = points[:, 0] - center_x
+    dys = points[:, 1] - center_y
+    xs = (dxs * num_pixels_per_meter + photo_pixel[1] // 2).astype(int)
+    ys = (photo_pixel[0] // 2 - dys * num_pixels_per_meter).astype(int)
+    if len(xs) == 1:
+        xs = xs[0]
+        ys = ys[0]
+    return ys, xs
 
 
 def get_data(input_annotation_path):
     '''extract data from input files'''
-
-
     region_with_label_file = open(input_annotation_path, "r", encoding="UTF-8")
 
     lines = region_with_label_file.readlines()
@@ -56,10 +64,8 @@ def process_data(region_with_label, scene_id, object_ids, bboxes, center_x, cent
     print(img.shape)
 
     for region in region_with_label:
-
         poly = region['vertex']
         region['object_ids']=[]
-
         for _index in range(len(object_ids)):
             object_x = bboxes[_index][0]
             object_y = bboxes[_index][1]
@@ -68,8 +74,6 @@ def process_data(region_with_label, scene_id, object_ids, bboxes, center_x, cent
             #print(get_position_in_render_image((object_x, object_y)))
             if is_in_poly((x, y), poly):
                 region['object_ids'].append(object_ids[_index])
-                print(object_data['object_types'][_index])
-    
     show_objects_in_bev = True
     if show_objects_in_bev:
         cv2.imwrite('testing.png', img)
@@ -78,10 +82,10 @@ def process_data(region_with_label, scene_id, object_ids, bboxes, center_x, cent
 
 if __name__ == "__main__":
 
-    scene_id = '1mp3d_0000_region1'
+    scene_id = 'scene0000_00'
 
     all_scene_info = np.load('all_render_param.npy', allow_pickle=True).item()
-    region_with_label = get_data(f'data/{scene_id}/region_segmentation.txt')
+    region_with_label = get_data(f'data/{scene_id}/region_segmentation_shujutang_0，shujutang_1.txt')
     scene_info = all_scene_info[scene_id]
 
     from utils_read import read_annotation_pickles
