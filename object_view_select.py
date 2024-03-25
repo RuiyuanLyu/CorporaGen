@@ -48,50 +48,14 @@ def mmengine_track_func(func):
 
 
 @mmengine_track_func
-def paint_object_pictures_tracked(
-    bboxes,
-    object_ids,
-    object_types,
-    visible_view_object_dict,
-    extrinsics_c2w,
-    axis_align_matrix,
-    intrinsics,
-    depth_intrinsics,
-    image_paths,
-    blurry_image_ids_path,
-    output_dir,
-    output_type="paint",
-):
-    paint_object_pictures(
-        bboxes,
-        object_ids,
-        object_types,
-        visible_view_object_dict,
-        extrinsics_c2w,
-        axis_align_matrix,
-        intrinsics,
-        depth_intrinsics,
-        image_paths,
-        blurry_image_ids_path,
-        output_dir,
-        output_type,
-    )
+def paint_object_pictures_tracked(bboxes, object_ids, object_types, visible_view_object_dict,
+                                  extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint"):
+    paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix,
+                          intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type)
 
 
-def paint_object_pictures(
-    bboxes,
-    object_ids,
-    object_types,
-    visible_view_object_dict,
-    extrinsics_c2w,
-    axis_align_matrix,
-    intrinsics,
-    depth_intrinsics,
-    image_paths,
-    blurry_image_ids_path,
-    output_dir,
-    output_type="paint",
-):
+def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint",
+                          ):
     """
     Select the best views for all 3d objects (bboxs) from a set of camera positions (extrinsics) in a scene.
     Then paint the 3d bbox in each view and save the painted images to the output directory.
@@ -119,7 +83,8 @@ def paint_object_pictures(
     for image_id in blurry_image_ids:
         if image_id in visible_view_object_dict:
             visible_view_object_dict.pop(image_id)
-    visible_object_view_dict = reverse_multi2multi_mapping(visible_view_object_dict)
+    visible_object_view_dict = reverse_multi2multi_mapping(
+        visible_view_object_dict)
     view_ids = [os.path.basename(path).split(".")[0] for path in image_paths]
     extrinsics_c2w = np.matmul(axis_align_matrix, extrinsics_c2w)
     color_map = get_color_map()
@@ -127,36 +92,11 @@ def paint_object_pictures(
     depth_map_paths = [
         os.path.join(image_dir, view_id + ".png") for view_id in view_ids
     ]
-    _paint_object_pictures(
-        bboxes,
-        object_ids,
-        object_types,
-        visible_object_view_dict,
-        extrinsics_c2w,
-        view_ids,
-        intrinsics,
-        depth_intrinsics,
-        depth_map_paths,
-        color_map,
-        image_dir,
-        output_dir,
-        output_type=output_type,
-    )
+    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, view_ids,
+                           intrinsics, depth_intrinsics, depth_map_paths, color_map, image_dir, output_dir, output_type=output_type)
 
 
-def paint_object_pictures_path(
-    object_json_path,
-    visibility_json_path,
-    extrinsic_dir,
-    axis_align_matrix_path,
-    intrinsic_path,
-    depth_intrinsic_path,
-    depth_map_dir,
-    image_dir,
-    blurry_image_id_path,
-    output_dir,
-    output_type="paint",
-):
+def paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic_dir, axis_align_matrix_path, intrinsic_path, depth_intrinsic_path, depth_map_dir, image_dir, blurry_image_id_path, output_dir, output_type="paint"):
     """
     Select the best views for all 3d objects (bboxs) from a set of camera positions (extrinsics) in a scene.
     Then paint the 3d bbox in each view and save the painted images to the output directory.
@@ -175,7 +115,8 @@ def paint_object_pictures_path(
     bboxes, object_ids, object_types = read_bboxes_json(
         object_json_path, return_id=True, return_type=True
     )
-    bboxes = get_9dof_boxes(bboxes, "xyz", (0, 0, 192))  # convert to o3d format
+    bboxes = get_9dof_boxes(bboxes, "xyz", (0, 0, 192)
+                            )  # convert to o3d format
     visible_view_object_dict = get_visible_objects_dict(
         object_json_path,
         extrinsic_dir,
@@ -191,9 +132,12 @@ def paint_object_pictures_path(
     for image_id in blurry_image_ids:
         if image_id in visible_view_object_dict:
             visible_view_object_dict.pop(image_id)
-    visible_object_view_dict = reverse_multi2multi_mapping(visible_view_object_dict)
-    extrinsics_c2w, view_ids = read_extrinsic_dir(extrinsic_dir)  # c2w', shape N, 4, 4
-    axis_align_matrix = read_extrinsic(axis_align_matrix_path)  # w'2w, shape 4, 4
+    visible_object_view_dict = reverse_multi2multi_mapping(
+        visible_view_object_dict)
+    extrinsics_c2w, view_ids = read_extrinsic_dir(
+        extrinsic_dir)  # c2w', shape N, 4, 4
+    axis_align_matrix = read_extrinsic(
+        axis_align_matrix_path)  # w'2w, shape 4, 4
     extrinsics_c2w = np.matmul(axis_align_matrix, extrinsics_c2w)  # c2w
     intrinsic = read_intrinsic(intrinsic_path)  # shape 4, 4
     depth_intrinsic = read_intrinsic(depth_intrinsic_path)  # shape 4, 4
@@ -201,39 +145,11 @@ def paint_object_pictures_path(
         os.path.join(image_dir, view_id + ".png") for view_id in view_ids
     ]
     color_map = get_color_map()
-    _paint_object_pictures(
-        bboxes,
-        object_ids,
-        object_types,
-        visible_object_view_dict,
-        extrinsics_c2w,
-        view_ids,
-        intrinsic,
-        depth_intrinsic,
-        depth_map_paths,
-        color_map,
-        image_dir,
-        output_dir,
-        output_type=output_type,
-    )
+    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, view_ids,
+                           intrinsic, depth_intrinsic, depth_map_paths, color_map, image_dir, output_dir, output_type=output_type)
 
 
-def _paint_object_pictures(
-    bboxes,
-    object_ids,
-    object_types,
-    visible_object_view_dict,
-    extrinsics_c2w,
-    view_ids,
-    intrinsics,
-    depth_intrinsics,
-    depth_map_paths,
-    color_map,
-    image_dir,
-    output_dir,
-    skip_existing=True,
-    output_type="paint",
-):
+def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, view_ids, intrinsics, depth_intrinsics, depth_map_paths, color_map, image_dir, output_dir, skip_existing=True, output_type="paint"):
     assert output_type in ["paint", "crop"], "unsupported output type {}".format(
         output_type
     )
@@ -245,7 +161,8 @@ def _paint_object_pictures(
             f for f in files_and_folders if os.path.isfile(os.path.join(output_dir, f))
         ]
         num_files = len(files)
-        valid_objects = [obj for obj in object_types if obj not in EXCLUDED_OBJECTS]
+        valid_objects = [
+            obj for obj in object_types if obj not in EXCLUDED_OBJECTS]
         if num_files >= len(valid_objects):
             return
     shutil.rmtree(output_dir)
@@ -264,7 +181,8 @@ def _paint_object_pictures(
             continue
         visible_views = visible_object_view_dict.get(int(object_id), [])
         if len(visible_views) == 0:
-            file_name = str(object_id).zfill(3) + "_" + object_type + "_placeholder.txt"
+            file_name = str(object_id).zfill(3) + "_" + \
+                object_type + "_placeholder.txt"
             with open(os.path.join(output_dir, file_name), "w") as f:
                 f.write("Object not visible in any view.")
             continue
@@ -286,14 +204,16 @@ def _paint_object_pictures(
             selected_depth_maps,
         )
         if best_view_index is None:
-            file_name = str(object_id).zfill(3) + "_" + object_type + "_placeholder.txt"
+            file_name = str(object_id).zfill(3) + "_" + \
+                object_type + "_placeholder.txt"
             with open(os.path.join(output_dir, file_name), "w") as f:
                 f.write("Object not visible in any view.")
             continue
         best_view_index = view_ids.index(visible_views[best_view_index])
         best_view_extrinsic_c2w = extrinsics_c2w[best_view_index]
         best_view_intrinsic = intrinsics[best_view_index]
-        img_in_path = os.path.join(image_dir, view_ids[best_view_index] + ".jpg")
+        img_in_path = os.path.join(
+            image_dir, view_ids[best_view_index] + ".jpg")
         img_out_path = os.path.join(
             output_dir,
             str(object_id).zfill(3)
@@ -311,21 +231,15 @@ def _paint_object_pictures(
         label = str(object_id) + " " + object_type
         if output_type == "paint":
             new_img, _ = draw_box3d_on_img(
-                img,
-                bbox,
-                color,
-                label,
-                best_view_extrinsic_c2w,
-                best_view_intrinsic,
-                ignore_outside=False,
-            )
+                img, bbox, color, label, best_view_extrinsic_c2w, best_view_intrinsic, ignore_outside=False)
         elif output_type == "crop":
             new_img = crop_box_from_img(
                 img, bbox, best_view_extrinsic_c2w, best_view_intrinsic
             )
             if new_img is None:
                 file_name = (
-                    str(object_id).zfill(3) + "_" + object_type + "_placeholder.txt"
+                    str(object_id).zfill(3) + "_" +
+                    object_type + "_placeholder.txt"
                 )
                 with open(os.path.join(output_dir, file_name), "w") as f:
                     f.write("Object cannot be cropped properly.")
@@ -337,15 +251,7 @@ def _paint_object_pictures(
             )
 
 
-def get_visible_objects_dict(
-    object_json_path,
-    extrinsic_dir,
-    axis_align_matrix_path,
-    depth_intrinsic_path,
-    depth_map_dir,
-    output_path,
-    skip_existing=True,
-):
+def get_visible_objects_dict(object_json_path, extrinsic_dir, axis_align_matrix_path, depth_intrinsic_path, depth_map_dir, output_path, skip_existing=True):
     """
     For each camera position (extrinsics), get the visible 3d objects (bboxs).
     Args:
@@ -364,9 +270,12 @@ def get_visible_objects_dict(
     bboxes, object_ids, object_types = read_bboxes_json(
         object_json_path, return_id=True, return_type=True
     )
-    bboxes = get_9dof_boxes(bboxes, "xyz", (0, 0, 192))  # convert to o3d format
-    extrinsics_c2w, view_ids = read_extrinsic_dir(extrinsic_dir)  # c2w', shape N, 4, 4
-    axis_align_matrix = read_extrinsic(axis_align_matrix_path)  # w'2w, shape 4, 4
+    bboxes = get_9dof_boxes(bboxes, "xyz", (0, 0, 192)
+                            )  # convert to o3d format
+    extrinsics_c2w, view_ids = read_extrinsic_dir(
+        extrinsic_dir)  # c2w', shape N, 4, 4
+    axis_align_matrix = read_extrinsic(
+        axis_align_matrix_path)  # w'2w, shape 4, 4
     extrinsics_c2w = np.matmul(axis_align_matrix, extrinsics_c2w)  # c2w
     depth_intrinsic = read_intrinsic(depth_intrinsic_path)  # shape 4, 4
     visible_objects_dict = {}
@@ -376,14 +285,8 @@ def get_visible_objects_dict(
         view_id = view_ids[i]
         depth_path = os.path.join(depth_map_dir, view_id + ".png")
         depth_map = read_depth_map(depth_path)  # shape (height, width)
-        visibles = check_bboxes_visibility(
-            bboxes,
-            depth_map,
-            depth_intrinsic,
-            np.linalg.inv(extrinsic_c2w),
-            corners_only=False,
-            granularity=0.1,
-        )
+        visibles = check_bboxes_visibility(bboxes, depth_map, depth_intrinsic, np.linalg.inv(
+            extrinsic_c2w), corners_only=False, granularity=0.1)
         visible_ids = object_ids[visibles]
         visible_objects_dict[view_id] = visible_ids.tolist()
         pbar.set_description(
@@ -418,7 +321,8 @@ def get_best_view(o3d_bbox, extrinsics_c2w, depth_intrinsics, depth_maps):
         extrinsic_c2w = extrinsics_c2w[i]
         depth_intrinsic = depth_intrinsics[i]
         depth_map = depth_maps[i]
-        pts = depth_intrinsic @ np.linalg.inv(extrinsic_c2w) @ points.T  # shape (4, n)
+        # shape (4, n)
+        pts = depth_intrinsic @ np.linalg.inv(extrinsic_c2w) @ points.T
         xs, ys, zs = pts[0, :], pts[1, :], pts[2, :]
         if zs.min() < 1e-6:
             areas.append(0)
@@ -545,7 +449,8 @@ def get_blurry_image_ids(
     variance_dict = {}
     if save_variance_path is None:
         save_variance_dir = os.path.dirname(save_path)
-        save_variance_path = os.path.join(save_variance_dir, "image_variances.json")
+        save_variance_path = os.path.join(
+            save_variance_dir, "image_variances.json")
     if os.path.exists(save_variance_path):
         variance_dict = load_json(save_variance_path)
     pbar = tqdm(range(len(paths)))
@@ -582,13 +487,7 @@ def get_blurry_image_ids(
     return blurry_ids
 
 
-def get_blurry_image_ids_dir(
-    image_dir,
-    save_path=None,
-    threshold=150,
-    skip_existing=True,
-    save_variance_path=None,
-):
+def get_blurry_image_ids_dir(image_dir, save_path=None, threshold=150, skip_existing=True, save_variance_path=None):
     """
     Returns a list of image ids that are blurry.
     Args:
@@ -608,13 +507,12 @@ def get_blurry_image_ids_dir(
             image_id = file_name[:-4]
             image_path = os.path.join(image_dir, file_name)
             paths.append(image_path)
-    blurry_ids = get_blurry_image_ids(
-        paths,
-        save_path=save_path,
-        threshold=threshold,
-        skip_existing=False,
-        save_variance_path=save_variance_path,
-    )
+    blurry_ids = get_blurry_image_ids(paths,
+                                      save_path=save_path,
+                                      threshold=threshold,
+                                      skip_existing=False,
+                                      save_variance_path=save_variance_path,
+                                      )
     return blurry_ids
 
 
@@ -652,13 +550,16 @@ def get_local_maxima_indices(data, window_size=3):
 
 def single_scene_test_local():
     object_json_path = f"./example_data/label/main_MDJH13.json"  # need to exist
-    visibility_json_path = f"./example_data/anno_lang/visible_objects.json"  # can be generated by this script
+    # can be generated by this script
+    visibility_json_path = f"./example_data/anno_lang/visible_objects.json"
     extrinsic_dir = "./example_data/posed_images"  # need to exist
     axis_align_matrix_path = "./example_data/label/rot_matrix.npy"  # need to exist
     intrinsic_path = f"./example_data/posed_images/intrinsic.txt"  # need to exist
     image_dir = "./example_data/posed_images"  # need to exist
-    blurry_image_id_path = "./example_data/anno_lang/blurry_image_ids.json"  # can be generated by this script
-    save_variance_path = "./example_data/anno_lang/image_variances.json"  # can be generated by this script
+    # can be generated by this script
+    blurry_image_id_path = "./example_data/anno_lang/blurry_image_ids.json"
+    # can be generated by this script
+    save_variance_path = "./example_data/anno_lang/image_variances.json"
     output_dir = "./example_data/anno_lang/painted_images"  # need to exist
     depth_intrinsic_path = (
         f"./example_data/posed_images/depth_intrinsic.txt"  # need to exist
@@ -720,7 +621,8 @@ def single_scene_test_by_pickle():
         real_image_paths = []
         for image_path in image_paths:
             image_id = os.path.basename(image_path)[:-4]
-            real_image_paths.append(os.path.join(real_image_dir, image_id + ".jpg"))
+            real_image_paths.append(os.path.join(
+                real_image_dir, image_id + ".jpg"))
         print(f"Real image path example: {real_image_paths[0]}")
         blurry_image_ids_path = "./example_data/anno_lang/blurry_image_ids.json"
         # output_dir = './example_data/anno_lang/painted_images'
@@ -764,7 +666,8 @@ def select_for_all_scenes_single_thread():
         image_paths = anno["image_paths"]
 
         dataset, _, scene_id, _ = image_paths[0].split(".")[0].split("/")
-        pbar.set_description("Painting for {} scene {}".format(dataset, scene_id))
+        pbar.set_description(
+            "Painting for {} scene {}".format(dataset, scene_id))
         image_paths = [
             os.path.join(
                 data_real_dir,
@@ -779,7 +682,8 @@ def select_for_all_scenes_single_thread():
         )
         # output_dir = os.path.join(out_real_dir, dataset, scene_id, 'painted_objects')
         # paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint")
-        output_dir = os.path.join(out_real_dir, dataset, scene_id, "cropped_objects")
+        output_dir = os.path.join(
+            out_real_dir, dataset, scene_id, "cropped_objects")
         paint_object_pictures(
             bboxes,
             object_ids,
@@ -832,7 +736,8 @@ def select_for_all_scenes_multi_threads():
         )
         # output_dir = os.path.join(out_real_dir, dataset, scene_id, 'painted_objects')
         # paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint")
-        output_dir = os.path.join(out_real_dir, dataset, scene_id, "cropped_objects")
+        output_dir = os.path.join(
+            out_real_dir, dataset, scene_id, "cropped_objects")
 
         input = (
             bboxes,
