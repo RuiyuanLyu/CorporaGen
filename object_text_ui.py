@@ -5,6 +5,8 @@ import numpy as np
 from object_text_anno import check_annotation_validity, map_choice_to_bool, map_choice_to_text
 from utils_read import load_json
 
+MAIN_CORPORA_STRING = "corpora_object_sharedcaptioner_crop"
+SUPP_CORPORA_STRING = "corpora_object_cogvlm_crop"
 QUESTIONS = {
     "meta": "这段文字是否在尝试描述框中的物体？",
     "visual_info_sufficient": "选择的照片提供的信息是否足以对该物体进行描述？（信息不足的例子：遮挡太多/过于模糊）",
@@ -28,7 +30,7 @@ def get_valid_directories():
     """
     valid_directories = []
     for dir_path, dir_names, file_names in os.walk(DATA_ROOT):
-        if any(name.startswith("corpora_object") for name in dir_names) and "painted_objects" in dir_names:
+        if any(name.startswith(MAIN_CORPORA_STRING) for name in dir_names) and "painted_objects" in dir_names:
             valid_directories.append(dir_path)
     return valid_directories
 
@@ -84,7 +86,7 @@ with gr.Blocks() as demo:
     user_name.blur(fn=check_user_name_validity, inputs=[user_name], outputs=[user_name_is_valid])
 
     def update_previous_user_choices(directory, user_name):
-        dir_to_view = os.path.join(directory, "corpora_object")
+        dir_to_view = os.path.join(directory, MAIN_CORPORA_STRING)
         previous_users = [name for name in os.listdir(dir_to_view) if os.path.isdir(os.path.join(dir_to_view, name))]
         previous_users = [name.strip("user_") for name in previous_users]
         if len(previous_users) == 0 or not user_name in SUPER_USERNAMES:
@@ -99,9 +101,9 @@ with gr.Blocks() as demo:
         """
         valid_objects = []
         if previous_user:
-            dir_to_load = os.path.join(directory, "corpora_object", f"user_{previous_user}")
+            dir_to_load = os.path.join(directory, MAIN_CORPORA_STRING, f"user_{previous_user}")
         else:
-            dir_to_load = os.path.join(directory, "corpora_object")
+            dir_to_load = os.path.join(directory, MAIN_CORPORA_STRING)
         for json_file in os.listdir(dir_to_load):
             if json_file.endswith(".json"):
                 annotation = load_json(os.path.join(dir_to_load, json_file))
@@ -143,14 +145,14 @@ with gr.Blocks() as demo:
         """
         Returns the description and image path of the given object.
         """
-        json_file = os.path.join(directory, "corpora_object", f"{object_name}.json")
-        user_json_file = os.path.join(directory, "corpora_object", f"user_{user_name}", f"{object_name}.json")
+        json_file = os.path.join(directory, MAIN_CORPORA_STRING, f"{object_name}.json")
+        user_json_file = os.path.join(directory, MAIN_CORPORA_STRING, f"user_{user_name}", f"{object_name}.json")
         if os.path.exists(user_json_file):
             json_file = user_json_file
         if previous_user:
-            json_file = os.path.join(directory, "corpora_object", f"user_{previous_user}", f"{object_name}.json")
+            json_file = os.path.join(directory, MAIN_CORPORA_STRING, f"user_{previous_user}", f"{object_name}.json")
         original_description, translated_description, warning_text = get_description(json_file)
-        backup_json_file = os.path.join(directory, "corpora_object_gpt4v", f"{object_name}.json")
+        backup_json_file = os.path.join(directory, SUPP_CORPORA_STRING, f"{object_name}.json")
         if os.path.exists(backup_json_file):
             backup_description, backup_translated_description, _ = get_description(backup_json_file, is_aux=True)
             backup_description = gr.Textbox(label="Backup Description", value=backup_description, visible=True, interactive=False)
@@ -197,12 +199,12 @@ with gr.Blocks() as demo:
         Parses the given description. Returns a list of gr.Textbox components with the parsed description.
         """
         parsed = description.strip().split('。')
-        parsed = [p.strip(" ") for p in parsed]
+        parsed = [p.strip() for p in parsed]
         parsed = [p + "。" for p in parsed if p]
         num_textboxes = min(len(parsed), max_textboxes)
         out = []
         for i in range(num_textboxes):
-            out.append(gr.Textbox(parsed[i], visible=True, interactive=True))
+            out.append(gr.Textbox(parsed[i], show_label=False, visible=True, interactive=True))
         for i in range(num_textboxes, max_textboxes):
             out.append(gr.Textbox("", visible=False))
         return out
@@ -227,7 +229,7 @@ with gr.Blocks() as demo:
         """
         Saves the annotations to the given directory.
         """
-        json_file_path_raw = os.path.join(directory, "corpora_object", f"{object_name}.json")
+        json_file_path_raw = os.path.join(directory, MAIN_CORPORA_STRING, f"{object_name}.json")
         annotation = load_json(json_file_path_raw)
         annotation_to_save = {}
         assert isinstance(annotation, dict), f"Invalid annotation type: {type(annotation)}"
@@ -251,7 +253,7 @@ with gr.Blocks() as demo:
                 accuracy_dict[key] = "False"
         annotation_to_save["accuracy_dict"] = accuracy_dict
         
-        json_file_path_to_save = os.path.join(directory, "corpora_object", f"user_{user_name}" , f"{object_name}.json")
+        json_file_path_to_save = os.path.join(directory, MAIN_CORPORA_STRING, f"user_{user_name}" , f"{object_name}.json")
         os.makedirs(os.path.dirname(json_file_path_to_save), exist_ok=True)
         with open(json_file_path_to_save, "w", encoding="utf-8") as f:
             json.dump(annotation_to_save, f, ensure_ascii=False, indent=4)

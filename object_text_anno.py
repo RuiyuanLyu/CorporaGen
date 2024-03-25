@@ -1,11 +1,11 @@
 import os
 import json
 from tqdm import tqdm
-from openai_api import mimic_chat, mimic_chat_budget, get_content_groups_from_source_groups
+from openai_api import mimic_chat, mimic_chat_budget, get_content_groups_from_source_groups, num_tokens_from_string, get_response
 from utils_read import load_json
 
 
-def annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=True, max_additional_attempts=0):
+def annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=True, max_additional_attempts=0, pick_ids=None, with_highlight=True):
     """
         Uses GPT-4 to annotate objects in a directory of images.
         Args:
@@ -14,17 +14,23 @@ def annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, for
             skip_existing: True if existing annotations should be skipped.
             force_invalid: True if existing invalid annotations should be forced to be re-annotated.
             max_additional_attempts: An integer of the maximum number of additional attempts to generate a valid annotation.
+            pick_ids: A list of object ids to be annotated. Set to None to annotate all objects in the directory.
+            with_highlight: True if the image is painted with a highlighted box. (as opposed to the object is cropped from the image)
         Returns:
             A dictionary of object annotations, where the keys are object ids and the values are lists of object descriptions.
     """
     file_names = []
+    if pick_ids is not None:
+        pick_ids = set(pick_ids)
     for file_name in os.listdir(image_dir):
         if not file_name.endswith(".jpg"):
             continue
         object_id, object_type, image_id = file_name.split("_") # example file name: 068_chair_00232.jpg
         # the line is used to prevent unwanted files from being annotated
+        if pick_ids is not None and int(object_id) not in pick_ids:
+            continue
         file_names.append(file_name)
-    inputs = [(file_name, image_dir, output_dir, skip_existing, force_invalid, max_additional_attempts) for file_name in file_names]
+    inputs = [(file_name, image_dir, output_dir, skip_existing, force_invalid, max_additional_attempts, with_highlight) for file_name in file_names]
     import mmengine
     results = mmengine.track_parallel_progress(annotate_object_parallel, inputs, nproc=8)
     return results
@@ -32,7 +38,7 @@ def annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, for
 def annotate_object_parallel(inputs):
     return annotate_object(*inputs)
 
-def annotate_object(file_name, image_dir, output_dir, skip_existing, force_invalid, max_additional_attempts):
+def annotate_object(file_name, image_dir, output_dir, skip_existing, force_invalid, max_additional_attempts, with_highlight=True):
     object_id, object_type, image_id = file_name.split(".")[0].split("_")
     image_path = os.path.join(image_dir, file_name)
     json_path = os.path.join(output_dir, f"{object_id}_{object_type}_{image_id}.json")
@@ -42,17 +48,18 @@ def annotate_object(file_name, image_dir, output_dir, skip_existing, force_inval
         if is_valid or not force_invalid:
             print(f"Skipping existing annotation for object {object_id}")
             return annotation
-    annotation = annotate_object_by_image(image_path, max_additional_attempts)
+    annotation = annotate_object_by_image(image_path, max_additional_attempts, with_highlight=with_highlight)
     with open(json_path, "w") as f:
         json.dump(annotation, f, indent=4)
     return annotation
 
-def annotate_object_by_image(image_path, max_additional_attempts=0):
+def annotate_object_by_image(image_path, max_additional_attempts=0, with_highlight=True):
     """
         Uses GPT-4 to annotate an object in an image.
         Args:
             image_path: A string of the path to the image.
             max_additional_attempts: An integer of the maximum number of additional attempts to generate a valid annotation.
+            with_highlight: True if the image is painted with a highlighted box. (as opposed to the object is cropped from the image)
         Returns:
             A dict of plain text descriptions.
             "original_description": A string of the original description.
@@ -65,13 +72,21 @@ def annotate_object_by_image(image_path, max_additional_attempts=0):
     object_id, object_type, image_id = image_name.split(".")[0].split("_")
     
     system_prompt = "You are an expert interior designer, who is very sensitive at room furnitures and their placements. You are visiting some ordinary rooms that conform to the daily life of an average person. The expected reader is a high-school student with average knowledge of furniture design."
-    user_message1 = "Please describe the {} in the highlighted box, mainly including the following aspects: appearance (shape, color), material, size (e.g., larger or smaller compared to similar items), condition (e.g., whether a door is open or closed), placement (e.g.,vertical/leaning/slanting/stacked), functionality (compared to similar items), and design features (e.g., whether a chair has armrests/backrest). Please aim for a roughly 300-word description".format(object_type).replace("highlighted box", "image")
+    if with_highlight:
+        user_message1 = "Please describe the {} in the highlighted box,".format(object_type)
+    else:
+        user_message1 = "Please describe the {} in the middle of the image,".format(object_type)
+    user_message1 += " mainly including the following aspects: appearance (shape, color), material, size (e.g., larger or smaller compared to similar items), condition (e.g., whether a door is open or closed), placement (e.g.,vertical/leaning/slanting/stacked), functionality (compared to similar items), and design features (e.g., whether a chair has armrests/backrest). Please aim for a roughly 300-word description,"
+    if with_highlight:
+        user_message1 += " and do not mention the highlight box in the description."
+    else:
+        user_message1 += " and do not use expressions like 'the middle of the image' in the description."
     user_message2 = "Please omit the plain and ordinary parts of the description, only retaining the unique characteristics of the objects; rewrite and recombine the retained descriptions to make the language flow naturally, without being too rigid. Make the description about 150 words."
     source_groups = [
         [user_message1, image_path],
         [user_message2]
     ]
-    content_groups = get_content_groups_from_source_groups(source_groups)
+    content_groups = get_content_groups_from_source_groups(source_groups, high_detail=False)
     # conversation = mimic_chat(content_groups, model="gpt-4-vision-preview", system_prompt=system_prompt)
     conversation = mimic_chat_budget(content_groups, system_prompt=system_prompt, max_additional_attempts=max_additional_attempts)
     raw_annotation = []
@@ -110,6 +125,19 @@ def translate(text, src_lang="English", tgt_lang="Chinese"):
     for message in conversation:
         if message["role"] == "assistant":
             return message["content"]
+
+def summarize(text):
+    system_prompt = "You are an expert interior designer, who is very sensitive at room furnitures and their placements. You are visiting some ordinary rooms that conform to the daily life of an average person. The expected reader is a high-school student with average knowledge of furniture design."
+    user_message1 = "Please describe the object in the middle of the image, mainly including the following aspects: appearance (shape, color), material, size (e.g., larger or smaller compared to similar items), condition (e.g., whether a door is open or closed), placement (e.g.,vertical/leaning/slanting/stacked), functionality (compared to similar items), and design features (e.g., whether a chair has armrests/backrest). Please aim for a roughly 300-word description."
+    user_message2 = "Please omit the plain and ordinary parts of the description, only retaining the unique characteristics of the objects; rewrite and recombine the retained descriptions to make the language flow naturally, without being too rigid. Make the description about 150 words."
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_message1},
+        {"role": "assistant", "content": text},
+        {"role": "user", "content": user_message2}
+    ]
+
+    return get_response(messages, model="gpt-3.5-turbo-0125")
 
 def check_annotation_validity_path(json_dir):
     valid_dict = {}
@@ -245,7 +273,7 @@ def check_annotation_quality(annotations, display_stats=True):
         print("Overall quality meta*other: {:.2f}%".format((quality_dict["meta"] * sum/(len(quality_dict)-2)) * 100))
     return quality_dict
 
-def translate_annotation_from_file(json_path, src_lang="English", tgt_lang="Chinese"):
+def translate_annotation_from_file(json_path, src_lang="English", tgt_lang="Chinese", force_translate=False):
     """
         Translates the "original_description" field of an annotation from a file.
         Returns:
@@ -257,7 +285,7 @@ def translate_annotation_from_file(json_path, src_lang="English", tgt_lang="Chin
     is_valid, error_message = check_annotation_validity(annotation)
     if not is_valid:
         return
-    if "translated_description" in annotation:
+    if "translated_description" in annotation and not force_translate:
         return annotation
     annotation_to_translate = annotation["original_description"]
     if "simplified_description" in annotation:
@@ -271,11 +299,32 @@ def translate_annotation_from_file(json_path, src_lang="English", tgt_lang="Chin
 def translate_annotation_from_file_parallel(inputs):
     return translate_annotation_from_file(*inputs)
 
+def summarize_annotation_from_file(json_path, force_summarize=False):
+    if not json_path.endswith(".json"):
+        return
+    annotation = load_json(json_path)
+    is_valid, error_message = check_annotation_validity(annotation)
+    # if not is_valid:
+    #     return
+    if num_tokens_from_string(annotation["original_description"]) < 150:
+        return 
+    if "simplified_description" in annotation and not force_summarize:
+        return annotation
+    text = annotation["original_description"]
+    summary = summarize(text)
+    annotation["simplified_description"] = summary
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(annotation, f, indent=4)
+    return annotation
+
+def summarize_annotation_from_file_parallel(inputs):
+    return summarize_annotation_from_file(*inputs)
+
 if __name__ == "__main__":
     DATA_ROOT = "./data"
     SCENE_ID = "scene0000_00"
-    image_dir = os.path.join(DATA_ROOT, SCENE_ID, "cropped_objects")
-    output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object_cogvlm_crop")
+    image_dir = os.path.join(DATA_ROOT, SCENE_ID, "painted_objects")
+    output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object_XComposer2_crop/user_test")
     os.makedirs(output_dir, exist_ok=True)
     # output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object_gpt4v_paint")
     # output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object_gpt4v_crop")
@@ -283,22 +332,33 @@ if __name__ == "__main__":
     # os.makedirs(output_dir, exist_ok=True)
 
     ###################################################################
-    # Annotation usage here.
-    # annotations = annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=False, max_additional_attempts=1)
+    ## Annotation usage here.
+    # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
+    # annotations = annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=True, max_additional_attempts=1, pick_ids = my_ids, with_highlight=True)
     # check_annotation_validity_path(output_dir)
 
     ##################################################################
+    ## Summarization usage here.
+    # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
+    # my_ids = set(my_ids)
+    # file_names = [file for file in os.listdir(output_dir) if file.endswith(".json") and int(file.split("_")[0]) in my_ids]
+    # json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
+    # inputs = [(json_path, True) for json_path in json_paths]
+    # import mmengine
+    # results = mmengine.track_parallel_progress(summarize_annotation_from_file_parallel, inputs, nproc=8)
+
+    ##################################################################
     # Translate usage here.
-    my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
-    my_ids = set(my_ids)
-    file_names = [file for file in os.listdir(output_dir) if int(file.split("_")[0]) in my_ids and file.endswith(".json")]
-    json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
-    inputs = [(json_path, "English", "Chinese") for json_path in json_paths]
-    import mmengine
-    results = mmengine.track_parallel_progress(translate_annotation_from_file_parallel, inputs, nproc=8)
+    # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
+    # my_ids = set(my_ids)
+    # file_names = [file for file in os.listdir(output_dir) if file.endswith(".json") and int(file.split("_")[0]) in my_ids]
+    # json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
+    # inputs = [(json_path, "English", "Chinese", True) for json_path in json_paths]
+    # import mmengine
+    # results = mmengine.track_parallel_progress(translate_annotation_from_file_parallel, inputs, nproc=8)
 
     ###################################################################
-    # Quality check usage here.
+    ## Quality check usage here.
     # annotations = []
     # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
     # my_ids = set(my_ids)
@@ -313,7 +373,7 @@ if __name__ == "__main__":
     # print(quality_dict)
 
     ###################################################################
-    # Another quality check usage here.
+    ## Another quality check usage here.
     # annotations = []
     # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
     # my_ids = set(my_ids)
