@@ -5,14 +5,16 @@ data
 data/
 data_zip/
 region_annos/
-data_link
 openai_api_key.txt
+selected_scenes/
+
 
 **.pkl
 **.png
 **.jpg
 **.jpeg
 **.pyc
+*counts.csv
 data.zip
 
 **testing**
