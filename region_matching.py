@@ -44,9 +44,8 @@ def get_position_in_mesh_render_image(points, center_x, center_y, num_pixels_per
 
 def get_data(input_annotation_path):
     '''extract data from input files'''
-    region_with_label_file = open(input_annotation_path, "r", encoding="UTF-8")
-
-    lines = region_with_label_file.readlines()
+    with open(input_annotation_path, "r", encoding="UTF-8") as f:
+        lines = f.readlines()
     s = ''
     for l in lines[0]:
         if l == "'":
@@ -54,7 +53,6 @@ def get_data(input_annotation_path):
         else:
             s += l
     region_with_label = json.loads(s)
-
     return region_with_label
 
 def process_data(region_with_label, scene_id, object_ids, bboxes, center_x, center_y, num_pixels_per_meter):
