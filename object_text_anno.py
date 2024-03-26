@@ -25,9 +25,7 @@ def annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, for
     for file_name in os.listdir(image_dir):
         if not file_name.endswith(".jpg"):
             continue
-        if len(file_name.split("_"))>3:
-            file_name = "_".join(file_name.split("_")[:3]) + ".jpg"
-        object_id, object_type, image_id = file_name.split("_") # example file name: 068_chair_00232.jpg
+        object_id = file_name.split("_")[0] # example file name: 068_chair_00232.jpg
         # the line is used to prevent unwanted files from being annotated
         if pick_ids is not None and int(object_id) not in pick_ids:
             continue
