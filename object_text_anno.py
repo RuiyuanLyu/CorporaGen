@@ -25,6 +25,8 @@ def annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, for
     for file_name in os.listdir(image_dir):
         if not file_name.endswith(".jpg"):
             continue
+        if len(file_name.split("_"))>3:
+            file_name = "_".join(file_name.split("_")[:3]) + ".jpg"
         object_id, object_type, image_id = file_name.split("_") # example file name: 068_chair_00232.jpg
         # the line is used to prevent unwanted files from being annotated
         if pick_ids is not None and int(object_id) not in pick_ids:
@@ -32,7 +34,7 @@ def annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, for
         file_names.append(file_name)
     inputs = [(file_name, image_dir, output_dir, skip_existing, force_invalid, max_additional_attempts, with_highlight) for file_name in file_names]
     import mmengine
-    results = mmengine.track_parallel_progress(annotate_object_parallel, inputs, nproc=8)
+    results = mmengine.track_parallel_progress(annotate_object_parallel, inputs, nproc=16)
     return results
 
 def annotate_object_parallel(inputs):
@@ -285,11 +287,13 @@ def translate_annotation_from_file(json_path, src_lang="English", tgt_lang="Chin
     is_valid, error_message = check_annotation_validity(annotation)
     if not is_valid:
         return
-    if "translated_description" in annotation and not force_translate:
+    if "translated_description" in annotation and len(annotation["translated_description"]) > 1 and not force_translate:
         return annotation
     annotation_to_translate = annotation["original_description"]
     if "simplified_description" in annotation:
         annotation_to_translate = annotation["simplified_description"]
+    if len(annotation_to_translate) <= 1:
+        return
     translated_description = translate(annotation_to_translate, src_lang=src_lang, tgt_lang=tgt_lang)
     annotation["translated_description"] = translated_description
     with open(json_path, "w", encoding="utf-8") as f:
@@ -322,10 +326,11 @@ def summarize_annotation_from_file_parallel(inputs):
 
 if __name__ == "__main__":
     DATA_ROOT = "./data"
-    SCENE_ID = "scene0000_00"
-    image_dir = os.path.join(DATA_ROOT, SCENE_ID, "painted_objects")
-    output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object_XComposer2_crop/user_test")
-    os.makedirs(output_dir, exist_ok=True)
+    scene_ids = ["1mp3d_0001_region8", "1mp3d_0002_region23", "3rscan0138", "3rscan0036", "scene0026_00", "scene0094_00", "scene0147_00"]
+    # SCENE_ID = "scene0000_00"
+    # image_dir = os.path.join(DATA_ROOT, SCENE_ID, "painted_objects")
+    # output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object_XComposer2_crop/user_test")
+    # os.makedirs(output_dir, exist_ok=True)
     # output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object_gpt4v_paint")
     # output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object_gpt4v_crop")
     # output_dir = os.path.join(DATA_ROOT, SCENE_ID, "corpora_object_cogvlm_crop")
@@ -334,7 +339,12 @@ if __name__ == "__main__":
     ###################################################################
     ## Annotation usage here.
     # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
-    # annotations = annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=True, max_additional_attempts=1, pick_ids = my_ids, with_highlight=True)
+    # for scene_id in scene_ids:
+    #     image_dir = os.path.join(DATA_ROOT, scene_id, "painted_objects")
+    #     output_dir = os.path.join(DATA_ROOT, scene_id, "corpora_object_gpt4v_paint_highdetail")
+    #     os.makedirs(output_dir, exist_ok=True)
+    #     annotations = annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=False, max_additional_attempts=1, pick_ids = None, with_highlight=True)
+    # ATTENTION: MODIFY with_highlight 
     # check_annotation_validity_path(output_dir)
 
     ##################################################################
@@ -342,21 +352,26 @@ if __name__ == "__main__":
     # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
     # my_ids = set(my_ids)
     # file_names = [file for file in os.listdir(output_dir) if file.endswith(".json") and int(file.split("_")[0]) in my_ids]
-    # json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
-    # inputs = [(json_path, True) for json_path in json_paths]
-    # import mmengine
-    # results = mmengine.track_parallel_progress(summarize_annotation_from_file_parallel, inputs, nproc=8)
+    for scene_id in scene_ids:
+        output_dir = os.path.join(DATA_ROOT, scene_id, "corpora_object_XComposer2")
+        file_names = [file for file in os.listdir(output_dir) if file.endswith(".json")]
+        json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
+        inputs = [(json_path, False) for json_path in json_paths]
+        import mmengine
+        results = mmengine.track_parallel_progress(summarize_annotation_from_file_parallel, inputs, nproc=16)
 
     ##################################################################
     # Translate usage here.
     # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
     # my_ids = set(my_ids)
     # file_names = [file for file in os.listdir(output_dir) if file.endswith(".json") and int(file.split("_")[0]) in my_ids]
-    # json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
-    # inputs = [(json_path, "English", "Chinese", True) for json_path in json_paths]
-    # import mmengine
-    # results = mmengine.track_parallel_progress(translate_annotation_from_file_parallel, inputs, nproc=8)
-
+    for scene_id in scene_ids:
+        output_dir = os.path.join(DATA_ROOT, scene_id, "corpora_object_XComposer2")
+        file_names = [file for file in os.listdir(output_dir) if file.endswith(".json")]
+        json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
+        inputs = [(json_path, "English", "Chinese", True) for json_path in json_paths]
+        import mmengine
+        results = mmengine.track_parallel_progress(translate_annotation_from_file_parallel, inputs, nproc=16)
     ###################################################################
     ## Quality check usage here.
     # annotations = []
