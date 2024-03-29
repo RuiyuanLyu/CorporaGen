@@ -91,6 +91,7 @@ with gr.Blocks() as demo:
     with gr.Row():
         user_name = gr.Textbox(label="用户名", value="", placeholder="在此输入用户名，首位必须为字母，不要带空格。")
         confirm_user_name_btn = gr.Button(value="确认并锁定用户名（刷新网页才能重置用户名）", label="确认用户名")
+        check_annotated_btn = gr.Button(value="查看未标注场景数", label="查看未标注")
     with gr.Row():
         scene_id = gr.Dropdown(scene_list, label="在此选择待标注的场景")
         scene_anno_info = gr.Textbox(label="提示信息", value="", visible=True, interactive=False)
@@ -120,11 +121,24 @@ with gr.Blocks() as demo:
             user_name = gr.Textbox(label="用户名", value=user_name, interactive=False)
             user_name_locked = True
         return user_name, user_name_locked
-
-
     confirm_user_name_btn.click(lock_user_name, inputs=[user_name, user_name_locked],
                                 outputs=[user_name, user_name_locked])
 
+
+    def check_annotated_scenes(user_name):
+        scene_list = os.listdir(RENDER_IMAGE_PATH)
+        scene_list.remove("demo_scene")
+        missing_scenes = []
+        for scene_id in scene_list:
+            file_path_to_save = os.path.join(scene_info[scene_id]["output_dir"], f'region_segmentation_{user_name}.txt')
+            if not os.path.exists(file_path_to_save):
+                missing_scenes.append(scene_id)
+        num_in_total = len(scene_list)
+        num_missing = len(missing_scenes)
+        missing_scenes.sort()
+        gr.Info(f"未标注场景数：{num_missing}/{num_in_total}")
+        return missing_scenes
+    check_annotated_btn.click(check_annotated_scenes, inputs=[user_name], outputs=[scene_anno_info])
 
     def get_file(scene_id, user_name, user_name_locked):
         annotation_list = []
