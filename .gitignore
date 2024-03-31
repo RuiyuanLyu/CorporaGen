@@ -1,3 +1,4 @@
+# data
 example_data/
 example_data2/
 deprecations/
@@ -5,17 +6,27 @@ data
 data/
 data_zip/
 region_annos/
-openai_api_key.txt
 selected_scenes/
 
+# OpenAI API key
+openai_api_key.txt
 
+# Python cache files
+**.pyc
+
+# pickle files
 **.pkl
+
+# image files
 **.png
 **.jpg
 **.jpeg
-**.pyc
+
+# stats files
 *counts.csv
+accuracy_dict*.csv
 data.zip
 
+# temporary files
 **testing**
 shortcut**
