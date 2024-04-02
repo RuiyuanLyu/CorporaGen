@@ -40,8 +40,19 @@ init_item_dict["annotation_list"] = []
 
 RENDER_IMAGE_PATH = "data"
 
-scene_list = os.listdir(RENDER_IMAGE_PATH)
-scene_list.sort()
+SCENE_LIST = os.listdir(RENDER_IMAGE_PATH)
+SCENE_LIST.remove("demo_scene")
+SCENE_LIST.sort()
+
+def get_next_scene_id(current_scene_id):
+    if current_scene_id == None or current_scene_id == 'None':
+        return SCENE_LIST[0]
+    else:
+        index = SCENE_LIST.index(current_scene_id)
+        if index == len(SCENE_LIST) - 1:
+            return None
+        else:
+            return SCENE_LIST[index + 1]
 
 REGIONS = {"起居室/会客区": "living region",
            "书房/工作学习区": "study region",
@@ -51,6 +62,7 @@ REGIONS = {"起居室/会客区": "living region",
            "浴室/洗澡区": "bathing region",
            "储藏区": "storage region",
            "厕所/洗手间": "toliet region",
+           "运动区/健身房": "sports region",
            "走廊/通道": "corridor region",
            "空地": "open area region",
            "其它": "other region"}
@@ -63,6 +75,7 @@ REGIONS_COLOR = {
     "bathing region": (255, 20, 147),
     "storage region": (122, 255, 122),
     "toliet region": (69, 139, 0),
+    "sports region": (139, 69, 19),
     "corridor region": (139, 105, 20),
     "open area region": (255, 0, 255),
     "other region": (122, 122, 0)
@@ -93,7 +106,7 @@ with gr.Blocks() as demo:
         confirm_user_name_btn = gr.Button(value="确认并锁定用户名（刷新网页才能重置用户名）", label="确认用户名")
         check_annotated_btn = gr.Button(value="查看未标注场景数", label="查看未标注")
     with gr.Row():
-        scene_id = gr.Dropdown(scene_list, label="在此选择待标注的场景")
+        scene_id = gr.Dropdown(SCENE_LIST, label="在此选择待标注的场景")
         scene_anno_info = gr.Textbox(label="提示信息", value="", visible=True, interactive=False)
     anno_result_img = gr.Image(label="result of annotation", interactive=True, tool=[])
     show_label_box = gr.Textbox(label="点击区域的类别（根据标注文件）")
@@ -126,14 +139,12 @@ with gr.Blocks() as demo:
 
 
     def check_annotated_scenes(user_name):
-        scene_list = os.listdir(RENDER_IMAGE_PATH)
-        scene_list.remove("demo_scene")
         missing_scenes = []
-        for scene_id in scene_list:
+        for scene_id in SCENE_LIST:
             file_path_to_save = os.path.join(scene_info[scene_id]["output_dir"], f'region_segmentation_{user_name}.txt')
             if not os.path.exists(file_path_to_save):
                 missing_scenes.append(scene_id)
-        num_in_total = len(scene_list)
+        num_in_total = len(SCENE_LIST)
         num_missing = len(missing_scenes)
         missing_scenes.sort()
         gr.Info(f"未标注场景数：{num_missing}/{num_in_total}")
@@ -185,6 +196,7 @@ with gr.Blocks() as demo:
         annotate_btn = gr.Button("标注单个区域")
         undo_btn = gr.Button("回退一步")
         save_btn = gr.Button("所有区域都已经标注完成，保存")
+        next_scene_btn = gr.Button("下一张场景")
         clear_btn = gr.Button("清空当前场景所有标注（谨慎操作）")
 
     with gr.Row():
@@ -205,10 +217,10 @@ with gr.Blocks() as demo:
         return mask
 
 
-    def draw_polygon(img, vertex_list):
+    def draw_polygon(img, vertex_list, alpha=0.4):
         img = img.copy()
         coverage_mask = get_coverage_mask(img.shape[0], img.shape[1], vertex_list)
-        img[coverage_mask] = img[coverage_mask] * 0.6 + np.array([255, 0, 0]) * 0.4
+        img[coverage_mask] = img[coverage_mask] * (1 - alpha) + np.array([255, 0, 0]) * alpha
         return img
 
 
@@ -219,9 +231,7 @@ with gr.Blocks() as demo:
                  ):
         w, h, c = img.shape
         size = ceil(max([w, h]) * 0.01)
-
-        out = img.copy() * 0.6
-
+        out = img.copy()
         if not poly_done:
             # print(item_dict_list[-1]["vertex_list"], item_dict_list[-1]["poly_done"], vertex_list, poly_done)
             new_item_dict = copy.deepcopy(item_dict_list[-1])
@@ -232,22 +242,21 @@ with gr.Blocks() as demo:
             new_item_dict["vertex_list"] = copy.deepcopy(vertex_list)
             item_dict_list.append(new_item_dict)
             vertex_list.append([evt.index[1], evt.index[0]])  # evt index is in h, w order
-
+            for vertex in vertex_list:
+                x, y = vertex
+                sx = max(x - size, 0)
+                ex = min(x + size, out.shape[0] - 1)
+                sy = max(y - size, 0)
+                ey = min(y + size, out.shape[1] - 1)
+                out[sx:ex, sy:ey] = np.array([255, 0, 0]).astype(np.uint8)
+            for i in range(len(vertex_list)):
+                x1, y1 = vertex_list[i]
+                x2, y2 = vertex_list[(i + 1) % len(vertex_list)]
+                cv2.line(out, (y1, x1), (y2, x2), (255, 0, 0), 2)
             if len(vertex_list) == vertex_num:
-
-                for vertex in vertex_list:
-                    out[
-                    max(vertex[0] - size, 0): min(
-                        vertex[0] + size, out.shape[0] - 1
-                    ),
-                    max(vertex[1] - size, 0): min(
-                        vertex[1] + size, out.shape[1] - 1
-                    ),
-                    ] = np.array([255, 0, 0]).astype(np.uint8)
-
-                new_out = draw_polygon(out.copy(), vertex_list)
+                out = draw_polygon(out, vertex_list)
+                out = out.astype(np.uint8)
                 poly_done = True
-                new_out = new_out.astype(np.uint8)
                 ks = np.arange(len(scene_info[scene_id]["object_ids"]))
                 xys_in_world = scene_info[scene_id]["bboxes"][:, :2]
                 draw_size_of_object = 5
@@ -258,7 +267,7 @@ with gr.Blocks() as demo:
                 is_in = is_in_poly(np.array([ys, xs]).T, vertex_list)
                 for k, is_in_k in enumerate(is_in):
                     if is_in_k and scene_info[scene_id]["object_types"][k] not in exclude_type:
-                        new_out[
+                        out[
                         max(ys[k] - draw_size_of_object, 0): min(ys[k] + draw_size_of_object, out.shape[0] - 1),
                         max(xs[k] - draw_size_of_object, 0): min(xs[k] + draw_size_of_object, out.shape[1] - 1),
                         ] = np.array([0, 0, 255]).astype(np.uint8)
@@ -266,29 +275,13 @@ with gr.Blocks() as demo:
                 store_vertex_list = copy.deepcopy(vertex_list)
                 # print(store_vertex_list)
                 vertex_list = []
-                # print('before return', poly_done, vertex_list)
-
-                return new_out, click_evt_list, poly_done, poly_image, vertex_list, annotation_list, enable_undo, item_dict_list, store_vertex_list,
-
-            for vertex in vertex_list:
-                out[
-                max(vertex[0] - size, 0): min(
-                    vertex[0] + size, out.shape[0] - 1
-                ),
-                max(vertex[1] - size, 0): min(
-                    vertex[1] + size, out.shape[1] - 1
-                ),
-                ] = np.array([255, 0, 0]).astype(np.uint8)
-            out = out.astype(np.uint8)
-            # print('before return', poly_done, vertex_list)
-            return out, click_evt_list, poly_done, poly_image, vertex_list, annotation_list, enable_undo, item_dict_list, store_vertex_list,
-
-
-
-        else:
-            return poly_image, click_evt_list, poly_done, poly_image, vertex_list, annotation_list, enable_undo, item_dict_list, store_vertex_list,
-
-
+        return out, click_evt_list, poly_done, poly_image, vertex_list, annotation_list, enable_undo, item_dict_list, store_vertex_list
+    input_img.select(draw_dot, [scene_id, input_img, output_img, total_vertex_num,
+                                click_evt_list, poly_done, poly_image, vertex_list, annotation_list, enable_undo,
+                                item_dict_list, store_vertex_list,
+                                ],
+                     [output_img, click_evt_list, poly_done, poly_image, vertex_list, annotation_list, enable_undo,
+                      item_dict_list, store_vertex_list])
 
 
     def new_draw_dot(scene_id, img, to_rotate_clockwise_90, evt: gr.SelectData):
@@ -419,7 +412,7 @@ with gr.Blocks() as demo:
                    annotation_list, store_vertex_list, to_show_areas, anno_result, item_dict_list
 
 
-    def clear(scene_id, output_img, annotation_list, poly_done, click_evt_list, vertex_list, item_dict_list):
+    def clear_all(scene_id, output_img, annotation_list, poly_done, click_evt_list, vertex_list, item_dict_list):
 
         if scene_id == None or scene_id == 'None':
             return [None] * 6
@@ -459,7 +452,7 @@ with gr.Blocks() as demo:
 
 
     def save_to_file(scene_id, annotation_list, click_evt_list, vertex_list, poly_done, item_dict_list, user_name):
-        if scene_id == None or scene_id == 'None':
+        if scene_id == None or scene_id == 'None' or annotation_list is None or len(annotation_list) == 0:
             return None, None, None, None, None, None, None, None, annotation_list, click_evt_list, vertex_list, poly_done, item_dict_list
 
         os.makedirs(scene_info[scene_id]['output_dir'], exist_ok=True)
@@ -471,7 +464,7 @@ with gr.Blocks() as demo:
         poly_done = False
         item_dict_list = [init_item_dict]
 
-        return None, None, None, None, None, None, None, None, annotation_list, click_evt_list, vertex_list, poly_done, item_dict_list
+        return scene_id, None, None, None, None, None, None, None, annotation_list, click_evt_list, vertex_list, poly_done, item_dict_list
 
 
     scene_id.change(
@@ -481,12 +474,6 @@ with gr.Blocks() as demo:
                  anno_result, to_show_areas]
     )
 
-    input_img.select(draw_dot, [scene_id, input_img, output_img, total_vertex_num,
-                                click_evt_list, poly_done, poly_image, vertex_list, annotation_list, enable_undo,
-                                item_dict_list, store_vertex_list,
-                                ],
-                     [output_img, click_evt_list, poly_done, poly_image, vertex_list, annotation_list, enable_undo,
-                      item_dict_list, store_vertex_list])
     object_postion_img.select(
         new_draw_dot, [scene_id, input_img, to_rotate_clockwise_90],
         [object_postion_img, detail_show_img, to_rotate_clockwise_90]
@@ -497,7 +484,7 @@ with gr.Blocks() as demo:
     detail_show_img.change(
         rotate_clockwise_90, [detail_show_img, to_rotate_clockwise_90], [detail_show_img, to_rotate_clockwise_90]
     )
-    clear_btn.click(fn=clear, inputs=[scene_id, output_img, annotation_list, poly_done, click_evt_list, vertex_list,
+    clear_btn.click(fn=clear_all, inputs=[scene_id, output_img, annotation_list, poly_done, click_evt_list, vertex_list,
                                       item_dict_list],
                     outputs=[output_img, show_json, annotation_list, poly_done, click_evt_list, vertex_list])
     annotate_btn.click(
@@ -529,6 +516,11 @@ with gr.Blocks() as demo:
 
         ],
     )
+    next_scene_btn.click(
+        fn=get_next_scene_id,
+        inputs=[scene_id],
+        outputs=[scene_id]
+    )
 demo.queue(concurrency_count=20)
 
 if __name__ == "__main__":
@@ -554,7 +546,7 @@ if __name__ == "__main__":
     scene_info = {}
     from tqdm import tqdm
 
-    for scene_id in tqdm(scene_list):
+    for scene_id in tqdm(SCENE_LIST):
         anno = anno_full.get(scene_id, None)
         if anno is None:
             print(f"No annotation for {scene_id}")
