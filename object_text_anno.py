@@ -229,7 +229,7 @@ def map_text_to_bool(text):
     else:
         raise ValueError(f"Invalid text: {text}")
 
-
+@DeprecationWarning
 def check_annotation_quality(annotations, display_stats=True):
     """
         Reads the accuracy_dict from the annotations and calculates the quality for a list of annotations. 
@@ -308,7 +308,7 @@ def summarize_annotation_from_file(json_path, force_summarize=False):
     is_valid, error_message = check_annotation_validity(annotation)
     # if not is_valid:
     #     return
-    if num_tokens_from_string(annotation["original_description"]) < 150:
+    if num_tokens_from_string(annotation["original_description"]) < 200:
         return 
     if "simplified_description" in annotation and not force_summarize:
         return annotation
@@ -322,8 +322,48 @@ def summarize_annotation_from_file(json_path, force_summarize=False):
 def summarize_annotation_from_file_parallel(inputs):
     return summarize_annotation_from_file(*inputs)
 
+def simplify_text(text):
+    if not isinstance(text, str):
+        return text
+    text = text.replace(" in the center of the picture", "")
+    text = text.replace(" in the center of the image", "")
+    text = text.replace(" in the center of the frame", "")
+    text = text.replace(" in the center of the photo", "")
+    text = text.replace(" in the middle of the picture", "")
+    text = text.replace(" in the middle of the image", "")
+    text = text.replace(" in the middle of the frame", "")
+    text = text.replace(" in the middle of the photo", "")
+    text = text.replace(" in the picture", "")
+    text = text.replace(" in the frame", "")
+    text = text.replace(" in the image", "")
+    text = text.replace(" in the photo", "")
+    text = text.replace(" neither too large nor too small", "")
+    return text
+
+def simplify_description(json_path):
+    with open(json_path, "r") as f:
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError:
+            print(f"Failed to load {json_path}")
+            return None
+    if isinstance(data, dict):
+        if data.get("modified_description", ""):
+            return None
+        description = data.get("original_description", "")
+        if description:
+            data["original_description"] = simplify_text(description)
+        description = data.get("simplified_description", "")
+        if description:
+            data["simplified_description"] = simplify_text(description)
+    elif isinstance(data, list):
+        data = [simplify_text(d) for d in data]
+    with open(json_path, "w") as f:
+        json.dump(data, f, indent=4)
+
+
+DATA_ROOT = "./data"
 if __name__ == "__main__":
-    DATA_ROOT = "./data"
     scene_ids = ["1mp3d_0001_region8", "1mp3d_0002_region23", "3rscan0138", "3rscan0036", "scene0026_00", "scene0094_00", "scene0147_00"]
     # SCENE_ID = "scene0000_00"
     # image_dir = os.path.join(DATA_ROOT, SCENE_ID, "painted_objects")
@@ -350,59 +390,37 @@ if __name__ == "__main__":
     # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
     # my_ids = set(my_ids)
     # file_names = [file for file in os.listdir(output_dir) if file.endswith(".json") and int(file.split("_")[0]) in my_ids]
+    scene_ids = os.listdir(DATA_ROOT)
+    inputs = []
     for scene_id in scene_ids:
-        output_dir = os.path.join(DATA_ROOT, scene_id, "corpora_object_XComposer2")
+        output_dir = os.path.join(DATA_ROOT, scene_id, "corpora_object_InternVL-Chat-V1-2-Plus_crop")
+        output_dir = os.path.join(DATA_ROOT, scene_id, "corpora_object_cogvlm_crop")
         file_names = [file for file in os.listdir(output_dir) if file.endswith(".json")]
         json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
-        inputs = [(json_path, False) for json_path in json_paths]
-        import mmengine
-        results = mmengine.track_parallel_progress(summarize_annotation_from_file_parallel, inputs, nproc=16)
+        inputs.extend([(json_path, False) for json_path in json_paths])
+    import mmengine
+    results = mmengine.track_parallel_progress(summarize_annotation_from_file_parallel, inputs, nproc=16)
 
     ##################################################################
-    # Translate usage here.
+    ## Translate usage here.
     # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
     # my_ids = set(my_ids)
+    # output_dir = os.path.join(DATA_ROOT, "scene0000_00", "corpora_object_InternVL-Chat-V1-2-Plus_crop")
     # file_names = [file for file in os.listdir(output_dir) if file.endswith(".json") and int(file.split("_")[0]) in my_ids]
-    for scene_id in scene_ids:
-        output_dir = os.path.join(DATA_ROOT, scene_id, "corpora_object_XComposer2")
-        file_names = [file for file in os.listdir(output_dir) if file.endswith(".json")]
-        json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
-        inputs = [(json_path, "English", "Chinese", True) for json_path in json_paths]
-        import mmengine
-        results = mmengine.track_parallel_progress(translate_annotation_from_file_parallel, inputs, nproc=16)
+    # for scene_id in scene_ids:
+    #     output_dir = os.path.join(DATA_ROOT, scene_id, "corpora_object_InternVL-Chat-V1-2-Plus_crop")
+    #     file_names = [file for file in os.listdir(output_dir) if file.endswith(".json")]
+    #     json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
+    #     inputs = [(json_path, "English", "Chinese", True) for json_path in json_paths]
+    #     import mmengine
+    #     results = mmengine.track_parallel_progress(translate_annotation_from_file_parallel, inputs, nproc=16)
     ###################################################################
-    ## Quality check usage here.
-    # annotations = []
-    # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
-    # my_ids = set(my_ids)
-    # for file_name in os.listdir(output_dir):
-    #     if not file_name.endswith(".json"):
-    #         continue
-    #     if not int(file_name.split('_')[0]) in my_ids:
-    #         continue
-    #     annotation = load_json(os.path.join(output_dir, file_name))
-    #     annotations.append(annotation)
-    # quality_dict = check_annotation_quality(annotations)
-    # print(quality_dict)
+    ## Simplify usage here.
+    # tasks = []
+    # for root, dirs, files in os.walk(DATA_ROOT):
+    #     for file in files:
+    #         if file.endswith(".json"):
+    #             tasks.append(os.path.join(root, file))
 
-    ###################################################################
-    ## Another quality check usage here.
-    # annotations = []
-    # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
-    # my_ids = set(my_ids)
-    # for file_name in os.listdir(output_dir):
-    #     if not file_name.endswith(".json"):
-    #         continue
-    #     if not int(file_name.split('_')[0]) in my_ids:
-    #         continue
-    #     annotation = load_json(os.path.join(output_dir, file_name))
-    #     acc_dict = {}
-    #     acc_dict["id"] = ' '.join(file_name.split("_")[:2])
-    #     acc_dict.update(annotation.get("accuracy_dict", {}))
-    #     acc_dict["position"] = acc_dict["position"] and acc_dict["placement"]
-    #     del acc_dict["placement"]
-    #     annotations.append(acc_dict)
-    # import pandas as pd
-    # df = pd.DataFrame(annotations)
-    # df.to_csv("accuracy_dict.csv", index=False)
-    # print(df)
+    # import mmengine
+    # mmengine.track_parallel_progress(simplify_description, tasks, nproc=10)
