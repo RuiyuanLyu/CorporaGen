@@ -7,9 +7,10 @@ data/
 data_zip/
 region_annos/
 selected_scenes/
+*.zip
 
-# OpenAI API key
-openai_api_key.txt
+# API keys
+*api_key*.txt
 
 # Python cache files
 **.pyc
@@ -25,8 +26,8 @@ openai_api_key.txt
 # stats files
 *counts.csv
 accuracy_dict*.csv
-data.zip
 
 # temporary files
 **testing**
 shortcut**
+tmp/**
