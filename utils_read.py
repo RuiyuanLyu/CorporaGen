@@ -141,7 +141,10 @@ def read_depth_map(path):
     """
     if "3rscan" in path:
         path = path[:-4] + ".pgm"
-    depth_map = cv2.imread(path, cv2.IMREAD_UNCHANGED) / 1000.0
+    depth_map = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    if depth_map is None:
+        raise ValueError(f"Cannot read file {path}")
+    depth_map = depth_map/1000.0 # '/=' does not work. Interesting.
     if "matterport" in path or "mp3d" in path:
         depth_map /= 4.0  # for matterport, depth should be divided by 4000
     return depth_map
