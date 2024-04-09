@@ -24,7 +24,7 @@ from math import ceil
 import json
 import open3d as o3d
 from utils_read import read_annotation_pickles
-from render_bev import load_mesh, _render_2d_bev, take_bev_screenshot, process_mesh
+# from render_bev_for_all import load_mesh, _render_2d_bev, take_bev_screenshot, process_mesh
 from region_matching import get_data, get_position_in_mesh_render_image, is_in_poly
 import matplotlib
 import copy
@@ -41,7 +41,6 @@ init_item_dict["annotation_list"] = []
 RENDER_IMAGE_PATH = "data"
 
 SCENE_LIST = os.listdir(RENDER_IMAGE_PATH)
-SCENE_LIST.remove("demo_scene")
 SCENE_LIST.sort()
 
 def get_next_scene_id(current_scene_id):
@@ -141,7 +140,7 @@ with gr.Blocks() as demo:
     def check_annotated_scenes(user_name):
         missing_scenes = []
         for scene_id in SCENE_LIST:
-            file_path_to_save = os.path.join(scene_info[scene_id]["output_dir"], f'region_segmentation_{user_name}.txt')
+            file_path_to_save = os.path.join(get_scene_info(scene_id)["output_dir"], f'region_segmentation_{user_name}.txt')
             if not os.path.exists(file_path_to_save):
                 missing_scenes.append(scene_id)
         num_in_total = len(SCENE_LIST)
@@ -167,7 +166,7 @@ with gr.Blocks() as demo:
         if scene_id == None or scene_id == 'None':
             return None, None, None, None, None, '', None, annotation_list, click_evt_list, vertex_list, poly_done, item_dict_list, anno_result, to_show_areas
 
-        file_path_to_save = os.path.join(scene_info[scene_id]["output_dir"], f'region_segmentation_{user_name}.txt')
+        file_path_to_save = os.path.join(get_scene_info(scene_id)["output_dir"], f'region_segmentation_{user_name}.txt')
         anno_result_img_path = gr.update(value=f'{render_image_path}/{scene_id}/render.png')
         if os.path.exists(file_path_to_save):
             scene_anno_state = scene_id + ' 已经被标注过 ! ! ! ! !'
@@ -257,16 +256,16 @@ with gr.Blocks() as demo:
                 out = draw_polygon(out, vertex_list)
                 out = out.astype(np.uint8)
                 poly_done = True
-                ks = np.arange(len(scene_info[scene_id]["object_ids"]))
-                xys_in_world = scene_info[scene_id]["bboxes"][:, :2]
+                ks = np.arange(len(get_scene_info(scene_id)["object_ids"]))
+                xys_in_world = get_scene_info(scene_id)["bboxes"][:, :2]
                 draw_size_of_object = 5
-                ys, xs = get_position_in_mesh_render_image(xys_in_world, scene_info[scene_id]["center_x"],
-                                                           scene_info[scene_id]["center_y"],
-                                                           scene_info[scene_id]["num_pixels_per_meter"],
+                ys, xs = get_position_in_mesh_render_image(xys_in_world, get_scene_info(scene_id)["center_x"],
+                                                           get_scene_info(scene_id)["center_y"],
+                                                           get_scene_info(scene_id)["num_pixels_per_meter"],
                                                            img.shape[:2])
                 is_in = is_in_poly(np.array([ys, xs]).T, vertex_list)
                 for k, is_in_k in enumerate(is_in):
-                    if is_in_k and scene_info[scene_id]["object_types"][k] not in exclude_type:
+                    if is_in_k and get_scene_info(scene_id)["object_types"][k] not in exclude_type:
                         out[
                         max(ys[k] - draw_size_of_object, 0): min(ys[k] + draw_size_of_object, out.shape[0] - 1),
                         max(xs[k] - draw_size_of_object, 0): min(xs[k] + draw_size_of_object, out.shape[1] - 1),
@@ -295,43 +294,43 @@ with gr.Blocks() as demo:
             return out, None
         w, h, c = img.shape
         size = ceil(max([w, h]) * 0.01)
-        useful_object_ids = list(scene_info[scene_id]["useful_object"].keys())
+        useful_object_ids = list(get_scene_info(scene_id)["useful_object"].keys())
         useful_object_index = []
         for object_id in useful_object_ids:
-            index = list(scene_info[scene_id]["object_ids"]).index(object_id)
+            index = list(get_scene_info(scene_id)["object_ids"]).index(object_id)
             useful_object_index.append(index)
         useful_object_index = np.array(useful_object_index)
-        xys_in_world = scene_info[scene_id]["bboxes"][useful_object_index, :2]
-        xs, ys = get_position_in_mesh_render_image(xys_in_world, scene_info[scene_id]["center_x"],
-                                                   scene_info[scene_id]["center_y"],
-                                                   scene_info[scene_id]["num_pixels_per_meter"],
+        xys_in_world = get_scene_info(scene_id)["bboxes"][useful_object_index, :2]
+        xs, ys = get_position_in_mesh_render_image(xys_in_world, get_scene_info(scene_id)["center_x"],
+                                                   get_scene_info(scene_id)["center_y"],
+                                                   get_scene_info(scene_id)["num_pixels_per_meter"],
                                                    img.shape[:2])
         distances = (xs - m_x) ** 2 + (ys - m_y) ** 2
         min_distance_index = np.argmin(distances)
         min_object_id = useful_object_ids[min_distance_index]
         p = (xs[min_distance_index], ys[min_distance_index])
 
-        view_id = scene_info[scene_id]['useful_object_view_id'][min_object_id]
-        view_id_idx = list(scene_info[scene_id]['view_ids']).index(view_id)
-        extrinsics_c2w = scene_info[scene_id]['camera_extrinsics_c2w'][view_id_idx]
+        view_id = get_scene_info(scene_id)['useful_object_view_id'][min_object_id]
+        view_id_idx = list(get_scene_info(scene_id)['view_ids']).index(view_id)
+        extrinsics_c2w = get_scene_info(scene_id)['camera_extrinsics_c2w'][view_id_idx]
         front = extrinsics_c2w[:3, 2]
         pos = extrinsics_c2w[:3, 3]
         sx_in_world, sy_in_world = pos[0], pos[1]
         ex_in_world, ey_in_world = pos[0] + front[0], pos[1] + front[1]
-        s_x, s_y = get_position_in_mesh_render_image((sx_in_world, sy_in_world), scene_info[scene_id]["center_x"],
-                                                     scene_info[scene_id]["center_y"],
-                                                     scene_info[scene_id]["num_pixels_per_meter"],
+        s_x, s_y = get_position_in_mesh_render_image((sx_in_world, sy_in_world), get_scene_info(scene_id)["center_x"],
+                                                     get_scene_info(scene_id)["center_y"],
+                                                     get_scene_info(scene_id)["num_pixels_per_meter"],
                                                      img.shape[:2])
-        e_x, e_y = get_position_in_mesh_render_image((ex_in_world, ey_in_world), scene_info[scene_id]["center_x"],
-                                                     scene_info[scene_id]["center_y"],
-                                                     scene_info[scene_id]["num_pixels_per_meter"],
+        e_x, e_y = get_position_in_mesh_render_image((ex_in_world, ey_in_world), get_scene_info(scene_id)["center_x"],
+                                                     get_scene_info(scene_id)["center_y"],
+                                                     get_scene_info(scene_id)["num_pixels_per_meter"],
                                                      img.shape[:2])
         out = cv2.arrowedLine(out, (s_y, s_x), (e_y, e_x), (255, 0, 0), 2)
         out[
         max(p[0] - size, 0): min(p[0] + size, out.shape[0] - 1),
         max(p[1] - size, 0): min(p[1] + size, out.shape[1] - 1),
         ] = np.array([0, 0, 255]).astype(np.uint8)
-        detail_img = gr.update(value=scene_info[scene_id]["useful_object"][min_object_id])
+        detail_img = gr.update(value=get_scene_info(scene_id)["useful_object"][min_object_id])
 
         if scene_id[:6] == '3rscan':
             to_rotate_clockwise_90 = True
@@ -455,8 +454,8 @@ with gr.Blocks() as demo:
         if scene_id == None or scene_id == 'None' or annotation_list is None or len(annotation_list) == 0:
             return None, None, None, None, None, None, None, None, annotation_list, click_evt_list, vertex_list, poly_done, item_dict_list
 
-        os.makedirs(scene_info[scene_id]['output_dir'], exist_ok=True)
-        with open(f"{scene_info[scene_id]['output_dir']}/region_segmentation_{user_name}.txt", "w") as file:
+        os.makedirs(get_scene_info(scene_id)['output_dir'], exist_ok=True)
+        with open(f"{get_scene_info(scene_id)['output_dir']}/region_segmentation_{user_name}.txt", "w") as file:
             file.write(str(annotation_list))
         annotation_list = []
         click_evt_list = []
@@ -523,6 +522,34 @@ with gr.Blocks() as demo:
     )
 demo.queue(concurrency_count=20)
 
+def get_scene_info(scene_id):
+    global scene_info, render_info, output_dir, painted_dir
+    if scene_id in scene_info:
+        return scene_info[scene_id]
+    else:
+        scene_info[scene_id] = {}
+        scene_info[scene_id]["bboxes"] = anno["bboxes"]
+        scene_info[scene_id]["object_ids"] = anno["object_ids"]
+        scene_info[scene_id]["object_types"] = anno["object_types"]
+        scene_info[scene_id]["visible_view_object_dict"] = anno["visible_view_object_dict"]
+        scene_info[scene_id]["output_dir"] = f"{output_dir}/{scene_id}"
+        painted_img_dir = f"{painted_dir}/{scene_id}/painted_objects"
+        scene_info[scene_id]["useful_object"] = {}
+        scene_info[scene_id]["useful_object_view_id"] = {}
+        for img_file in os.listdir(painted_img_dir):
+            if img_file.endswith(".png") or img_file.endswith(".jpg"):
+                scene_info[scene_id]["useful_object"][int(img_file.split("_")[0])] = painted_img_dir + "/" + img_file
+                scene_info[scene_id]["useful_object_view_id"][int(img_file.split("_")[0])] = "_".join(
+                    img_file.split(".")[0].split("_")[2:])
+        scene_info[scene_id]["view_ids"] = [path.split("/")[-1].split(".")[0] for path in anno["image_paths"]]
+        scene_info[scene_id]["camera_extrinsics_c2w"] = [(anno["axis_align_matrix"] @ extrinsic) for extrinsic in
+                                                            anno["extrinsics_c2w"]]
+        scene_info[scene_id]["center_x"] = render_info[scene_id]["center_x"]
+        scene_info[scene_id]["center_y"] = render_info[scene_id]["center_y"]
+        scene_info[scene_id]["num_pixels_per_meter"] = render_info[scene_id]["num_pixels_per_meter"]
+        return scene_info[scene_id]
+
+
 if __name__ == "__main__":
 
     import os
@@ -532,9 +559,12 @@ if __name__ == "__main__":
     # 不用显示的类型（但会记录）
     exclude_type = ["wall", "ceiling", "floor"]
     # 存储所有场景标注信息的列表
-    anno_full = read_annotation_pickles(['embodiedscan_infos_train_full.pkl', 'embodiedscan_infos_val_full.pkl'])
+    anno_full = read_annotation_pickles(['embodiedscan_infos_train_full.pkl',
+                                         'embodiedscan_infos_val_full.pkl',
+                                         '3rscan_infos_test_MDJH_aligned_full_10_visible.pkl',
+                                         'matterport3d_infos_test_full_10_visible.pkl'])
     # 存储渲染参数的文件（坐标变换要用到）
-    all_scene_info = np.load('all_render_param.npy', allow_pickle=True).item()
+    render_info = np.load('all_render_param.npy', allow_pickle=True).item()
     # 输出文件夹
     output_dir = './region_annos/'
     # 辅助查看图文件夹
@@ -551,28 +581,14 @@ if __name__ == "__main__":
         if anno is None:
             print(f"No annotation for {scene_id}")
             continue
-
-        scene_info[scene_id] = {}
-
-        scene_info[scene_id]["bboxes"] = anno["bboxes"]
-        scene_info[scene_id]["object_ids"] = anno["object_ids"]
-        scene_info[scene_id]["object_types"] = anno["object_types"]
-        scene_info[scene_id]["visible_view_object_dict"] = anno["visible_view_object_dict"]
-        scene_info[scene_id]["output_dir"] = f"{output_dir}/{scene_id}"
         painted_img_dir = f"{painted_dir}/{scene_id}/painted_objects"
-        scene_info[scene_id]["useful_object"] = {}
-        scene_info[scene_id]["useful_object_view_id"] = {}
-        for img_file in os.listdir(painted_img_dir):
-            if img_file.endswith(".png") or img_file.endswith(".jpg"):
-                scene_info[scene_id]["useful_object"][int(img_file.split("_")[0])] = painted_img_dir + "/" + img_file
-                scene_info[scene_id]["useful_object_view_id"][int(img_file.split("_")[0])] = "_".join(
-                    img_file.split(".")[0].split("_")[2:])
-        scene_info[scene_id]["view_ids"] = [path.split("/")[-1].split(".")[0] for path in anno["image_paths"]]
-        scene_info[scene_id]["camera_extrinsics_c2w"] = [(anno["axis_align_matrix"] @ extrinsic) for extrinsic in
-                                                         anno["extrinsics_c2w"]]
-        scene_info[scene_id]["center_x"], scene_info[scene_id]["center_y"], scene_info[scene_id]["num_pixels_per_meter"] \
-            = all_scene_info[scene_id]["center_x"], all_scene_info[scene_id]["center_y"], all_scene_info[scene_id][
-            "num_pixels_per_meter"],
-
+        if not os.path.exists(painted_img_dir):
+            print(f"No painted objects for {scene_id}")
+            SCENE_LIST.remove(scene_id)
+            continue
+        painted_files = [f for f in os.listdir(painted_img_dir) if f.endswith(".png") or f.endswith(".jpg")]
+        if len(painted_files) == 0:
+            print(f"No painted objects for {scene_id}")
+            SCENE_LIST.remove(scene_id)
     demo.launch(show_error=True, allowed_paths=[painted_dir], server_port=7859)
 

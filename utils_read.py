@@ -188,6 +188,16 @@ def read_bboxes_json(path, return_id=False, return_type=False):
     return boxes
 
 
+def get_scene_prefix(path):
+    if "3rscan" in path:
+        return "3rscan"
+    elif "matterport" in path or "mp3d" in path:
+        return "matterport3d"
+    elif "scene" in path:
+        return "scannet"
+    else:
+        return ""
+
 def read_annotation_pickle(path):
     """
     Returns: A dictionary. Format. scene_id : (bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, image_paths)
@@ -248,6 +258,11 @@ def read_annotation_pickle(path):
         image_paths = []
         for image_idx in range(len(images)):
             img_path = images[image_idx]["img_path"]  # str
+            if len(img_path.split("/")) == 3: # should be 4, add prefix
+                # example input: posed_images/3rscan0001/000000.jpg
+                # example output: 3rscan/posed_images/3rscan0001/000000.jpg
+                scene_prefix = get_scene_prefix(img_path)
+                img_path = os.path.join(scene_prefix, img_path)
             extrinsic_id = img_path.split("/")[-1].split(".")[0]  # str
             cam2global = images[image_idx]["cam2global"]  # a 4x4 matrix
             if missing_intrinsic:
