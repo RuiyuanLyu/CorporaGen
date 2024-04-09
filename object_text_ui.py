@@ -24,7 +24,7 @@ KEYS = ["category", "appearance", "material", "size", "state", "position", "plac
 DATA_ROOT = "data"
 SUPER_USERNAMES = ["openrobotlab", "lvruiyuan"]
 
-VALID_MODEL_CORPORAS = ["corpora_object_cogvlm_crop", "corpora_object_gpt4v_crop", "corpora_object_gpt4v_paint_highres", "corpora_object_XComposer2_crop"]
+VALID_MODEL_CORPORAS = ["corpora_object_cogvlm_crop", "corpora_object_gpt4v_crop", "corpora_object_gpt4v_paint_highdetail", "corpora_object_XComposer2_crop", "corpora_object_InternVL-Chat-V1-2-Plus_crop"]
 
 
 with gr.Blocks() as demo:
@@ -36,6 +36,7 @@ with gr.Blocks() as demo:
         directory = gr.Dropdown(label="Select a directory", choices=[], allow_custom_value=True, visible=True)
         previous_user = gr.Dropdown(label="Select which user's annotations to load", choices=[], visible=False, allow_custom_value=True)
         object_name = gr.Dropdown(label="Select an object", value="Select an object", allow_custom_value=True, interactive=True)
+        check_objects_btn = gr.Button(label="Check Missing Objects", value="Check Missing Objects")
 
     with gr.Row():
         original_description = gr.Textbox(label="Original Description", interactive=False)
@@ -96,17 +97,15 @@ with gr.Blocks() as demo:
         for dir_path, dir_names, file_names in os.walk(DATA_ROOT):
             if any(name.startswith(main_corpora) for name in dir_names) and "painted_objects" in dir_names:
                 valid_directories.append(dir_path)
+        valid_directories.sort()
         return gr.Dropdown(label="Select a directory", choices=valid_directories, value=valid_directories[0], allow_custom_value=True, visible=True)
     user_name.blur(fn=update_valid_directories, inputs=[main_corpora], outputs=[directory])
     main_corpora.change(fn=update_valid_directories, inputs=[main_corpora], outputs=[directory])
 
-    def update_object_name_choices(directory, main_corpora, previous_user):
-        """
-        Updates the choices of the object_name input based on the selected directory.
-        """
+    def get_object_names(directory, main_corpora, user_name=None):
         valid_objects = []
-        if previous_user:
-            dir_to_load = os.path.join(directory, main_corpora, f"user_{previous_user}")
+        if user_name:
+            dir_to_load = os.path.join(directory, main_corpora, f"user_{user_name}")
         else:
             dir_to_load = os.path.join(directory, main_corpora)
         for json_file in os.listdir(dir_to_load):
@@ -116,9 +115,29 @@ with gr.Blocks() as demo:
                 if is_valid:
                     object_name = json_file.split(".")[0]
                     valid_objects.append(object_name)
-        return gr.Dropdown(label="Select an object", choices=valid_objects, allow_custom_value=True)
+        valid_objects.sort()
+        return valid_objects
+
+    def update_object_name_choices(directory, main_corpora, previous_user):
+        """
+        Updates the choices of the object_name input based on the selected directory.
+        """
+        valid_objects = get_object_names(directory, main_corpora, previous_user)
+        return gr.Dropdown(label="Select an object", choices=valid_objects, value=valid_objects[0], allow_custom_value=True)
     directory.change(fn=update_object_name_choices, inputs=[directory, main_corpora, previous_user], outputs=[object_name])
     previous_user.change(fn=update_object_name_choices, inputs=[directory, main_corpora, previous_user], outputs=[object_name])
+
+    def check_objects(directory, main_corpora, user_name):
+        """
+        Checks missing objects in the selected directory and returns a list of missing objects.
+        """
+        ref_objects = get_object_names(directory, main_corpora)
+        user_objects = get_object_names(directory, main_corpora, user_name)
+        user_objects = set(user_objects)
+        missing_objects = [obj for obj in ref_objects if obj not in user_objects]
+        gr.Info(f"Missing {len(missing_objects)} objects: {missing_objects}")
+        return missing_objects
+    check_objects_btn.click(fn=check_objects, inputs=[directory, main_corpora, user_name], outputs=warning_text)
 
     def get_description(json_file_path, is_aux=False):
         """
@@ -166,7 +185,9 @@ with gr.Blocks() as demo:
             backup_description = gr.Textbox(label="Backup Description", value="", visible=False, interactive=False)
             backup_translated_description = gr.Textbox(label="Backup Translated Description", value="", visible=False, interactive=False)
         warning_text = gr.Textbox(label="Warning", value=warning_text, visible=bool(warning_text), interactive=False)
-        image_path = os.path.join(directory, "painted_objects", f"{object_name}.jpg")
+        image_path = os.path.join(directory, "repainted_objects", f"{object_name}.jpg")
+        if not os.path.exists(image_path):
+            image_path = os.path.join(directory, "painted_objects", f"{object_name}.jpg")
         aux_image_path = os.path.join(directory, "cropped_objects", f"{object_name}.jpg")
         return original_description, translated_description, backup_description, backup_translated_description, image_path, aux_image_path, warning_text
     object_name.change(fn=get_description_and_image_path, inputs=[object_name, directory, main_corpora, user_name, previous_user], outputs=[original_description, translated_description, backup_description, backup_translated_description, image, aux_image, warning_text])
