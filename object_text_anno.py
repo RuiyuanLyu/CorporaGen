@@ -14,7 +14,7 @@ def mmengine_track_func(func):
     return wrapped_func
 
 
-def annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=True, max_additional_attempts=0, pick_ids=None, with_highlight=True):
+def annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=True, max_additional_attempts=0, pick_ids=None, with_highlight=True, high_detail=False):
     """
         Uses GPT-4 to annotate objects in a directory of images.
         Args:
@@ -39,7 +39,7 @@ def annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, for
         if pick_ids is not None and int(object_id) not in pick_ids:
             continue
         file_names.append(file_name)
-    inputs = [(file_name, image_dir, output_dir, skip_existing, force_invalid, max_additional_attempts, with_highlight) for file_name in file_names]
+    inputs = [(file_name, image_dir, output_dir, skip_existing, force_invalid, max_additional_attempts, with_highlight, high_detail) for file_name in file_names]
     import mmengine
     results = mmengine.track_parallel_progress(annotate_object, inputs, nproc=8)
     return results
@@ -47,7 +47,7 @@ def annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, for
 def annotate_object_parallel(inputs):
     return annotate_object(*inputs)
 
-def annotate_object(file_name, image_dir, output_dir, skip_existing, force_invalid, max_additional_attempts, with_highlight=True):
+def annotate_object(file_name, image_dir, output_dir, skip_existing, force_invalid, max_additional_attempts, with_highlight=True, high_detail=False):
     object_id, object_type, image_id = file_name.split(".")[0].split("_")
     image_path = os.path.join(image_dir, file_name)
     json_path = os.path.join(output_dir, f"{object_id}_{object_type}_{image_id}.json")
@@ -57,12 +57,12 @@ def annotate_object(file_name, image_dir, output_dir, skip_existing, force_inval
         if is_valid or not force_invalid:
             print(f"Skipping existing annotation for object {object_id}")
             return annotation
-    annotation = annotate_object_by_image(image_path, max_additional_attempts, with_highlight=with_highlight)
+    annotation = annotate_object_by_image(image_path, max_additional_attempts, with_highlight=with_highlight, high_detail=high_detail)
     with open(json_path, "w") as f:
         json.dump(annotation, f, indent=4)
     return annotation
 
-def annotate_object_by_image(image_path, max_additional_attempts=0, with_highlight=True):
+def annotate_object_by_image(image_path, max_additional_attempts=0, with_highlight=True, high_detail=False):
     """
         Uses GPT-4 to annotate an object in an image.
         Args:
@@ -95,7 +95,7 @@ def annotate_object_by_image(image_path, max_additional_attempts=0, with_highlig
         [user_message1, image_path],
         [user_message2]
     ]
-    content_groups = get_content_groups_from_source_groups(source_groups, high_detail=False)
+    content_groups = get_content_groups_from_source_groups(source_groups, high_detail=high_detail)
     # conversation = mimic_chat(content_groups, model="gpt-4-vision-preview", system_prompt=system_prompt)
     conversation = mimic_chat_budget(content_groups, system_prompt=system_prompt, max_additional_attempts=max_additional_attempts)
     raw_annotation = []
@@ -390,11 +390,11 @@ if __name__ == "__main__":
     ###################################################################
     ## Annotation usage here.
     # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
-    # for scene_id in scene_ids:
-    #     image_dir = os.path.join(DATA_ROOT, scene_id, "painted_objects")
-    #     output_dir = os.path.join(DATA_ROOT, scene_id, "corpora_object_gpt4v_paint_highdetail")
-    #     os.makedirs(output_dir, exist_ok=True)
-    #     annotations = annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=False, max_additional_attempts=1, pick_ids = None, with_highlight=True)
+    for scene_id in scene_ids:
+        image_dir = os.path.join(DATA_ROOT, scene_id, "repainted_objects")
+        output_dir = os.path.join(DATA_ROOT, scene_id, "corpora_object_gpt4v_paint_highdetail")
+        os.makedirs(output_dir, exist_ok=True)
+        annotations = annotate_objects_by_directory(image_dir, output_dir, skip_existing=False, force_invalid=False, max_additional_attempts=1, pick_ids = None, with_highlight=True, high_detail=True)
     # ATTENTION: MODIFY with_highlight 
     # check_annotation_validity_path(output_dir)
 
