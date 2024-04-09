@@ -16,6 +16,7 @@ from utils_read import (
     read_bboxes_json,
     load_json,
     reverse_multi2multi_mapping,
+    reverse_121_mapping,
     read_annotation_pickles,
     EXCLUDED_OBJECTS,
 )
@@ -49,13 +50,12 @@ def mmengine_track_func(func):
 
 @mmengine_track_func
 def paint_object_pictures_tracked(bboxes, object_ids, object_types, visible_view_object_dict,
-                                  extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint"):
+                                  extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint", depth_map_paths=None, skip_existing=False):
     paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix,
-                          intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type)
+                          intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type, depth_map_paths, skip_existing)
 
 
-def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint",
-                          ):
+def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type, depth_map_paths, skip_existing):
     """
     Select the best views for all 3d objects (bboxs) from a set of camera positions (extrinsics) in a scene.
     Then paint the 3d bbox in each view and save the painted images to the output directory.
@@ -78,24 +78,23 @@ def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_
 
     bboxes = get_9dof_boxes(np.array(bboxes), mode="zxy", colors=(0, 0, 192))
     blurry_image_ids = get_blurry_image_ids(
-        image_paths, save_path=blurry_image_ids_path, skip_existing=True
+        image_paths, save_path=blurry_image_ids_path, skip_existing=False
     )
     for image_id in blurry_image_ids:
         if image_id in visible_view_object_dict:
             visible_view_object_dict.pop(image_id)
     visible_object_view_dict = reverse_multi2multi_mapping(
         visible_view_object_dict)
-    view_ids = [os.path.basename(path).split(".")[0] for path in image_paths]
+    # NOTE: might have bug for view ids
+    view_ids = [os.path.basename(path)[:-4] for path in image_paths]
     extrinsics_c2w = np.matmul(axis_align_matrix, extrinsics_c2w)
     color_map = get_color_map()
     image_dir = os.path.dirname(image_paths[0])
-    depth_map_paths = [
-        os.path.join(image_dir, view_id + ".png") for view_id in view_ids
-    ]
-    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, view_ids,
-                           intrinsics, depth_intrinsics, depth_map_paths, color_map, image_dir, output_dir, output_type=output_type)
+    if not depth_map_paths:
+        depth_map_paths = [os.path.join(image_dir, view_id + ".png") for view_id in view_ids]
+    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, view_ids, intrinsics, depth_intrinsics, depth_map_paths, color_map, image_dir, output_dir,output_type, skip_existing)
 
-
+@DeprecationWarning
 def paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic_dir, axis_align_matrix_path, intrinsic_path, depth_intrinsic_path, depth_map_dir, image_dir, blurry_image_id_path, output_dir, output_type="paint"):
     """
     Select the best views for all 3d objects (bboxs) from a set of camera positions (extrinsics) in a scene.
@@ -145,14 +144,12 @@ def paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic
         os.path.join(image_dir, view_id + ".png") for view_id in view_ids
     ]
     color_map = get_color_map()
-    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, view_ids,
-                           intrinsic, depth_intrinsic, depth_map_paths, color_map, image_dir, output_dir, output_type=output_type)
+    _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, view_ids, intrinsic, depth_intrinsic, depth_map_paths, color_map, image_dir, output_dir, output_type=output_type)
 
 
-def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, view_ids, intrinsics, depth_intrinsics, depth_map_paths, color_map, image_dir, output_dir, skip_existing=True, output_type="paint"):
-    assert output_type in ["paint", "crop"], "unsupported output type {}".format(
-        output_type
-    )
+def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view_dict, extrinsics_c2w, view_ids, intrinsics, depth_intrinsics, depth_map_paths, color_map, image_dir, output_dir,  output_type="paint", skip_existing=True):
+    assert output_type in ["paint", "crop"], f"unsupported output type {output_type}"
+    assert isinstance(skip_existing, bool), f"expected skip_existing to be a bool, but get {skip_existing}"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     if skip_existing:
@@ -167,7 +164,7 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
             return
     shutil.rmtree(output_dir)
     os.makedirs(output_dir)
-
+    
     depth_maps = [read_depth_map(path) for path in depth_map_paths]
     if len(np.array(intrinsics).shape) == 2:
         intrinsics = np.tile(intrinsics, (len(view_ids), 1, 1))
@@ -189,7 +186,7 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
         selected_extrinsics_c2w, selected_intrinsics = [], []
         selected_depth_intrinsics, selected_depth_maps = [], []
         for view_id in visible_views:
-            view_index = view_ids.index(view_id)
+            view_index = view_ids.index(view_id) #问题出在view_id是旧一套，但是view_ids是新一套，来自image paths
             selected_extrinsics_c2w.append(extrinsics_c2w[view_index])
             selected_intrinsics.append(intrinsics[view_index])
             selected_depth_intrinsics.append(depth_intrinsics[view_index])
@@ -419,7 +416,7 @@ def compute_visible_area(points, image_size):
 def get_blurry_image_ids(
     image_paths,
     save_path=None,
-    threshold=150,
+    threshold=0,
     skip_existing=False,
     save_variance_path=None,
 ):
@@ -441,7 +438,7 @@ def get_blurry_image_ids(
     for image_path in image_paths:
         image_id = os.path.basename(image_path)[:-4]
         image_ids.append(image_id)
-    image_indices = np.argsort([int(i) for i in image_ids])
+    image_indices = np.argsort(image_ids)
     image_ids = [image_ids[i] for i in image_indices]
     paths = [paths[i] for i in image_indices]
     blurry_ids = []
@@ -487,7 +484,7 @@ def get_blurry_image_ids(
     return blurry_ids
 
 
-def get_blurry_image_ids_dir(image_dir, save_path=None, threshold=150, skip_existing=True, save_variance_path=None):
+def get_blurry_image_ids_dir(image_dir, save_path=None, threshold=0, skip_existing=True, save_variance_path=None):
     """
     Returns a list of image ids that are blurry.
     Args:
@@ -516,7 +513,7 @@ def get_blurry_image_ids_dir(image_dir, save_path=None, threshold=150, skip_exis
     return blurry_ids
 
 
-def is_blurry(image, threshold=100, return_variance=False):
+def is_blurry(image, threshold=0, return_variance=False):
     """
     Returns True if the image is blurry, False otherwise.
     The lower the variance of the laplacian, the more blurry the image.
@@ -548,110 +545,91 @@ def get_local_maxima_indices(data, window_size=3):
     return maxima_indices
 
 
-def single_scene_test_local():
-    object_json_path = f"./example_data/label/main_MDJH13.json"  # need to exist
-    # can be generated by this script
-    visibility_json_path = f"./example_data/anno_lang/visible_objects.json"
-    extrinsic_dir = "./example_data/posed_images"  # need to exist
-    axis_align_matrix_path = "./example_data/label/rot_matrix.npy"  # need to exist
-    intrinsic_path = f"./example_data/posed_images/intrinsic.txt"  # need to exist
-    image_dir = "./example_data/posed_images"  # need to exist
-    # can be generated by this script
-    blurry_image_id_path = "./example_data/anno_lang/blurry_image_ids.json"
-    # can be generated by this script
-    save_variance_path = "./example_data/anno_lang/image_variances.json"
-    output_dir = "./example_data/anno_lang/painted_images"  # need to exist
-    depth_intrinsic_path = (
-        f"./example_data/posed_images/depth_intrinsic.txt"  # need to exist
-    )
-    depth_map_dir = "./example_data/posed_images"  # need to exist
-    get_blurry_image_ids_dir(
-        image_dir,
-        save_path=blurry_image_id_path,
-        save_variance_path=save_variance_path,
-        skip_existing=False,
-    )
-    get_visible_objects_dict(
-        object_json_path,
-        extrinsic_dir,
-        axis_align_matrix_path,
-        depth_intrinsic_path,
-        depth_map_dir,
-        visibility_json_path,
-        skip_existing=False,
-    )
-    paint_object_pictures_path(
-        object_json_path,
-        visibility_json_path,
-        extrinsic_dir,
-        axis_align_matrix_path,
-        intrinsic_path,
-        depth_intrinsic_path,
-        depth_map_dir,
-        image_dir,
-        blurry_image_id_path,
-        output_dir,
-    )
+
+mapping_3rscan = load_json('scene_mappings/3rscan_mapping.json') 
+mapping_3rscan = reverse_121_mapping(mapping_3rscan) # id to hash
+mapping_mp3d = load_json('scene_mappings/mp3d_mapping.json') 
+mapping_mp3d = reverse_121_mapping(mapping_mp3d)
+
+def map_view_id(view_id, mode, house_hash=None):
+    """
+        Args:
+            view id: (the numbered view id in anno file). Example: 0165_2_5 (mp3d) or 000137 (3rscan)
+            mode: must in 'mp3d' or '3rscan'
+        Returns:
+            mapped view id (some hash value like b185432bf33645aca813ac2a961b4140_2_5)
+    """
+    assert mode in ['mp3d', '3rscan'], f"unsupported mode {mode}"
+    if mode == 'mp3d':
+        assert house_hash is not None
+        camera_id = view_id.split('/')[0].split('_')[0]
+        angle_id = view_id[-3:]
+        mapping_for_cur_scene = load_json(f'scene_mappings/mp3d_rename/{house_hash}.json')
+        mapping_for_cur_scene = reverse_121_mapping(mapping_for_cur_scene)
+        camera_hash = mapping_for_cur_scene[camera_id]
+        return f"{camera_hash}_i{angle_id}" 
+    elif mode == '3rscan':
+        return f"frame-{view_id}.color"
 
 
-def single_scene_test_by_pickle():
-    pickle_file_val = "./example_data/embodiedscan_infos_val_full.pkl"
-    pickle_file_train = "./example_data/embodiedscan_infos_train_full.pkl"
-    anno_dict = read_annotation_pickles([pickle_file_val, pickle_file_train])
-    keys = sorted(list(anno_dict.keys()))
-    for key in keys:
-        anno = anno_dict[key]
-        bboxes = anno["bboxes"]
-        object_ids = anno["object_ids"]
-        object_types = anno["object_types"]
-        visible_view_object_dict = anno["visible_view_object_dict"]
-        extrinsics_c2w = anno["extrinsics_c2w"]
-        axis_align_matrix = anno["axis_align_matrix"]
-        intrinsics = anno["intrinsics"]
-        depth_intrinsics = anno["depth_intrinsics"]
-        image_paths = anno["image_paths"]
-
-        dataset, _, scene_id, _ = image_paths[0].split(".")[0].split("/")
-        if dataset != "scannet":
-            continue
-        if scene_id != "scene0000_00":
-            continue
-        print(f"Processing {dataset} {scene_id}")
-        real_image_dir = "./example_data/posed_images"
-        real_image_paths = []
-        for image_path in image_paths:
-            image_id = os.path.basename(image_path)[:-4]
-            real_image_paths.append(os.path.join(
-                real_image_dir, image_id + ".jpg"))
-        print(f"Real image path example: {real_image_paths[0]}")
-        blurry_image_ids_path = "./example_data/anno_lang/blurry_image_ids.json"
-        # output_dir = './example_data/anno_lang/painted_images'
-        # paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, real_image_paths, blurry_image_ids_path, output_dir, output_type="paint")
-        output_dir = "./example_data/anno_lang/cropped_images"
-        paint_object_pictures(
-            bboxes,
-            object_ids,
-            object_types,
-            visible_view_object_dict,
-            extrinsics_c2w,
-            axis_align_matrix,
-            intrinsics,
-            depth_intrinsics,
-            real_image_paths,
-            blurry_image_ids_path,
-            output_dir,
-            output_type="crop",
-        )
+hashes = []
+def map_file_path(image_path):
+    if 'mp3d' in image_path:
+    # 'posed_images/1mp3d_0015_region0/0165_2_5.jpg'
+    # /mnt/petrelfs/share_data/maoxiaohan/transfer/matterport3d/scans/17DRP5sb8fy/matterport_color_images/b185432bf33645aca813ac2a961b4140_i2_3.jpg
+    # /mnt/petrelfs/share_data/maoxiaohan/transfer/matterport3d/scans/17DRP5sb8fy/matterport_depth_images/b185432bf33645aca813ac2a961b4140_d2_3.png
+        scene_id = image_path.split('/')[-2].split('_region')[0]
+        view_id = image_path.split('/')[-1].split('.')[0]
+        scene_hash = mapping_mp3d[scene_id]
+        hashes.append(scene_hash)
+        mapped_view_id = map_view_id(view_id, 'mp3d', scene_hash)
+        mapped_view_id_for_depth = mapped_view_id[:-4]+'d'+mapped_view_id[-3:]
+        ret_color = f"/mnt/petrelfs/share_data/maoxiaohan/transfer/matterport3d/scans/{scene_hash}/matterport_color_images/{mapped_view_id}.jpg"
+        ret_depth = f"/mnt/petrelfs/share_data/maoxiaohan/transfer/matterport3d/scans/{scene_hash}/matterport_depth_images/{mapped_view_id_for_depth}.png"
+    # 'posed_images/3rscan0000/000442.jpg'
+    # /mnt/petrelfs/share_data/maoxiaohan/transfer/3rscan/raw_data/ffa41874-6f78-2040-85a8-8056ac60c764/sequence/frame-000137.color.jpg
+    # /mnt/petrelfs/share_data/maoxiaohan/transfer/3rscan/raw_data/ffa41874-6f78-2040-85a8-8056ac60c764/sequence/frame-000171.depth.pgm
+    elif '3rscan' in image_path:
+        scene_id = image_path.split('/')[-2]
+        view_id = image_path.split('/')[-1].split('.')[0]
+        scene_hash = mapping_3rscan[scene_id]
+        hashes.append(scene_hash)
+        mapped_view_id = map_view_id(view_id, '3rscan')
+        mapped_view_id_for_depth = mapped_view_id.replace('color', 'depth')
+        ret_color = f"/mnt/petrelfs/share_data/maoxiaohan/transfer/3rscan/raw_data/{scene_hash}/sequence/{mapped_view_id}.jpg"
+        ret_depth = f"/mnt/petrelfs/share_data/maoxiaohan/transfer/3rscan/raw_data/{scene_hash}/sequence/{mapped_view_id_for_depth}.pgm"
+    elif 'scannet' in image_path:
+    # 'scannet/posed_images/scene0701_01/01040.jpg'
+    # /mnt/petrelfs/share_data/maoxiaohan/transfer/ScanNet_v2/posed_images/scene0072_00/01040.jpg
+    # /mnt/petrelfs/share_data/maoxiaohan/transfer/ScanNet_v2/posed_images/scene0072_00/01040.png
+        scene_id = image_path.split('/')[-2]
+        view_id = image_path.split('/')[-1].split('.')[0]
+        ret_color = f"/mnt/petrelfs/share_data/maoxiaohan/transfer/ScanNet_v2/posed_images/{scene_id}/{view_id}.jpg"
+        ret_depth = f"/mnt/petrelfs/share_data/maoxiaohan/transfer/ScanNet_v2/posed_images/{scene_id}/{view_id}.png"
+    if not os.path.exists(ret_color):
+        print(scene_hash)
+    return ret_color, ret_depth
 
 
-def select_for_all_scenes_single_thread():
-    pickle_file_val = "/mnt/petrelfs/share_data/wangtai/data/full_10_visible/embodiedscan_infos_val_full.pkl"
-    pickle_file_train = "/mnt/petrelfs/share_data/wangtai/data/full_10_visible/embodiedscan_infos_train_full.pkl"
-    data_real_dir = "/mnt/petrelfs/share_data/maoxiaohan"
+
+
+if __name__ == "__main__":
+    # single_scene_test()
+    ########################################################################################
+    ## select_for_all_scenes
+    ## NOTE: only use the desired pickle files.
+    ## No "skipping existing" feature for this code.
+    pickle_files = ["embodiedscan_infos_train_full.pkl",
+                    "embodiedscan_infos_val_full.pkl",
+                    "3rscan_infos_test_MDJH_aligned_full_10_visible.pkl",
+                    "matterport3d_infos_test_full_10_visible.pkl"][-1:]
+    data_real_dir = "/mnt/petrelfs/share_data/maoxiaohan/transfer"
     out_real_dir = "/mnt/petrelfs/share_data/lvruiyuan"
-    anno_dict = read_annotation_pickles([pickle_file_val, pickle_file_train])
+    anno_dict = read_annotation_pickles(pickle_files)
     keys = sorted(list(anno_dict.keys()))
     pbar = tqdm(range(len(keys)))
+    inputs = []
+    scene_ids = []
     for key_index in pbar:
         key = keys[key_index]
         anno = anno_dict[key]
@@ -663,20 +641,26 @@ def select_for_all_scenes_single_thread():
         axis_align_matrix = anno["axis_align_matrix"]
         intrinsics = anno["intrinsics"]
         depth_intrinsics = anno["depth_intrinsics"]
-        image_paths = anno["image_paths"]
-
-        dataset, _, scene_id, _ = image_paths[0].split(".")[0].split("/")
+        _image_paths = anno["image_paths"]
+        scene_id = _image_paths[0].split(".")[0].split("/")[-2]
+        scene_ids.append(scene_id)
+        if '3rscan' in scene_id:
+            dataset = '3rscan'
+            visible_view_object_dict = {map_view_id(k, '3rscan'):v for k, v in visible_view_object_dict.items()}
+        elif 'mp3d' in scene_id:
+            dataset = 'matterport3d'
+            house_id = _image_paths[0].split('/')[-2].split('_region')[0]
+            house_hash = mapping_mp3d[house_id]
+            visible_view_object_dict = {map_view_id(k, 'mp3d', house_hash):v for k, v in visible_view_object_dict.items()}
+        elif 'scene' in scene_id:
+            dataset = 'scannet'
         pbar.set_description(
-            "Painting for {} scene {}".format(dataset, scene_id))
-        image_paths = [
-            os.path.join(
-                data_real_dir,
-                path.replace("matterport3d", "matterport3d/matterport3d").replace(
-                    "scannet", "ScanNet_v2"
-                ),
-            )
-            for path in image_paths
-        ]  # dirty implementation. The real data is not arranged properly.
+            "Processing input for scene {}".format(scene_id))
+        image_paths, depth_map_paths = [], []
+        for path in _image_paths:
+            i_path, d_path = map_file_path(path)
+            image_paths.append(i_path)
+            depth_map_paths.append(d_path)
         blurry_image_ids_path = os.path.join(
             out_real_dir, dataset, scene_id, "blurry_image_ids.json"
         )
@@ -684,61 +668,6 @@ def select_for_all_scenes_single_thread():
         # paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint")
         output_dir = os.path.join(
             out_real_dir, dataset, scene_id, "cropped_objects")
-        paint_object_pictures(
-            bboxes,
-            object_ids,
-            object_types,
-            visible_view_object_dict,
-            extrinsics_c2w,
-            axis_align_matrix,
-            intrinsics,
-            depth_intrinsics,
-            image_paths,
-            blurry_image_ids_path,
-            output_dir,
-            output_type="crop",
-        )
-
-
-def select_for_all_scenes_multi_threads():
-    pickle_file_val = "/mnt/petrelfs/share_data/wangtai/data/full_10_visible/embodiedscan_infos_val_full.pkl"
-    pickle_file_train = "/mnt/petrelfs/share_data/wangtai/data/full_10_visible/embodiedscan_infos_train_full.pkl"
-    data_real_dir = "/mnt/petrelfs/share_data/maoxiaohan"
-    out_real_dir = "/mnt/petrelfs/share_data/lvruiyuan"
-    anno_dict = read_annotation_pickles([pickle_file_val, pickle_file_train])
-    keys = sorted(list(anno_dict.keys()))
-    inputs = []
-    for key_index in range(len(keys)):
-        key = keys[key_index]
-        anno = anno_dict[key]
-        bboxes = anno["bboxes"]
-        object_ids = anno["object_ids"]
-        object_types = anno["object_types"]
-        visible_view_object_dict = anno["visible_view_object_dict"]
-        extrinsics_c2w = anno["extrinsics_c2w"]
-        axis_align_matrix = anno["axis_align_matrix"]
-        intrinsics = anno["intrinsics"]
-        depth_intrinsics = anno["depth_intrinsics"]
-        image_paths = anno["image_paths"]
-
-        dataset, _, scene_id, _ = image_paths[0].split(".")[0].split("/")
-        image_paths = [
-            os.path.join(
-                data_real_dir,
-                path.replace("matterport3d", "matterport3d/matterport3d").replace(
-                    "scannet", "ScanNet_v2"
-                ),
-            )
-            for path in image_paths
-        ]  # dirty implementation. The real data is not arranged properly.
-        blurry_image_ids_path = os.path.join(
-            out_real_dir, dataset, scene_id, "blurry_image_ids.json"
-        )
-        # output_dir = os.path.join(out_real_dir, dataset, scene_id, 'painted_objects')
-        # paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, depth_intrinsics, image_paths, blurry_image_ids_path, output_dir, output_type="paint")
-        output_dir = os.path.join(
-            out_real_dir, dataset, scene_id, "cropped_objects")
-
         input = (
             bboxes,
             object_ids,
@@ -752,15 +681,14 @@ def select_for_all_scenes_multi_threads():
             blurry_image_ids_path,
             output_dir,
             "crop",
+            depth_map_paths,
+            False # skip existing
         )
         inputs.append(input)
+    hashes = set(hashes)
+    print(hashes)
+    print(scene_ids)
+    exit()
     import mmengine
-
-    mmengine.utils.track_parallel_progress(
-        func=paint_object_pictures_tracked, tasks=inputs, nproc=8
-    )
-
-
-if __name__ == "__main__":
-    # single_scene_test()
-    select_for_all_scenes_multi_threads()
+    mmengine.track_parallel_progress(paint_object_pictures_tracked, inputs, nproc=10)
+        # paint_object_pictures(*input)

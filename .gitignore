@@ -26,6 +26,7 @@ openai_api_key.txt
 *counts.csv
 accuracy_dict*.csv
 data.zip
+scene_mappings/*
 
 # temporary files
 **testing**
