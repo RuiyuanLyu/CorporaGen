@@ -3,21 +3,30 @@ import requests
 import os
 import json
 import openai
+import random
 from openai import OpenAI
-openai.api_base = "https://api.chatweb.plus/v1"
 # prevent accidential activation of API key
 KEY_ACTIVATED = True
 
-def get_api_key():
-    with open("openai_api_key.txt", "r") as f:
-        api_key = f.read().strip()
+# NOTE: not finished yet.
+def get_api_key(key_file=None):
+    if key_file is None:
+        key_file = "openai_api_key.txt"
     if not KEY_ACTIVATED:
-        api_key = " "
         print("WARNING: API key not ACTIVATED. Please activate it in the code.")
+        return " "
+    with open(key_file, "r") as f:
+        api_keys = [line.strip() for line in f.readlines()]
+    if len(api_keys) == 0:
+        print(f"WARNING: No API key found. Please add one in the file: {key_file}.")
+        return " "
+    api_key = random.choice(api_keys)
     return api_key
 
 def get_client():
-    return OpenAI(api_key=get_api_key(), base_url=openai.api_base)
+    if random.random() < 0.5:
+        return OpenAI(api_key=get_api_key("chatweb_api_key.txt"), base_url="https://api.chatweb.plus/v1")
+    return OpenAI(api_key=get_api_key())
 
 def get_response(messages, model="gpt-3.5-turbo", max_tokens=1000):
     client = get_client()

@@ -7,9 +7,10 @@ data/
 data_zip/
 region_annos/
 selected_scenes/
+*.zip
 
-# OpenAI API key
-openai_api_key.txt
+# API keys
+*api_key*.txt
 
 # Python cache files
 **.pyc
