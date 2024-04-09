@@ -32,3 +32,4 @@ scene_mappings/*
 # temporary files
 **testing**
 shortcut**
+tmp/**
