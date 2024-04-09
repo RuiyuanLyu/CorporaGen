@@ -3,6 +3,15 @@ import json
 from tqdm import tqdm
 from openai_api import mimic_chat, mimic_chat_budget, get_content_groups_from_source_groups, num_tokens_from_string, get_response
 from utils_read import load_json
+from functools import wraps
+
+def mmengine_track_func(func):
+    @wraps(func)
+    def wrapped_func(args):
+        result = func(*args)
+        return result
+
+    return wrapped_func
 
 
 def annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=True, max_additional_attempts=0, pick_ids=None, with_highlight=True):
@@ -32,7 +41,7 @@ def annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, for
         file_names.append(file_name)
     inputs = [(file_name, image_dir, output_dir, skip_existing, force_invalid, max_additional_attempts, with_highlight) for file_name in file_names]
     import mmengine
-    results = mmengine.track_parallel_progress(annotate_object_parallel, inputs, nproc=16)
+    results = mmengine.track_parallel_progress(annotate_object, inputs, nproc=8)
     return results
 
 def annotate_object_parallel(inputs):
@@ -273,6 +282,7 @@ def check_annotation_quality(annotations, display_stats=True):
         print("Overall quality meta*other: {:.2f}%".format((quality_dict["meta"] * sum/(len(quality_dict)-2)) * 100))
     return quality_dict
 
+@mmengine_track_func
 def translate_annotation_from_file(json_path, src_lang="English", tgt_lang="Chinese", force_translate=False):
     """
         Translates the "original_description" field of an annotation from a file.
@@ -298,31 +308,34 @@ def translate_annotation_from_file(json_path, src_lang="English", tgt_lang="Chin
         json.dump(annotation, f, indent=4)
     return annotation
 
-def translate_annotation_from_file_parallel(inputs):
-    return translate_annotation_from_file(*inputs)
-
+@mmengine_track_func
 def summarize_annotation_from_file(json_path, force_summarize=False):
+    """
+        Summarizes the "original_description" field of an annotation from a file.
+        Returns:
+            A dictionary of the summarized annotation.
+    """
     if not json_path.endswith(".json"):
         return
     annotation = load_json(json_path)
     is_valid, error_message = check_annotation_validity(annotation)
     # if not is_valid:
     #     return
-    if num_tokens_from_string(annotation["original_description"]) < 200:
+    text = annotation.get("original_description", "")
+    if not text:
+        return
+    if num_tokens_from_string(text) < 200:
         return 
     if "simplified_description" in annotation and not force_summarize:
         return annotation
-    text = annotation["original_description"]
     summary = summarize(text)
     annotation["simplified_description"] = summary
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(annotation, f, indent=4)
     return annotation
 
-def summarize_annotation_from_file_parallel(inputs):
-    return summarize_annotation_from_file(*inputs)
 
-def simplify_text(text):
+def remove_specific_expressions(text):
     if not isinstance(text, str):
         return text
     text = text.replace(" in the center of the picture", "")
@@ -340,7 +353,7 @@ def simplify_text(text):
     text = text.replace(" neither too large nor too small", "")
     return text
 
-def simplify_description(json_path):
+def remove_specific_expressions_from_description(json_path):
     with open(json_path, "r") as f:
         try:
             data = json.load(f)
@@ -352,12 +365,12 @@ def simplify_description(json_path):
             return None
         description = data.get("original_description", "")
         if description:
-            data["original_description"] = simplify_text(description)
+            data["original_description"] = remove_specific_expressions(description)
         description = data.get("simplified_description", "")
         if description:
-            data["simplified_description"] = simplify_text(description)
+            data["simplified_description"] = remove_specific_expressions(description)
     elif isinstance(data, list):
-        data = [simplify_text(d) for d in data]
+        data = [remove_specific_expressions(d) for d in data]
     with open(json_path, "w") as f:
         json.dump(data, f, indent=4)
 
@@ -385,21 +398,39 @@ if __name__ == "__main__":
     # ATTENTION: MODIFY with_highlight 
     # check_annotation_validity_path(output_dir)
 
+    ###################################################################
+    ## Remove specific expressions usage here.
+    ## NOTE: use this before summarization.
+    # tasks = []
+    # for root, dirs, files in os.walk(DATA_ROOT):
+    #     for file in files:
+    #         if file.endswith(".json"):
+    #             tasks.append(os.path.join(root, file))
+
+    # import mmengine
+    # mmengine.track_parallel_progress(remove_specific_expressions_from_description, tasks, nproc=8)
+
     ##################################################################
     ## Summarization usage here.
     # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
     # my_ids = set(my_ids)
     # file_names = [file for file in os.listdir(output_dir) if file.endswith(".json") and int(file.split("_")[0]) in my_ids]
     scene_ids = os.listdir(DATA_ROOT)
+    # skip mp3d, just for now.
+    scene_ids = [scene_id for scene_id in scene_ids if scene_id.startswith("scene") or scene_id.startswith("3rscan")]
     inputs = []
+    corpora_strings = ["corpora_object_InternVL-Chat-V1-2-Plus_crop", "corpora_object_cogvlm_crop"][:1]
     for scene_id in scene_ids:
-        output_dir = os.path.join(DATA_ROOT, scene_id, "corpora_object_InternVL-Chat-V1-2-Plus_crop")
-        output_dir = os.path.join(DATA_ROOT, scene_id, "corpora_object_cogvlm_crop")
-        file_names = [file for file in os.listdir(output_dir) if file.endswith(".json")]
-        json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
-        inputs.extend([(json_path, False) for json_path in json_paths])
+        for corpora_string in corpora_strings:
+            output_dir = os.path.join(DATA_ROOT, scene_id, corpora_string)
+            if not os.path.exists(output_dir):
+                continue
+            file_names = [file for file in os.listdir(output_dir) if file.endswith(".json")]
+            json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
+            # False means force_summarize=False
+            inputs.extend([(json_path, False) for json_path in json_paths])
     import mmengine
-    results = mmengine.track_parallel_progress(summarize_annotation_from_file_parallel, inputs, nproc=16)
+    results = mmengine.track_parallel_progress(summarize_annotation_from_file, inputs, nproc=8)
 
     ##################################################################
     ## Translate usage here.
@@ -413,14 +444,4 @@ if __name__ == "__main__":
     #     json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
     #     inputs = [(json_path, "English", "Chinese", True) for json_path in json_paths]
     #     import mmengine
-    #     results = mmengine.track_parallel_progress(translate_annotation_from_file_parallel, inputs, nproc=16)
-    ###################################################################
-    ## Simplify usage here.
-    # tasks = []
-    # for root, dirs, files in os.walk(DATA_ROOT):
-    #     for file in files:
-    #         if file.endswith(".json"):
-    #             tasks.append(os.path.join(root, file))
-
-    # import mmengine
-    # mmengine.track_parallel_progress(simplify_description, tasks, nproc=10)
+    #     results = mmengine.track_parallel_progress(translate_annotation_from_file, inputs, nproc=8)
