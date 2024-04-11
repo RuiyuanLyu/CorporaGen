@@ -27,7 +27,6 @@ selected_scenes/
 *counts.csv
 accuracy_dict*.csv
 data.zip
-scene_mappings/*
 
 # temporary files
 **testing**
