@@ -2,8 +2,10 @@ import gradio as gr  # gradio==3.50.2
 import os
 import json
 import numpy as np
-from object_text_anno import check_annotation_validity, map_choice_to_bool, map_choice_to_text
+from object_text_anno import check_annotation_validity, map_choice_to_bool, map_CNchoice_to_ENtext, map_ENtext_to_CNchoice
 from utils_read import load_json
+from difflib import Differ
+
 
 QUESTIONS = {
     "meta": "这段文字是否在尝试描述框中的物体？",
@@ -12,8 +14,8 @@ QUESTIONS = {
     "appearance": "物体的外观（形状颜色）是否准确？",
     "material": "物体的材质是否准确？",
     "size": "物体的尺寸是否准确？",
-    "state": "物体的状态（比如灯的开关/门的开关）是否准确？",
-    "position": "物体的位置是否准确？",
+    "state": "物体的状态（比如门的开关/桶的空满）是否准确？",
+    "position": "物体的位置（比如在桌上/A和B之间）是否准确？",
     "placement": "物体的摆放（比如竖直/斜靠/平躺/堆叠）是否准确？",
     "special_function": "物体的特殊功能是否准确？请注意是否有编造的内容。",
     "other_features": "物体的其它特点（比如椅子扶手）是否准确？"
@@ -23,8 +25,8 @@ DATA_ROOT = "data"
 SUPER_USERNAMES = ["openrobotlab", "lvruiyuan", "test"]
 
 VALID_MODEL_CORPORAS = ["corpora_object_cogvlm_crop", "corpora_object_gpt4v_crop", "corpora_object_gpt4v_paint_highdetail", "corpora_object_XComposer2_crop", "corpora_object_InternVL-Chat-V1-2-Plus_crop"]
-DEFAULT_SAVE_STRING = "corpora_object"
-MAIN_CORPORA_STRING = VALID_MODEL_CORPORAS[0]
+DEFAULT_SAVE_STR = "corpora_object"
+MAIN_CORPORA_STR = VALID_MODEL_CORPORAS[0]
 
 
 ################################################################################
@@ -36,27 +38,44 @@ with gr.Blocks() as demo:
         lock_user_name_btn = gr.Button(value="确认并锁定用户名（刷新网页才能重置用户名）", label="确认用户名")
 
     with gr.Row():
-        directory = gr.Dropdown(label="选择一个场景名", choices=[], allow_custom_value=True, visible=True)
-        previous_user = gr.Dropdown(label="Select which user's annotations to load", choices=[], visible=False, allow_custom_value=True)
-        object_name = gr.Dropdown(label="选择一个物体", value="Select an object", allow_custom_value=True, interactive=True)
-        check_objects_btn = gr.Button(label="Check Missing Objects", value="检查缺失标注的物体")
-        supp_corpora = gr.Dropdown(label="选择备用语料来源模型", choices=VALID_MODEL_CORPORAS, value=VALID_MODEL_CORPORAS[-1], visible=True)
-        record_corpora_source = gr.Checkbox(label="保存时记录标注来源模型", value=False, visible=False)
+        DIRECTORY_GR_STR = "选择一个场景名"
+        directory = gr.Dropdown(label=DIRECTORY_GR_STR, choices=[], allow_custom_value=True, visible=True)
+        PREVIOUS_USER_GR_STR = "选择要检查标注结果的用户名"
+        previous_user = gr.Dropdown(label=PREVIOUS_USER_GR_STR, choices=[], visible=False, allow_custom_value=True)
+        OBJECT_NAME_GR_STR = "选择一个物体"
+        object_name = gr.Dropdown(label=OBJECT_NAME_GR_STR, value=OBJECT_NAME_GR_STR, allow_custom_value=True, interactive=True)
+        CHECK_OBJECTS_BTN_GR_STR = "检查缺失标注的物体"
+        check_objects_btn = gr.Button(label=CHECK_OBJECTS_BTN_GR_STR, value=CHECK_OBJECTS_BTN_GR_STR)
+        SUPP_CORPORA_GR_STR = "选择备用语料来源模型"
+        supp_corpora = gr.Dropdown(label=SUPP_CORPORA_GR_STR, choices=VALID_MODEL_CORPORAS, value=VALID_MODEL_CORPORAS[-1], visible=True)
+        DO_RECORD_CORPORA_SOURCE_IN_DIR_NAME_GR_STR = "通过目录名记录标注来源模型"
+        do_record_corpora_source_in_dir_name = gr.Checkbox(label=DO_RECORD_CORPORA_SOURCE_IN_DIR_NAME_GR_STR, value=False, visible=False)
 
     with gr.Row():
-        original_description = gr.Textbox(label="待检查/修改的描述", interactive=False, lines=5)
-        supp_description = gr.Textbox(label="若主描述答非所问，备用描述", value="", visible=False, interactive=False, lines=5)
+        ORIGIONAL_DESCRIPTION_GR_STR = "待检查/修改的描述"
+        original_description = gr.Textbox(label=ORIGIONAL_DESCRIPTION_GR_STR, interactive=False, lines=5)
+        SUPP_DESCRIPTION_GR_STR = "若主描述答非所问，备用描述"
+        supp_description = gr.Textbox(label=SUPP_DESCRIPTION_GR_STR, value="", visible=False, interactive=False, lines=5)
     warning_text = gr.Textbox(label="警告", value="", visible=False, interactive=False)
     with gr.Row():
-        translated_description = gr.Textbox(label="翻译后的描述", interactive=False, lines=3)
-        supp_translated_description = gr.Textbox(label="备用翻译描述", value="", visible=False, interactive=False, lines=3)
+        TRANSLATED_DESCRIPTION_GR_STR = "翻译后的描述"
+        translated_description = gr.Textbox(label=TRANSLATED_DESCRIPTION_GR_STR, interactive=False, lines=3)
+        SUPP_TRANSLATED_DESCRIPTION_GR_STR = "备用翻译描述"
+        supp_translated_description = gr.Textbox(label=SUPP_TRANSLATED_DESCRIPTION_GR_STR, value="", visible=False, interactive=False, lines=3)
+    with gr.Row():
+        MODIFIED_DESCRIPTION_GR_STR = "修改后的描述"
+        modified_description = gr.Textbox(label=MODIFIED_DESCRIPTION_GR_STR, value="", visible=True, interactive=False, lines=3)
+        DELTA_DESCRIPTION_GR_STR = "修改的部分"
+        delta_description = gr.HighlightedText(label="Diff",combine_adjacent=True,show_legend=True,color_map={"+": "red", "-": "green"}, visible=True, interactive=False)
     
     with gr.Row():
         core_question = gr.Radio(label=QUESTIONS["meta"], choices=["是", "否", "不要选这个选项"], value="不要选这个选项", interactive=True)
         core_question2 = gr.Radio(label=QUESTIONS["visual_info_sufficient"], choices=["是", "否", "不要选这个选项"], value="不要选这个选项", interactive=True)
-        supp_activated = gr.Checkbox(label="左边描述没有在尝试描述框中的物体，勾选以切换到右边的描述。（在取消前，都将使用右边的描述）", value=False, visible=True)
+        SUPP_ACTIVATED_GR_STR = "左边描述没有在尝试描述框中的物体，勾选以切换到右边的描述。（在取消前，都将使用右边的描述）"
+        supp_activated = gr.Checkbox(label=SUPP_ACTIVATED_GR_STR, value=False, visible=True)
 
     with gr.Row():
+        accuracy_dict = gr.State({})
         questions_radio = []
         # Questions for the user to answer
         num_questions = len(KEYS)
@@ -82,14 +101,14 @@ with gr.Blocks() as demo:
 ################################################################################
 ## Start defining the logic for the webui
 
-    def check_user_name_validity(user_name):
+    def _check_user_name_validity(user_name):
         if len(user_name) == 0 or ' ' in user_name or not user_name[0].isalpha():
             gr.Warning("用户名不合法。请首位必须为字母，并不要带空格。请重新输入。")
             return False
-        return 
+        return True
     
     def lock_user_name(user_name, user_name_locked):
-        if check_user_name_validity(user_name):
+        if _check_user_name_validity(user_name):
             user_name = user_name.strip()
             user_name = gr.Textbox(label="用户名", value=user_name, interactive=False)
             user_name_locked = True
@@ -97,27 +116,27 @@ with gr.Blocks() as demo:
     lock_user_name_btn.click(lock_user_name, inputs=[user_name, user_name_locked],
                                 outputs=[user_name, user_name_locked])
 
-    def update_record_corpora_source_visibility(user_name):
+    def update_do_record_corpora_source_in_dir_name_visibility(user_name):
         visible = user_name in SUPER_USERNAMES
-        record_corpora_source = gr.Checkbox(label="保存时记录标注来源模型", value=False, visible=visible)
-        return record_corpora_source
-    lock_user_name_btn.click(update_record_corpora_source_visibility, inputs=[user_name], outputs=[record_corpora_source])
+        do_record_corpora_source_in_dir_name = gr.Checkbox(label=DO_RECORD_CORPORA_SOURCE_IN_DIR_NAME_GR_STR, value=False, visible=visible)
+        return do_record_corpora_source_in_dir_name
+    lock_user_name_btn.click(update_do_record_corpora_source_in_dir_name_visibility, inputs=[user_name], outputs=[do_record_corpora_source_in_dir_name])
 
     def update_previous_user_choices(directory, user_name):
-        dir_to_check = os.path.join(directory, DEFAULT_SAVE_STRING)
+        dir_to_check = os.path.join(directory, DEFAULT_SAVE_STR)
         os.makedirs(dir_to_check, exist_ok=True)
         previous_users = [name for name in os.listdir(dir_to_check) if os.path.isdir(os.path.join(dir_to_check, name))]
-        previous_users = [name.strip("user_") for name in previous_users]
+        previous_users = [name.replace("user_", "") for name in previous_users]
         if len(previous_users) == 0 or not user_name in SUPER_USERNAMES:
-            return gr.Dropdown(label="Select which user's annotations to load", choices=[], value="", visible=False)
-        return gr.Dropdown(label="Select which user's annotations to load", choices=previous_users, value="", visible=True)
+            return gr.Dropdown(label=PREVIOUS_USER_GR_STR, choices=[], value="", visible=False)
+        return gr.Dropdown(label=PREVIOUS_USER_GR_STR, choices=previous_users, value="", visible=True)
     directory.change(fn=update_previous_user_choices, inputs=[directory, user_name], outputs=[previous_user])
 
     def update_valid_directories():
         """
         Returns a list of valid directories in the current working directory or subdirectories.
         """
-        main_corpora = MAIN_CORPORA_STRING
+        main_corpora = MAIN_CORPORA_STR
         valid_directories = []
         for dir_path, dir_names, file_names in os.walk(DATA_ROOT):
             if any(name.startswith(main_corpora) for name in dir_names) and "painted_objects" in dir_names:
@@ -136,16 +155,17 @@ with gr.Blocks() as demo:
         for dir_path in valid_directories:
             if not os.path.exists(os.path.join(directory, dir_path, object_name + ".json")):
                 valid_directories.remove(dir_path)
-        return gr.Dropdown(label="选择备用语料来源模型", choices=valid_directories, value=valid_directories[-1], visible=True)
+        return gr.Dropdown(label=SUPP_CORPORA_GR_STR, choices=valid_directories, value=valid_directories[-1], visible=True)
     object_name.change(fn=update_supp_corpora_choices, inputs=[directory, object_name], outputs=[supp_corpora])
 
     def _get_object_names(directory, corpora_source, user_name=None):
         valid_objects = []
         if user_name:
-            dir_to_load = os.path.join(directory, DEFAULT_SAVE_STRING, f"user_{user_name}")
+            dir_to_load = os.path.join(directory, DEFAULT_SAVE_STR, f"user_{user_name}")
         else:
             dir_to_load = os.path.join(directory, corpora_source)
         if not os.path.exists(dir_to_load):
+            gr.Info(f"目录 {dir_to_load} 不存在。没有可用的物体。")
             return valid_objects
         for json_file in os.listdir(dir_to_load):
             if json_file.endswith(".json"):
@@ -154,6 +174,8 @@ with gr.Blocks() as demo:
                 if is_valid:
                     object_name = json_file.split(".")[0]
                     valid_objects.append(object_name)
+            if len(valid_objects) == 0:
+                gr.Info(f"目录 {dir_to_load} 中没有可用的物体。")
         valid_objects.sort()
         return valid_objects
 
@@ -162,9 +184,16 @@ with gr.Blocks() as demo:
         Updates the choices of the object_name input based on the selected directory.
         """
         # previous_user is [] if the user is not a superuser or if there are no previous annotations.
-        main_corpora = MAIN_CORPORA_STRING
-        valid_objects = _get_object_names(directory, main_corpora, previous_user)
-        return gr.Dropdown(label="Select an object", choices=valid_objects, value=valid_objects[0], allow_custom_value=True)
+        if previous_user:
+            valid_objects = _get_object_names(directory, DEFAULT_SAVE_STR, previous_user)
+        else:
+            valid_objects = _get_object_names(directory, MAIN_CORPORA_STR)
+        if len(valid_objects) == 0:
+            value = ''
+            gr.Warning("没有可用的物体。请选择其他目录。")
+        else:
+            value = valid_objects[0]
+        return gr.Dropdown(label=OBJECT_NAME_GR_STR, choices=valid_objects, value=value, allow_custom_value=True)
     directory.change(fn=update_object_name_choices, inputs=[directory, previous_user], outputs=[object_name])
     previous_user.change(fn=update_object_name_choices, inputs=[directory, previous_user], outputs=[object_name])
 
@@ -172,10 +201,10 @@ with gr.Blocks() as demo:
         """
         Returns the next object name to be annotated.
         """
-        main_corpora = MAIN_CORPORA_STRING
+        main_corpora = MAIN_CORPORA_STR
         valid_objects = _get_object_names(directory, main_corpora, previous_user)
         if len(valid_objects) == 0:
-            return "Select an object"
+            return OBJECT_NAME_GR_STR
         if object_name not in valid_objects:
             return valid_objects[0]
         index = valid_objects.index(object_name)
@@ -189,14 +218,14 @@ with gr.Blocks() as demo:
         """
         Checks missing objects in the selected directory and returns a list of missing objects.
         """
-        ref_objects = _get_object_names(directory, MAIN_CORPORA_STRING)
+        ref_objects = _get_object_names(directory, MAIN_CORPORA_STR)
         if supp_activated:
             user_objects = _get_object_names(directory, supp_corpora, user_name)
         else:
-            user_objects = _get_object_names(directory, DEFAULT_SAVE_STRING, user_name)
+            user_objects = _get_object_names(directory, DEFAULT_SAVE_STR, user_name)
         user_objects = set(user_objects)
         missing_objects = [obj for obj in ref_objects if obj not in user_objects]
-        gr.Info(f"Missing {len(missing_objects)} objects: {missing_objects}")
+        gr.Info(f"Missing {len(missing_objects)}/{len(ref_objects)} objects: {missing_objects}")
         return missing_objects
     check_objects_btn.click(fn=check_objects, inputs=[directory, supp_corpora, supp_activated, user_name], outputs=warning_text)
 
@@ -208,7 +237,9 @@ with gr.Blocks() as demo:
             Returns:
                 original_description: str, the original description of the object.
                 translated_description: str, the translated description of the object.
+                modified_description: str or None, the modified description of the object if it exists.
                 warning_text: str or None, the warning message if the translated description is not available.
+                accuracy_dict: dict, the accuracy dictionary of the object.
         """
         annotation = load_json(json_file_path)
         assert isinstance(annotation, dict), f"Invalid annotation type: {type(annotation)}"
@@ -216,69 +247,88 @@ with gr.Blocks() as demo:
             original_description = annotation["simplified_description"]
         else:
             original_description = annotation["original_description"]
-        if "modified_description" in annotation:
-            translated_description = annotation["modified_description"]
+        translated_description = annotation.get("translated_description", '没有可用的中文描述。如果左右都没有，请在Q0中选择“否”。')
+        modified_description = annotation.get("modified_description", None)
+        if modified_description:
             warning_text = "提示：该物体的描述此前已经被修改过。"
             if not is_aux:
                 gr.Info("提示：该物体的描述此前已经被修改过。")
         else:
-            translated_description = annotation.get("translated_description", '没有可用的中文描述。如果左右都没有，请在Q0中选择“否”。')
             warning_text = None
-        return original_description, translated_description, warning_text
+        accuracy_dict = annotation.get("accuracy_dict", {})
+        return original_description, translated_description, modified_description, warning_text, accuracy_dict
 
-    def get_description_and_image_path(object_name, directory, supp_corpora, supp_activated, record_corpora_source, user_name, previous_user):
+    def get_description_answers_image_path(object_name, directory, supp_corpora, supp_activated, do_record_corpora_source_in_dir_name, user_name, previous_user):
         """
-        Returns the description and image path of the given object.
+        Returns the description, answers, and image path of the given object.
         """
-        json_file = os.path.join(directory, MAIN_CORPORA_STRING, f"{object_name}.json")
-        load_string = supp_corpora if record_corpora_source and supp_activated else DEFAULT_SAVE_STRING
-        user_json_file = os.path.join(directory, load_string, f"user_{user_name}", f"{object_name}.json")
+        json_file = os.path.join(directory, MAIN_CORPORA_STR, f"{object_name}.json")
+        load_STR = supp_corpora if do_record_corpora_source_in_dir_name and supp_activated else DEFAULT_SAVE_STR
+        user_json_file = os.path.join(directory, load_STR, f"user_{user_name}", f"{object_name}.json")
         if os.path.exists(user_json_file):
             json_file = user_json_file
         if previous_user:
-            json_file = os.path.join(directory, load_string, f"user_{previous_user}", f"{object_name}.json")
-        original_description, translated_description, warning_text = _get_description(json_file)
+            json_file = os.path.join(directory, load_STR, f"user_{previous_user}", f"{object_name}.json")
+        original_description, translated_description, modified_description, warning_text, accuracy_dict = _get_description(json_file)
+        if modified_description:
+            modified_description = gr.Textbox(label=MODIFIED_DESCRIPTION_GR_STR, value=modified_description, visible=True, interactive=False)
+        else:
+            modified_description = gr.Textbox(label=MODIFIED_DESCRIPTION_GR_STR, value="", visible=False, interactive=False)
         supp_json_file = os.path.join(directory, supp_corpora, f"{object_name}.json")
         if os.path.exists(supp_json_file):
-            supp_description, supp_translated_description, _ = _get_description(supp_json_file, is_aux=True)
-            supp_description = gr.Textbox(label="Supp Description", value=supp_description, visible=True, interactive=False)
-            supp_translated_description = gr.Textbox(label="Supp Translated Description", value=supp_translated_description, visible=True, interactive=False)
+            supp_description, supp_translated_description, _, _, _ = _get_description(supp_json_file, is_aux=True)
+            supp_description = gr.Textbox(label=SUPP_DESCRIPTION_GR_STR, value=supp_description, visible=True, interactive=False)
+            supp_translated_description = gr.Textbox(label=SUPP_TRANSLATED_DESCRIPTION_GR_STR, value=supp_translated_description, visible=True, interactive=False)
         else:
-            supp_description = gr.Textbox(label="Supp Description", value="", visible=False, interactive=False)
-            supp_translated_description = gr.Textbox(label="Supp Translated Description", value="", visible=False, interactive=False)
+            supp_description = gr.Textbox(label=SUPP_DESCRIPTION_GR_STR, value="", visible=False, interactive=False)
+            supp_translated_description = gr.Textbox(label=SUPP_TRANSLATED_DESCRIPTION_GR_STR, value="", visible=False, interactive=False)
         warning_text = gr.Textbox(label="Warning", value=warning_text, visible=bool(warning_text), interactive=False)
         image_path = os.path.join(directory, "repainted_objects", f"{object_name}.jpg")
         if not os.path.exists(image_path):
             image_path = os.path.join(directory, "painted_objects", f"{object_name}.jpg")
         aux_image_path = os.path.join(directory, "cropped_objects", f"{object_name}.jpg")
-        return original_description, translated_description, supp_description, supp_translated_description, image_path, aux_image_path, warning_text
-    object_name.change(fn=get_description_and_image_path,
-                       inputs=[object_name, directory, supp_corpora, record_corpora_source, supp_activated, user_name, previous_user],
-                       outputs=[original_description, translated_description, supp_description, supp_translated_description, image, aux_image, warning_text])
-    supp_corpora.change(fn=get_description_and_image_path,
-                       inputs=[object_name, directory, supp_corpora, record_corpora_source, supp_activated, user_name, previous_user],
-                       outputs=[original_description, translated_description, supp_description, supp_translated_description, image, aux_image, warning_text])
+        return original_description, translated_description, modified_description, supp_description, supp_translated_description, image_path, aux_image_path, warning_text
+    object_name.change(fn=get_description_answers_image_path,
+                       inputs=[object_name, directory, supp_corpora, do_record_corpora_source_in_dir_name, supp_activated, user_name, previous_user],
+                       outputs=[original_description, translated_description, modified_description, supp_description, supp_translated_description, image, aux_image, warning_text, accuracy_dict])
+    supp_corpora.change(fn=get_description_answers_image_path,
+                       inputs=[object_name, directory, supp_corpora, do_record_corpora_source_in_dir_name, supp_activated, user_name, previous_user],
+                       outputs=[original_description, translated_description, modified_description, supp_description, supp_translated_description, image, aux_image, warning_text, accuracy_dict])
+    
+    preview_description = gr.Textbox(label="Preview Annotation", value="", visible=False, interactive=False)
 
-    def refresh_core_questions():
-        core_question = "不要选这个选项"
-        core_question2 = "不要选这个选项"
+    def diff_texts(text1, text2):
+        d = Differ()
+        return [
+            (token[2:], token[0] if token[0] != " " else None)
+            for token in d.compare(text1, text2)
+        ]
+    modified_description.change(fn=diff_texts, inputs=[translated_description, modified_description], outputs=delta_description)
+    preview_description.change(fn=diff_texts, inputs=[translated_description, preview_description], outputs=delta_description)
+
+    def refresh_core_questions(accuracy_dict):
+        core_question = map_ENtext_to_CNchoice(accuracy_dict.get("meta", None))
+        core_question2 = map_ENtext_to_CNchoice(accuracy_dict.get("visual_info_sufficient", None))
         return core_question, core_question2
-    object_name.change(fn=refresh_core_questions, inputs=None, outputs=[core_question, core_question2])
+    object_name.change(fn=refresh_core_questions, inputs=accuracy_dict, outputs=[core_question, core_question2])
 
-    def refresh_questions(core_question, core_question2):
+    def refresh_questions(core_question, core_question2, accuracy_dict):
         visible = map_choice_to_bool(core_question) and map_choice_to_bool(core_question2)
         questions_radio = []
         # Questions for the user to answer
-        questions = [QUESTIONS.get(k, "") for k in KEYS]
         choices = ["是", "否", "该物体没有这一属性", "该物体具有这一属性，描述遗漏了", "不要选这个选项"]
         for i in range(len(questions)):
-            value = choices[-1] if np.random.rand() < 0.1 else choices[0] # to check the user is not too lazy
-            r = gr.Radio(label=f"Question {i+1}", choices=choices, value=value, info=questions[i], interactive=True, visible=visible)
+            question = QUESTIONS.get(KEYS[i], "")
+            if KEYS[i] in accuracy_dict:
+                value = map_ENtext_to_CNchoice(accuracy_dict[KEYS[i]])
+            else:
+                value = choices[-1] if np.random.rand() < 0.1 else choices[0] # to check the user is not too lazy
+            r = gr.Radio(label=f"Question {i+1}", choices=choices, value=value, info=question, interactive=True, visible=visible)
             questions_radio.append(r)
         return questions_radio
-    object_name.change(fn=refresh_questions, inputs=[core_question, core_question2], outputs=questions_radio)
-    core_question.change(fn=refresh_questions, inputs=[core_question, core_question2], outputs=questions_radio)
-    core_question2.change(fn=refresh_questions, inputs=[core_question, core_question2], outputs=questions_radio)
+    object_name.change(fn=refresh_questions, inputs=[core_question, core_question2, accuracy_dict], outputs=questions_radio)
+    core_question.change(fn=refresh_questions, inputs=[core_question, core_question2, accuracy_dict], outputs=questions_radio)
+    core_question2.change(fn=refresh_questions, inputs=[core_question, core_question2, accuracy_dict], outputs=questions_radio)
 
     def refresh_save_button(core_question):
         visible = core_question in ["是", "否"]
@@ -306,7 +356,6 @@ with gr.Blocks() as demo:
     supp_description.change(fn=parse_description, inputs=[translated_description, supp_translated_description, supp_activated], outputs=textboxes)
     supp_activated.change(fn=parse_description, inputs=[translated_description, supp_translated_description, supp_activated], outputs=textboxes)
 
-    preview_description = gr.Textbox(label="Preview Annotation", value="", visible=False, interactive=False)
     def update_preview_description(*textboxes):
         """
         Updates the preview annotation based on the user's answers.
@@ -321,25 +370,25 @@ with gr.Blocks() as demo:
         t.change(fn=update_preview_description, inputs=[*textboxes], outputs=preview_description)
     save_btn.click(fn=update_preview_description, inputs=[*textboxes], outputs=preview_description)
 
-    def save_annotations(directory, supp_corpora, supp_activated, record_corpora_source, user_name, object_name, core_question, core_question2, preview_description, *questions_radio):
+    def save_annotations(directory, supp_corpora, supp_activated, do_record_corpora_source_in_dir_name, user_name, object_name, core_question, core_question2, preview_description, *questions_radio):
         """
         Saves the annotations to the given directory.
         """
-        corpora_string = supp_corpora if supp_activated else MAIN_CORPORA_STRING
-        json_file_path_raw = os.path.join(directory, corpora_string, f"{object_name}.json")
+        corpora_STR = supp_corpora if supp_activated else MAIN_CORPORA_STR
+        json_file_path_raw = os.path.join(directory, corpora_STR, f"{object_name}.json")
         annotation = load_json(json_file_path_raw)
         annotation_to_save = {}
         assert isinstance(annotation, dict), f"Invalid annotation type: {type(annotation)}"
         annotation_to_save = annotation.copy()
         annotation_to_save["modified_description"] = preview_description
-
+        annotation_to_save["corpora_source"] = supp_corpora if supp_activated else MAIN_CORPORA_STR
         accuracy_dict = {} # whether the attribute (key) of the original description is accurate or not
         accuracy_dict["meta"] = map_choice_to_bool(core_question)
         accuracy_dict["visual_info_sufficient"] = map_choice_to_bool(core_question2)
         if map_choice_to_bool(core_question) and map_choice_to_bool(core_question2):
             for i in range(len(questions_radio)):
                 key = KEYS[i]
-                value = map_choice_to_text(questions_radio[i])
+                value = map_CNchoice_to_ENtext(questions_radio[i])
                 if value is None:
                     save_button = gr.Button(value="有问题没回答，保存失败！")
                     return save_button
@@ -349,16 +398,18 @@ with gr.Blocks() as demo:
                 key = KEYS[i]
                 accuracy_dict[key] = "False"
         annotation_to_save["accuracy_dict"] = accuracy_dict
-        save_corpora_string = DEFAULT_SAVE_STRING
-        if record_corpora_source:
-            save_corpora_string = supp_corpora if supp_activated else MAIN_CORPORA_STRING
-        json_file_path_to_save = os.path.join(directory, save_corpora_string, f"user_{user_name}" , f"{object_name}.json")
+        save_corpora_STR = DEFAULT_SAVE_STR
+        if do_record_corpora_source_in_dir_name:
+            # the source of the annotation is always recorded now.
+            # This is used to compatible with the previous version of the annotation tool, where the source of the annotation is recorded by the directory name.
+            save_corpora_STR = supp_corpora if supp_activated else MAIN_CORPORA_STR
+        json_file_path_to_save = os.path.join(directory, save_corpora_STR, f"user_{user_name}" , f"{object_name}.json")
         os.makedirs(os.path.dirname(json_file_path_to_save), exist_ok=True)
         with open(json_file_path_to_save, "w", encoding="utf-8") as f:
             json.dump(annotation_to_save, f, ensure_ascii=False, indent=4)
         save_button = gr.Button(value="保存成功！请选择下一个物体。")
         return save_button
-    save_btn.click(fn=save_annotations, inputs=[directory, supp_corpora, supp_activated, record_corpora_source, user_name, object_name, core_question, core_question2, preview_description, *questions_radio], outputs=save_btn)
+    save_btn.click(fn=save_annotations, inputs=[directory, supp_corpora, supp_activated, do_record_corpora_source_in_dir_name, user_name, object_name, core_question, core_question2, preview_description, *questions_radio], outputs=save_btn)
 demo.queue(concurrency_count=20)
 
 if __name__ == "__main__":

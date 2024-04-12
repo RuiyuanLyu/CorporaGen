@@ -211,30 +211,38 @@ def map_choice_to_bool(choice):
         return None # special value if the user is lazy.
     else:
         raise ValueError(f"Invalid choice: {choice}")    
-def map_choice_to_text(choice):
-    if choice == "是":
-        return "True"
-    elif choice == "否":
-        return "False"
-    elif choice == "该物体没有这一属性":
-        return "Inrelevant"
-    elif choice == "该物体具有这一属性，描述遗漏了":
-        return "Missing"
-    elif choice == "不要选这个选项":
-        return None # special value if the user is lazy.
+
+choice_text_mapping = {
+    "是": "True",
+    "否": "False",
+    "该物体没有这一属性": "Inrelevant",
+    "该物体具有这一属性，描述遗漏了": "Missing",
+    "不要选这个选项": None # special value if the user is lazy.
+}
+
+def map_CNchoice_to_ENtext(choice):
+    if choice in choice_text_mapping:
+        return choice_text_mapping[choice]
     else:
         raise ValueError(f"Invalid choice: {choice}")
+def map_ENtext_to_CNchoice(text):
+    for key in choice_text_mapping:
+        if choice_text_mapping[key] == text:
+            return key
+    raise ValueError(f"Invalid text: {text}")
+
+text_bool_mapping = {
+    "True": True,
+    "False": False,
+    "Inrelevant": True,
+    "Missing": False
+}
+
 def map_text_to_bool(text):
     if isinstance(text, bool):
         return text
-    if text == "True":
-        return True
-    elif text == "False":
-        return False
-    elif text == "Inrelevant":
-        return True
-    elif text == "Missing":
-        return False
+    if text in text_bool_mapping:
+        return text_bool_mapping[text]
     else:
         raise ValueError(f"Invalid text: {text}")
 
@@ -317,6 +325,10 @@ def summarize_annotation_from_file(json_path, force_summarize=False):
     """
     if not json_path.endswith(".json"):
         return
+    # check if the file is empty
+    with open(json_path, "r", encoding="utf-8") as f:
+        if f.read().strip() == "":
+            return
     annotation = load_json(json_path)
     is_valid, error_message = check_annotation_validity(annotation)
     # if not is_valid:
@@ -390,11 +402,11 @@ if __name__ == "__main__":
     ###################################################################
     ## Annotation usage here.
     # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
-    for scene_id in scene_ids:
-        image_dir = os.path.join(DATA_ROOT, scene_id, "repainted_objects")
-        output_dir = os.path.join(DATA_ROOT, scene_id, "corpora_object_gpt4v_paint_highdetail")
-        os.makedirs(output_dir, exist_ok=True)
-        annotations = annotate_objects_by_directory(image_dir, output_dir, skip_existing=False, force_invalid=False, max_additional_attempts=1, pick_ids = None, with_highlight=True, high_detail=True)
+    # for scene_id in scene_ids:
+    #     image_dir = os.path.join(DATA_ROOT, scene_id, "repainted_objects")
+    #     output_dir = os.path.join(DATA_ROOT, scene_id, "corpora_object_gpt4v_paint_highdetail")
+    #     os.makedirs(output_dir, exist_ok=True)
+    #     annotations = annotate_objects_by_directory(image_dir, output_dir, skip_existing=False, force_invalid=False, max_additional_attempts=1, pick_ids = None, with_highlight=True, high_detail=True)
     # ATTENTION: MODIFY with_highlight 
     # check_annotation_validity_path(output_dir)
 
@@ -415,22 +427,21 @@ if __name__ == "__main__":
     # my_ids = [3, 5, 8, 13, 15, 18, 19, 30, 54, 59, 60, 66, 68, 147, 150, 159, 168, 172, 178, 180]
     # my_ids = set(my_ids)
     # file_names = [file for file in os.listdir(output_dir) if file.endswith(".json") and int(file.split("_")[0]) in my_ids]
-    scene_ids = os.listdir(DATA_ROOT)
-    # skip mp3d, just for now.
-    scene_ids = [scene_id for scene_id in scene_ids if scene_id.startswith("scene") or scene_id.startswith("3rscan")]
-    inputs = []
-    corpora_strings = ["corpora_object_InternVL-Chat-V1-2-Plus_crop", "corpora_object_cogvlm_crop"][:1]
-    for scene_id in scene_ids:
-        for corpora_string in corpora_strings:
-            output_dir = os.path.join(DATA_ROOT, scene_id, corpora_string)
-            if not os.path.exists(output_dir):
-                continue
-            file_names = [file for file in os.listdir(output_dir) if file.endswith(".json")]
-            json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
-            # False means force_summarize=False
-            inputs.extend([(json_path, False) for json_path in json_paths])
-    import mmengine
-    results = mmengine.track_parallel_progress(summarize_annotation_from_file, inputs, nproc=8)
+    # scene_ids = os.listdir(DATA_ROOT)
+    # scene_ids = [scene_id for scene_id in scene_ids if scene_id.startswith("1mp3d")]
+    # inputs = []
+    corpora_strings = ["corpora_object_InternVL-Chat-V1-2-Plus_crop", "corpora_object_cogvlm_crop"][:]
+    # for scene_id in scene_ids:
+    #     for corpora_string in corpora_strings:
+    #         output_dir = os.path.join(DATA_ROOT, scene_id, corpora_string)
+    #         if not os.path.exists(output_dir):
+    #             continue
+    #         file_names = [file for file in os.listdir(output_dir) if file.endswith(".json")]
+    #         json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
+    #         # False means force_summarize=False
+    #         inputs.extend([(json_path, False) for json_path in json_paths])
+    # import mmengine
+    # results = mmengine.track_parallel_progress(summarize_annotation_from_file, inputs, nproc=8)
 
     ##################################################################
     ## Translate usage here.
@@ -438,10 +449,17 @@ if __name__ == "__main__":
     # my_ids = set(my_ids)
     # output_dir = os.path.join(DATA_ROOT, "scene0000_00", "corpora_object_InternVL-Chat-V1-2-Plus_crop")
     # file_names = [file for file in os.listdir(output_dir) if file.endswith(".json") and int(file.split("_")[0]) in my_ids]
-    # for scene_id in scene_ids:
-    #     output_dir = os.path.join(DATA_ROOT, scene_id, "corpora_object_InternVL-Chat-V1-2-Plus_crop")
-    #     file_names = [file for file in os.listdir(output_dir) if file.endswith(".json")]
-    #     json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
-    #     inputs = [(json_path, "English", "Chinese", True) for json_path in json_paths]
-    #     import mmengine
-    #     results = mmengine.track_parallel_progress(translate_annotation_from_file, inputs, nproc=8)
+    scene_ids = os.listdir(DATA_ROOT)
+    scene_ids = [scene_id for scene_id in scene_ids if scene_id.startswith("1mp3d")]
+    inputs = []
+    for scene_id in scene_ids:
+        for corpora_string in corpora_strings:
+            output_dir = os.path.join(DATA_ROOT, scene_id, corpora_string)
+            if not os.path.exists(output_dir):
+                continue
+            file_names = [file for file in os.listdir(output_dir) if file.endswith(".json")]
+            json_paths = [os.path.join(output_dir, file_name) for file_name in file_names]
+            # False means force_translate=False
+            inputs.extend([(json_path, "English", "Chinese", False) for json_path in json_paths])
+    import mmengine
+    results = mmengine.track_parallel_progress(translate_annotation_from_file, inputs, nproc=8)
