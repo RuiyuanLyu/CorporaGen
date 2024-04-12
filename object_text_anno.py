@@ -226,6 +226,8 @@ def map_CNchoice_to_ENtext(choice):
     else:
         raise ValueError(f"Invalid choice: {choice}")
 def map_ENtext_to_CNchoice(text):
+    if isinstance(text, bool):
+        return "是" if text else "否"
     for key in choice_text_mapping:
         if choice_text_mapping[key] == text:
             return key

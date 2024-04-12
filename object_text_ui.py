@@ -65,9 +65,10 @@ with gr.Blocks() as demo:
     with gr.Row():
         MODIFIED_DESCRIPTION_GR_STR = "修改后的描述"
         modified_description = gr.Textbox(label=MODIFIED_DESCRIPTION_GR_STR, value="", visible=True, interactive=False, lines=3)
-        DELTA_DESCRIPTION_GR_STR = "修改的部分"
-        delta_description = gr.HighlightedText(label="Diff",combine_adjacent=True,show_legend=True,color_map={"+": "red", "-": "green"}, visible=True, interactive=False)
-    
+        DELTA_DESCRIPTION_GR_STR = "变化的部分"
+        delta_description = gr.HighlightedText(label=DELTA_DESCRIPTION_GR_STR,combine_adjacent=True,show_legend=True,color_map={"-": "red", "+": "green"}, visible=True, interactive=False)
+        CHECK_DELTA_BTN_GR_STR = "检查加载的描述和原始描述的变化（如果在下面修改区进行了修改，这里会自动更新，不需要点击）"
+        check_delta_btn = gr.Button(value=CHECK_DELTA_BTN_GR_STR, visible=True)
     with gr.Row():
         core_question = gr.Radio(label=QUESTIONS["meta"], choices=["是", "否", "不要选这个选项"], value="不要选这个选项", interactive=True)
         core_question2 = gr.Radio(label=QUESTIONS["visual_info_sufficient"], choices=["是", "否", "不要选这个选项"], value="不要选这个选项", interactive=True)
@@ -287,7 +288,7 @@ with gr.Blocks() as demo:
         if not os.path.exists(image_path):
             image_path = os.path.join(directory, "painted_objects", f"{object_name}.jpg")
         aux_image_path = os.path.join(directory, "cropped_objects", f"{object_name}.jpg")
-        return original_description, translated_description, modified_description, supp_description, supp_translated_description, image_path, aux_image_path, warning_text
+        return original_description, translated_description, modified_description, supp_description, supp_translated_description, image_path, aux_image_path, warning_text, accuracy_dict
     object_name.change(fn=get_description_answers_image_path,
                        inputs=[object_name, directory, supp_corpora, do_record_corpora_source_in_dir_name, supp_activated, user_name, previous_user],
                        outputs=[original_description, translated_description, modified_description, supp_description, supp_translated_description, image, aux_image, warning_text, accuracy_dict])
@@ -304,6 +305,7 @@ with gr.Blocks() as demo:
             for token in d.compare(text1, text2)
         ]
     modified_description.change(fn=diff_texts, inputs=[translated_description, modified_description], outputs=delta_description)
+    check_delta_btn.click(fn=diff_texts, inputs=[translated_description, modified_description], outputs=delta_description)
     preview_description.change(fn=diff_texts, inputs=[translated_description, preview_description], outputs=delta_description)
 
     def refresh_core_questions(accuracy_dict):
@@ -370,7 +372,7 @@ with gr.Blocks() as demo:
         t.change(fn=update_preview_description, inputs=[*textboxes], outputs=preview_description)
     save_btn.click(fn=update_preview_description, inputs=[*textboxes], outputs=preview_description)
 
-    def save_annotations(directory, supp_corpora, supp_activated, do_record_corpora_source_in_dir_name, user_name, object_name, core_question, core_question2, preview_description, *questions_radio):
+    def save_annotations(directory, supp_corpora, supp_activated, do_record_corpora_source_in_dir_name, user_name, previous_user, object_name, core_question, core_question2, preview_description, *questions_radio):
         """
         Saves the annotations to the given directory.
         """
@@ -403,14 +405,17 @@ with gr.Blocks() as demo:
             # the source of the annotation is always recorded now.
             # This is used to compatible with the previous version of the annotation tool, where the source of the annotation is recorded by the directory name.
             save_corpora_STR = supp_corpora if supp_activated else MAIN_CORPORA_STR
-        json_file_path_to_save = os.path.join(directory, save_corpora_STR, f"user_{user_name}" , f"{object_name}.json")
+        if previous_user and user_name in SUPER_USERNAMES:
+            json_file_path_to_save = os.path.join(directory, save_corpora_STR, f"user_{user_name}", f"user_{previous_user}", f"{object_name}.json")
+        else:
+            json_file_path_to_save = os.path.join(directory, save_corpora_STR, f"user_{user_name}" , f"{object_name}.json")
         os.makedirs(os.path.dirname(json_file_path_to_save), exist_ok=True)
         with open(json_file_path_to_save, "w", encoding="utf-8") as f:
             json.dump(annotation_to_save, f, ensure_ascii=False, indent=4)
         save_button = gr.Button(value="保存成功！请选择下一个物体。")
         return save_button
-    save_btn.click(fn=save_annotations, inputs=[directory, supp_corpora, supp_activated, do_record_corpora_source_in_dir_name, user_name, object_name, core_question, core_question2, preview_description, *questions_radio], outputs=save_btn)
+    save_btn.click(fn=save_annotations, inputs=[directory, supp_corpora, supp_activated, do_record_corpora_source_in_dir_name, user_name, previous_user, object_name, core_question, core_question2, preview_description, *questions_radio], outputs=save_btn)
 demo.queue(concurrency_count=20)
 
 if __name__ == "__main__":
-    demo.launch(server_port=7858)
+    demo.launch(server_port=7800)
