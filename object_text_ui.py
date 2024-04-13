@@ -66,9 +66,9 @@ with gr.Blocks() as demo:
         MODIFIED_DESCRIPTION_GR_STR = "修改后的描述"
         modified_description = gr.Textbox(label=MODIFIED_DESCRIPTION_GR_STR, value="", visible=True, interactive=False, lines=3)
         DELTA_DESCRIPTION_GR_STR = "变化的部分"
-        delta_description = gr.HighlightedText(label=DELTA_DESCRIPTION_GR_STR,combine_adjacent=True,show_legend=True,color_map={"-": "red", "+": "green"}, visible=True, interactive=False)
+        delta_description = gr.HighlightedText(label=DELTA_DESCRIPTION_GR_STR,combine_adjacent=True,show_legend=True,color_map={"-": "red", "+": "green"}, visible=False, interactive=False)
         CHECK_DELTA_BTN_GR_STR = "检查加载的描述和原始描述的变化（如果在下面修改区进行了修改，这里会自动更新，不需要点击）"
-        check_delta_btn = gr.Button(value=CHECK_DELTA_BTN_GR_STR, visible=True)
+        check_delta_btn = gr.Button(value=CHECK_DELTA_BTN_GR_STR, visible=False)
     with gr.Row():
         core_question = gr.Radio(label=QUESTIONS["meta"], choices=["是", "否", "不要选这个选项"], value="不要选这个选项", interactive=True)
         core_question2 = gr.Radio(label=QUESTIONS["visual_info_sufficient"], choices=["是", "否", "不要选这个选项"], value="不要选这个选项", interactive=True)
@@ -108,18 +108,22 @@ with gr.Blocks() as demo:
             return False
         return True
     
+    is_super_user = gr.State(False)
     def lock_user_name(user_name, user_name_locked):
         if _check_user_name_validity(user_name):
             user_name = user_name.strip()
+            is_super_user = user_name in SUPER_USERNAMES
             user_name = gr.Textbox(label="用户名", value=user_name, interactive=False)
             user_name_locked = True
-        return user_name, user_name_locked
+            print(f"Super user: {is_super_user}")
+        check_delta_btn = gr.Button(value=CHECK_DELTA_BTN_GR_STR, visible=is_super_user)
+        delta_description = gr.HighlightedText(label=DELTA_DESCRIPTION_GR_STR, combine_adjacent=True, show_legend=True,color_map={"-": "red", "+": "green"}, visible=is_super_user, interactive=False)
+        return user_name, user_name_locked, is_super_user, check_delta_btn, delta_description
     lock_user_name_btn.click(lock_user_name, inputs=[user_name, user_name_locked],
-                                outputs=[user_name, user_name_locked])
+                                outputs=[user_name, user_name_locked, is_super_user, check_delta_btn, delta_description])
 
     def update_do_record_corpora_source_in_dir_name_visibility(user_name):
-        visible = user_name in SUPER_USERNAMES
-        do_record_corpora_source_in_dir_name = gr.Checkbox(label=DO_RECORD_CORPORA_SOURCE_IN_DIR_NAME_GR_STR, value=False, visible=visible)
+        do_record_corpora_source_in_dir_name = gr.Checkbox(label=DO_RECORD_CORPORA_SOURCE_IN_DIR_NAME_GR_STR, value=False, visible=is_super_user)
         return do_record_corpora_source_in_dir_name
     lock_user_name_btn.click(update_do_record_corpora_source_in_dir_name_visibility, inputs=[user_name], outputs=[do_record_corpora_source_in_dir_name])
 
@@ -128,7 +132,7 @@ with gr.Blocks() as demo:
         os.makedirs(dir_to_check, exist_ok=True)
         previous_users = [name for name in os.listdir(dir_to_check) if os.path.isdir(os.path.join(dir_to_check, name))]
         previous_users = [name.replace("user_", "") for name in previous_users]
-        if len(previous_users) == 0 or not user_name in SUPER_USERNAMES:
+        if len(previous_users) == 0 or not is_super_user:
             return gr.Dropdown(label=PREVIOUS_USER_GR_STR, choices=[], value="", visible=False)
         return gr.Dropdown(label=PREVIOUS_USER_GR_STR, choices=previous_users, value="", visible=True)
     directory.change(fn=update_previous_user_choices, inputs=[directory, user_name], outputs=[previous_user])
@@ -308,13 +312,13 @@ with gr.Blocks() as demo:
     check_delta_btn.click(fn=diff_texts, inputs=[translated_description, modified_description], outputs=delta_description)
     preview_description.change(fn=diff_texts, inputs=[translated_description, preview_description], outputs=delta_description)
 
-    def refresh_core_questions(accuracy_dict):
+    def update_core_questions(accuracy_dict):
         core_question = map_ENtext_to_CNchoice(accuracy_dict.get("meta", None))
         core_question2 = map_ENtext_to_CNchoice(accuracy_dict.get("visual_info_sufficient", None))
         return core_question, core_question2
-    object_name.change(fn=refresh_core_questions, inputs=accuracy_dict, outputs=[core_question, core_question2])
+    object_name.change(fn=update_core_questions, inputs=accuracy_dict, outputs=[core_question, core_question2])
 
-    def refresh_questions(core_question, core_question2, accuracy_dict):
+    def update_questions(core_question, core_question2, accuracy_dict):
         visible = map_choice_to_bool(core_question) and map_choice_to_bool(core_question2)
         questions_radio = []
         # Questions for the user to answer
@@ -328,22 +332,24 @@ with gr.Blocks() as demo:
             r = gr.Radio(label=f"Question {i+1}", choices=choices, value=value, info=question, interactive=True, visible=visible)
             questions_radio.append(r)
         return questions_radio
-    object_name.change(fn=refresh_questions, inputs=[core_question, core_question2, accuracy_dict], outputs=questions_radio)
-    core_question.change(fn=refresh_questions, inputs=[core_question, core_question2, accuracy_dict], outputs=questions_radio)
-    core_question2.change(fn=refresh_questions, inputs=[core_question, core_question2, accuracy_dict], outputs=questions_radio)
+    object_name.change(fn=update_questions, inputs=[core_question, core_question2, accuracy_dict], outputs=questions_radio)
+    core_question.change(fn=update_questions, inputs=[core_question, core_question2, accuracy_dict], outputs=questions_radio)
+    core_question2.change(fn=update_questions, inputs=[core_question, core_question2, accuracy_dict], outputs=questions_radio)
 
-    def refresh_save_button(core_question):
+    def update_save_button(core_question):
         visible = core_question in ["是", "否"]
         save_button = gr.Button(value="保存物体标注", visible=visible)
         return save_button
-    core_question.change(fn=refresh_save_button, inputs=core_question, outputs=save_btn)
+    core_question.change(fn=update_save_button, inputs=core_question, outputs=save_btn)
+    object_name.change(fn=update_save_button, inputs=core_question, outputs=save_btn)
 
-
-    def parse_description(desc, supp_desc, supp_activated):
+    def parse_description(desc, modified_des, supp_desc, supp_activated):
         """
         Parses the given description. Returns a list of gr.Textbox components with the parsed description.
         """
         description = supp_desc if supp_activated else desc
+        if modified_des:
+            description = modified_des
         parsed = description.strip().split('。')
         parsed = [p.strip() for p in parsed]
         parsed = [p + "。" for p in parsed if p]
@@ -354,9 +360,9 @@ with gr.Blocks() as demo:
         for i in range(num_textboxes, max_textboxes):
             out.append(gr.Textbox("", visible=False))
         return out
-    translated_description.change(fn=parse_description, inputs=[translated_description, supp_translated_description, supp_activated], outputs=textboxes)
-    supp_description.change(fn=parse_description, inputs=[translated_description, supp_translated_description, supp_activated], outputs=textboxes)
-    supp_activated.change(fn=parse_description, inputs=[translated_description, supp_translated_description, supp_activated], outputs=textboxes)
+    translated_description.change(fn=parse_description, inputs=[translated_description, modified_description, supp_translated_description, supp_activated], outputs=textboxes)
+    supp_description.change(fn=parse_description, inputs=[translated_description, modified_description, supp_translated_description, supp_activated], outputs=textboxes)
+    supp_activated.change(fn=parse_description, inputs=[translated_description, modified_description, supp_translated_description, supp_activated], outputs=textboxes)
 
     def update_preview_description(*textboxes):
         """
@@ -405,17 +411,18 @@ with gr.Blocks() as demo:
             # the source of the annotation is always recorded now.
             # This is used to compatible with the previous version of the annotation tool, where the source of the annotation is recorded by the directory name.
             save_corpora_STR = supp_corpora if supp_activated else MAIN_CORPORA_STR
-        if previous_user and user_name in SUPER_USERNAMES:
+        if previous_user and is_super_user:
             json_file_path_to_save = os.path.join(directory, save_corpora_STR, f"user_{user_name}", f"user_{previous_user}", f"{object_name}.json")
         else:
             json_file_path_to_save = os.path.join(directory, save_corpora_STR, f"user_{user_name}" , f"{object_name}.json")
         os.makedirs(os.path.dirname(json_file_path_to_save), exist_ok=True)
         with open(json_file_path_to_save, "w", encoding="utf-8") as f:
             json.dump(annotation_to_save, f, ensure_ascii=False, indent=4)
+        gr.Info(f"物体标注已保存至 {json_file_path_to_save}")
         save_button = gr.Button(value="保存成功！请选择下一个物体。")
         return save_button
     save_btn.click(fn=save_annotations, inputs=[directory, supp_corpora, supp_activated, do_record_corpora_source_in_dir_name, user_name, previous_user, object_name, core_question, core_question2, preview_description, *questions_radio], outputs=save_btn)
 demo.queue(concurrency_count=20)
 
 if __name__ == "__main__":
-    demo.launch(server_port=7800)
+    demo.launch(server_port=7858)

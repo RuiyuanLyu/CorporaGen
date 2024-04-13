@@ -302,6 +302,8 @@ def translate_annotation_from_file(json_path, src_lang="English", tgt_lang="Chin
     if not json_path.endswith(".json"):
         return
     annotation = load_json(json_path)
+    if not annotation:
+        return
     is_valid, error_message = check_annotation_validity(annotation)
     if not is_valid:
         return
