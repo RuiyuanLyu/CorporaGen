@@ -3,7 +3,7 @@ import numpy as np
 import cv2
 import matplotlib
 import json
-from linemesh import LineMesh
+from utils.linemesh import LineMesh
 from utils.utils_read import (
     read_bboxes_json,
     read_intrinsic,
