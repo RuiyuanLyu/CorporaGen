@@ -1,4 +1,4 @@
-from utils_read import load_json
+from utils.utils_read import load_json
 from object_text_anno import DATA_ROOT, map_text_to_bool
 import os
 

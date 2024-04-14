@@ -2,7 +2,7 @@ import open3d as o3d  # version 0.16.0. NEVER EVER use version 0.17.0 or later, 
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
-from utils_read import read_axis_align_matrix, load_json, reverse_121_mapping,read_annotation_pickle
+from utils.utils_read import read_axis_align_matrix, load_json, reverse_121_mapping,read_annotation_pickle
 
 
 def compute_extrinsic_matrix(lookat_point, camera_coords):

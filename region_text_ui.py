@@ -5,7 +5,7 @@ import os
 import gradio as gr  # Now: gradio==3.50.2 Deprecated: gradio==3.44.0
 import numpy as np
 import json
-from utils_read import read_annotation_pickles
+from utils.utils_read import read_annotation_pickles
 
 # 最大可能包含的物品数
 MAX_OBJECT_NUM =30

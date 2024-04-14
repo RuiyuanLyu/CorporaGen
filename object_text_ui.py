@@ -3,7 +3,7 @@ import os
 import json
 import numpy as np
 from object_text_anno import check_annotation_validity, map_choice_to_bool, map_CNchoice_to_ENtext, map_ENtext_to_CNchoice
-from utils_read import load_json
+from utils.utils_read import load_json
 from difflib import Differ
 
 

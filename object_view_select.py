@@ -8,7 +8,7 @@ from functools import wraps
 from tqdm import tqdm
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon
-from utils_read import (
+from utils.utils_read import (
     read_extrinsic,
     read_extrinsic_dir,
     read_intrinsic,
@@ -20,12 +20,12 @@ from utils_read import (
     read_annotation_pickles,
     EXCLUDED_OBJECTS,
 )
-from utils_3d import (
+from utils.utils_3d import (
     check_bboxes_visibility,
     check_point_visibility,
     interpolate_bbox_points,
 )
-from utils_vis import (
+from utils.utils_vis import (
     get_9dof_boxes,
     draw_box3d_on_img,
     get_color_map,

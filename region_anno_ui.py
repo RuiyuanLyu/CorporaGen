@@ -23,7 +23,7 @@ import numpy as np
 from math import ceil
 import json
 import open3d as o3d
-from utils_read import read_annotation_pickles
+from utils.utils_read import read_annotation_pickles
 # from render_bev_for_all import load_mesh, _render_2d_bev, take_bev_screenshot, process_mesh
 from region_matching import get_data, get_position_in_mesh_render_image, is_in_poly
 import matplotlib

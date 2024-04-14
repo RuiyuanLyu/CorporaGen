@@ -1,7 +1,7 @@
 import os
 import shutil
 import logging
-from utils_read import load_json
+from utils.utils_read import load_json
 from tqdm import tqdm
 
 def get_dataset_prefix(scene_id):

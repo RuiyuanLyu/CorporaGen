@@ -116,7 +116,7 @@ if __name__ == "__main__":
     region_with_label = get_data(f'region_annos/{scene_id}/region_segmentation_Abir.txt')
     scene_info = all_scene_info[scene_id]
 
-    from utils_read import read_annotation_pickles
+    from utils.utils_read import read_annotation_pickles
     annotation_data = read_annotation_pickles(["embodiedscan_infos_train_full.pkl", "embodiedscan_infos_val_full.pkl"])
     object_data = annotation_data[scene_id]
     bboxes = object_data['bboxes']

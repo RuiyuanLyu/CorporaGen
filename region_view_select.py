@@ -6,13 +6,13 @@ from tqdm import tqdm
 from scipy.spatial import ConvexHull
 import scipy
 from shapely.geometry import Polygon
-from utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_depth_map, read_bboxes_json, load_json, reverse_multi2multi_mapping, read_annotation_pickle, EXCLUDED_OBJECTS
-from utils_3d import check_bboxes_visibility, check_point_visibility, interpolate_bbox_points
-from utils_read import read_annotation_pickle
+from utils.utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_depth_map, read_bboxes_json, load_json, reverse_multi2multi_mapping, read_annotation_pickle, EXCLUDED_OBJECTS
+from utils.utils_3d import check_bboxes_visibility, check_point_visibility, interpolate_bbox_points
+from utils.utils_read import read_annotation_pickle
 import shutil
 import json
 from region_matching import get_data, process_data
-from utils_vis import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop_box_from_img
+from utils.utils_vis import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop_box_from_img
 import matplotlib.pyplot as plt
 from object_view_select import get_local_maxima_indices, is_blurry, get_blurry_image_ids, _compute_area
 
@@ -314,7 +314,7 @@ if __name__ == '__main__':
 
     scene_info = all_scene_info[scene_id]
 
-    from utils_read import read_annotation_pickles
+    from utils.utils_read import read_annotation_pickles
 
     annotation_data = read_annotation_pickles(["embodiedscan_infos_train_full.pkl", "embodiedscan_infos_val_full.pkl",
                                                "3rscan_infos_test_MDJH_aligned_full_10_visible.pkl","matterport3d_infos_test_full_10_visible.pkl"])

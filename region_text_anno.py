@@ -2,7 +2,7 @@ import os
 import json
 from tqdm import tqdm
 from openai_api import mimic_chat, mimic_chat_budget, get_content_groups_from_source_groups
-from utils_read import load_json
+from utils.utils_read import load_json
 from strict_translate import strict_translate
 import numpy as np
 
@@ -78,7 +78,7 @@ def get_visible_objects_dict(dataset_tar, scene_id_tar):
     """
     pickle_file_val = 'embodiedscan_infos_val_full.pkl'
     pickle_file_train = 'embodiedscan_infos_train_full.pkl'
-    from utils_read import read_annotation_pickles
+    from utils.utils_read import read_annotation_pickles
     anno_dict = read_annotation_pickles([pickle_file_val, pickle_file_train])
     keys = sorted(list(anno_dict.keys()))
     for key_index in range(len(keys)):
@@ -110,7 +110,7 @@ def prepare_visible_objects(visible_view_object_dict, view_ids, object_ids, obje
         visible_object_ids_pre += visible_view_object_dict[view_id].tolist()
     visible_object_ids_pre = sorted(list(set(visible_object_ids_pre)))
     visible_object_ids, visible_object_types = [], []
-    from utils_read import EXCLUDED_OBJECTS
+    from utils.utils_read import EXCLUDED_OBJECTS
     for object_id in visible_object_ids_pre:
         object_index = np.where(object_ids == object_id)[0][0]
         object_type = object_types[object_index]
@@ -145,7 +145,7 @@ if __name__ == "__main__":
 
     all_scene_info = np.load('all_render_param.npy', allow_pickle=True).item()
     scene_info = all_scene_info[scene_id]
-    from utils_read import read_annotation_pickles
+    from utils.utils_read import read_annotation_pickles
 
     annotation_data = read_annotation_pickles(["embodiedscan_infos_train_full.pkl", "embodiedscan_infos_val_full.pkl",
                                                "3rscan_infos_test_MDJH_aligned_full_10_visible.pkl",

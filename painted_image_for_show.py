@@ -7,12 +7,12 @@ from tqdm import tqdm
 from scipy.spatial import ConvexHull
 import scipy
 from shapely.geometry import Polygon
-from utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_depth_map, read_bboxes_json, load_json, reverse_multi2multi_mapping, read_annotation_pickles, EXCLUDED_OBJECTS
-from utils_3d import check_bboxes_visibility, check_point_visibility, interpolate_bbox_points
+from utils.utils_read import read_extrinsic, read_extrinsic_dir, read_intrinsic, read_depth_map, read_bboxes_json, load_json, reverse_multi2multi_mapping, read_annotation_pickles, EXCLUDED_OBJECTS
+from utils.utils_3d import check_bboxes_visibility, check_point_visibility, interpolate_bbox_points
 import shutil
 import json
 from region_matching import get_data,process_data
-from utils_vis import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop_box_from_img
+from utils.utils_vis import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop_box_from_img
 import matplotlib.pyplot as plt
 from object_view_select import get_local_maxima_indices, is_blurry, get_blurry_image_ids, _compute_area
 
