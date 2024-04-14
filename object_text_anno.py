@@ -314,7 +314,11 @@ def translate_annotation_from_file(json_path, src_lang="English", tgt_lang="Chin
         annotation_to_translate = annotation["simplified_description"]
     if len(annotation_to_translate) <= 1:
         return
-    translated_description = translate(annotation_to_translate, src_lang=src_lang, tgt_lang=tgt_lang)
+    try:
+        translated_description = translate(annotation_to_translate, src_lang=src_lang, tgt_lang=tgt_lang)
+    except Exception as e:
+        print(f"Error translating {json_path}: {e}")
+        return
     annotation["translated_description"] = translated_description
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(annotation, f, indent=4)
@@ -350,23 +354,17 @@ def summarize_annotation_from_file(json_path, force_summarize=False):
         json.dump(annotation, f, indent=4)
     return annotation
 
+with open("expressions_to_remove.txt", "r") as f:
+    lines = f.readlines()
+    EXPRESSION_TO_REMOVE = [line.strip() for line in lines]
 
 def remove_specific_expressions(text):
     if not isinstance(text, str):
         return text
-    text = text.replace(" in the center of the picture", "")
-    text = text.replace(" in the center of the image", "")
-    text = text.replace(" in the center of the frame", "")
-    text = text.replace(" in the center of the photo", "")
-    text = text.replace(" in the middle of the picture", "")
-    text = text.replace(" in the middle of the image", "")
-    text = text.replace(" in the middle of the frame", "")
-    text = text.replace(" in the middle of the photo", "")
-    text = text.replace(" in the picture", "")
-    text = text.replace(" in the frame", "")
-    text = text.replace(" in the image", "")
-    text = text.replace(" in the photo", "")
-    text = text.replace(" neither too large nor too small", "")
+    for expression in EXPRESSION_TO_REMOVE:
+        text = text.replace(expression, "")
+    text = text.replace("  ", " ")
+    text = text.strip()
     return text
 
 def remove_specific_expressions_from_description(json_path):
@@ -455,6 +453,7 @@ if __name__ == "__main__":
     # file_names = [file for file in os.listdir(output_dir) if file.endswith(".json") and int(file.split("_")[0]) in my_ids]
     scene_ids = os.listdir(DATA_ROOT)
     scene_ids = [scene_id for scene_id in scene_ids if scene_id.startswith("1mp3d")]
+    corpora_strings = ["corpora_object_InternVL-Chat-V1-2-Plus_crop", "corpora_object_cogvlm_crop"][:1]
     inputs = []
     for scene_id in scene_ids:
         for corpora_string in corpora_strings:
@@ -467,3 +466,5 @@ if __name__ == "__main__":
             inputs.extend([(json_path, "English", "Chinese", False) for json_path in json_paths])
     import mmengine
     results = mmengine.track_parallel_progress(translate_annotation_from_file, inputs, nproc=8)
+    # for input_tuple in inputs:
+    #     translate_annotation_from_file(input_tuple)

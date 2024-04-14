@@ -113,11 +113,15 @@ def mimic_chat(user_content_groups, model=None, system_prompt=None):
         messages.append({"role": "system", "content": system_prompt})
     for content_group in user_content_groups:
         messages.append({"role": "user", "content": content_group})
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=1000,
-        )
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=1000,
+            )
+        except Exception as e:
+            print(f"Error: {e}")
+            exit()
         response = response.choices[0].message.content.strip()
         messages.append({"role": "assistant", "content": response})
     return messages
@@ -138,7 +142,10 @@ def get_content_groups_from_source_groups(source_groups, high_detail=False):
             if os.path.exists(source):
                 content_group.append(_get_image_content_for_api(source, high_detail=high_detail))
             else:
-                content_group.append(_get_text_content_for_api(source))
+                if len(source_group) == 1:
+                    content_group = source
+                else:
+                    content_group.append(_get_text_content_for_api(source))
         content_groups.append(content_group)
     return content_groups
         
