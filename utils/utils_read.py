@@ -41,7 +41,7 @@ def reverse_121_mapping(mapping):
 
 def load_json(path):
     if os.path.getsize(path) == 0:
-        return {}
+        return None
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
     return data
