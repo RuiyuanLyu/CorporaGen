@@ -7,7 +7,8 @@ scene_ids = ["1mp3d_0001_region8", "1mp3d_0002_region23", "3rscan0138", "3rscan0
 model_names = ["cogvlm_crop", "XComposer2_crop", "gpt4v_crop", "gpt4v_paint_highdetail", "InternVL-Chat-V1-2-Plus_crop"][:]
 users_to_check = ["boyue", "QS_wangjing", "shujutang_01"][1:]
 
-STRINGS_TO_NEGLECT = ["似乎", "好像", "大概", "看起来", "可能", "图片", "照片", "中心的"]
+STRINGS_TO_NEGLECT = ["似乎", "好像", "大概", "看起来", "可能",
+                      "图片中的", "图片", "照片中的", "照片"]
 def filter_text(text: str) -> str:
     """
     Remove some strings from the text.
