@@ -39,8 +39,9 @@ init_item_dict["vertex_list"] = []
 init_item_dict["annotation_list"] = []
 
 RENDER_IMAGE_PATH = "data"
-
+global SCENE_LIST
 SCENE_LIST = os.listdir(RENDER_IMAGE_PATH)
+SCENE_LIST = [s for s in SCENE_LIST if s.startswith('scene') or s.startswith('1mp3d') or s.startswith('3rscan')]
 SCENE_LIST.sort()
 
 def get_next_scene_id(current_scene_id):
@@ -141,6 +142,12 @@ with gr.Blocks() as demo:
         missing_scenes = []
         for scene_id in SCENE_LIST:
             file_path_to_save = os.path.join(get_scene_info(scene_id)["output_dir"], f'region_segmentation_{user_name}.txt')
+            painted_img_dir = f"{painted_dir}/{scene_id}/painted_objects"
+            if not os.path.exists(painted_img_dir):
+                continue
+            num_painted_objects = len([name for name in os.listdir(painted_img_dir) if name.endswith('.jpg')])
+            if num_painted_objects == 0:
+                continue
             if not os.path.exists(file_path_to_save):
                 missing_scenes.append(scene_id)
         num_in_total = len(SCENE_LIST)
@@ -527,6 +534,9 @@ def get_scene_info(scene_id):
     if scene_id in scene_info:
         return scene_info[scene_id]
     else:
+        anno = anno_full.get(scene_id, None)
+        if anno is None:
+            return None
         scene_info[scene_id] = {}
         scene_info[scene_id]["bboxes"] = anno["bboxes"]
         scene_info[scene_id]["object_ids"] = anno["object_ids"]
@@ -536,11 +546,15 @@ def get_scene_info(scene_id):
         painted_img_dir = f"{painted_dir}/{scene_id}/painted_objects"
         scene_info[scene_id]["useful_object"] = {}
         scene_info[scene_id]["useful_object_view_id"] = {}
-        for img_file in os.listdir(painted_img_dir):
-            if img_file.endswith(".png") or img_file.endswith(".jpg"):
-                scene_info[scene_id]["useful_object"][int(img_file.split("_")[0])] = painted_img_dir + "/" + img_file
-                scene_info[scene_id]["useful_object_view_id"][int(img_file.split("_")[0])] = "_".join(
-                    img_file.split(".")[0].split("_")[2:])
+        if os.path.exists(painted_img_dir):
+            for img_file in os.listdir(painted_img_dir):
+                if img_file.endswith(".png") or img_file.endswith(".jpg"):
+                    scene_info[scene_id]["useful_object"][int(img_file.split("_")[0])] = painted_img_dir + "/" + img_file
+                    scene_info[scene_id]["useful_object_view_id"][int(img_file.split("_")[0])] = "_".join(
+                        img_file.split(".")[0].split("_")[2:])
+        else:
+            scene_info[scene_id]["useful_object"] = {}
+            scene_info[scene_id]["useful_object_view_id"] = {}
         scene_info[scene_id]["view_ids"] = [path.split("/")[-1].split(".")[0] for path in anno["image_paths"]]
         scene_info[scene_id]["camera_extrinsics_c2w"] = [(anno["axis_align_matrix"] @ extrinsic) for extrinsic in
                                                             anno["extrinsics_c2w"]]
@@ -575,7 +589,6 @@ if __name__ == "__main__":
 
     scene_info = {}
     from tqdm import tqdm
-
     for scene_id in tqdm(SCENE_LIST):
         anno = anno_full.get(scene_id, None)
         if anno is None:
