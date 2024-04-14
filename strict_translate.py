@@ -1,7 +1,7 @@
 import os
 import json
 from tqdm import tqdm
-from openai_api import mimic_chat, mimic_chat_budget, get_content_groups_from_source_groups, num_tokens_from_string, get_response
+from utils.openai_api import mimic_chat, mimic_chat_budget, get_content_groups_from_source_groups, num_tokens_from_string, get_response
 from utils.utils_read import load_json
 
 
