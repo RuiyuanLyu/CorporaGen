@@ -3,6 +3,7 @@ import json
 from tqdm import tqdm
 from openai_api import mimic_chat, mimic_chat_budget, get_content_groups_from_source_groups
 from utils_read import load_json
+from strict_translate import strict_translate
 import numpy as np
 
 
@@ -17,21 +18,25 @@ def annotate_region_image(image_paths, region_type, object_ids, object_types):
         Returns:
             A list of strings, each string is a part of the annotation.
     """    
-    num_words = 150 + 10*len(object_ids)
-    user_message1 = "I will share photos of a room's {} and use 3D boxes to highlight important items within it. Your task is to provide a description of the primary furniture and decorations found in the area, as well as their respective positions. Please aim for a roughly {}-word description, and when referring to objects, enclose their names and ids in angle brackets, like <piano> <01>.".format(region_type, num_words)
-    user_message1 += "In this region, the items that need to be described include "
+    num_words = (150 + 10*len(object_ids))/5
+    user_message1 = "I will share photos of a room's {} and use 3D boxes to highlight important items within it. Your task is to provide a description of the primary items in the area as well as their respective positions(And please describe their relative position, if any).What's more,noting their roles in the region(what contribution do they make to the region?). Please aim for a roughly {}-word description, and when referring to a object, enclose its name and id in an angle bracket, like <pillow_17>.Please not miss any items!".format(region_type,num_words)
+    user_message1 += "In this region, the items that must be described include "
     for (object_id, object_type) in zip(object_ids, object_types):
-        user_message1 += f"<{object_type}> <{object_id}>, "
-    user_message1 = user_message1[:-2] + ". Please focus on describing them in order of their significance rather than the order I mentioned them."
-    user_message2 = "Based on these layouts, could you share information about how crowded it is, how well it's organized, the lighting, and (optional) whether there are any elements that tell a story?"
+        user_message1 += f"<{object_type}_{object_id}>, "
+    user_message1 = user_message1[:-2] + ",don't leave out any of them! Please focus on describing them in order of their significance rather than the order I mentioned them."
+    user_message2 = 'Further, I would like you to give a comprehensive description of the relationships between these objects:Which of these items together provides what function (not single but together,e.g. book and pen provide the function of writing).'
+    user_message3 = "Based on these layouts, could you share information about the region,these should be included:its location and function description, its space layout and dimensions, its Doors and Windows, walls, floors and ceilings,its soft fitting elements and decorative details,its lighting design,its color matching and style theme and its special features."
     system_prompt = "You are an expert interior designer, who is very sensitive at room furnitures and their placements. The expected reader is a high-school student with average knowledge of furniture design."
+
     source_groups = [
         [user_message1, *image_paths],
-        [user_message2]
+        [user_message2, *image_paths],
+        [user_message3, *image_paths]
+
     ]
-    content_groups = get_content_groups_from_source_groups(source_groups)
+    content_groups = get_content_groups_from_source_groups(source_groups) #high detail
     # conversation = mimic_chat(content_groups, model="gpt-4-vision-preview", system_prompt=system_prompt)
-    conversation = mimic_chat_budget(content_groups, system_prompt=system_prompt)
+    conversation = mimic_chat_budget(content_groups, system_prompt=system_prompt, num_turns_expensive=3)
     annotation = []
     for message in conversation:
         if message["role"] == "assistant":
@@ -71,8 +76,8 @@ def get_visible_objects_dict(dataset_tar, scene_id_tar):
             object_ids: A numpy.ndarray of ints indicating the ids of the objects in the scene.
             object_types: A list of strings indicating the types of the objects in the scene.
     """
-    pickle_file_val = './example_data/embodiedscan_infos_val_full.pkl'
-    pickle_file_train = './example_data/embodiedscan_infos_train_full.pkl'
+    pickle_file_val = 'embodiedscan_infos_val_full.pkl'
+    pickle_file_train = 'embodiedscan_infos_train_full.pkl'
     from utils_read import read_annotation_pickles
     anno_dict = read_annotation_pickles([pickle_file_val, pickle_file_train])
     keys = sorted(list(anno_dict.keys()))
@@ -115,32 +120,77 @@ def prepare_visible_objects(visible_view_object_dict, view_ids, object_ids, obje
         visible_object_types.append(object_type)
     return visible_object_ids, visible_object_types
 
+def check_forget_id(text,object_ids,object_types):
+    from strict_translate import strict_check
+    _, item_dict = strict_check(text)
+    forget_id = []
+    for (object_id, object_type) in zip(object_ids, object_types):
+        if f'<{object_type}_{object_id}>' not in item_dict.keys():
+            forget_id.append(object_id)
+    return forget_id
+
+
+
+
 if __name__ == "__main__":
-    # image_path = "./example_data/anno_lang/painted_images/068_chair_00232.jpg"
-    # annotation = annotate_object_image(image_path)
-    # for i, line in enumerate(annotation):
-    #     print(f"Line {i+1}:")
-    #     print(line)
-    view_ids = ["01750", "01860", "04600", "04970"]
-    region_name = "02_kitchen"
-    image_paths = [f"./example_data/anno_lang/regions/{region_name}/{view_id}_annotated.jpg" for view_id in view_ids]
-    region_type = "kitchen region"
-    visible_view_object_dict, object_ids, object_types = get_visible_objects_dict("scannet", "scene0000_00")
-    output_path = f"./example_data/anno_lang/regions/{region_name}/annotation.json"
-    visible_object_ids, visible_object_types = prepare_visible_objects(visible_view_object_dict, view_ids, object_ids, object_types)
-    if 1==1:
-        my_object_ids = [4, 43, 44, 41, 183, 52, 184, 181, 182, 46, 180, 34, 53, 179, 3, 31, 32, 30, 29, 155, 54, 185, 186, 1, 154]
-        my_object_ids = sorted(list(set(my_object_ids)))
-        my_object_types = []
-        for object_id in my_object_ids:
-            object_index = np.where(object_ids == object_id)[0][0]
-            object_type = object_types[object_index]
-            my_object_types.append(object_type)
-        visible_object_ids = my_object_ids
-        visible_object_types = my_object_types
-    annotations = annotate_region_image(image_paths, region_type, visible_object_ids, visible_object_types)
-    with open(output_path, "w") as f:
-        json.dump(annotations, f, indent=4)
-    annotations = load_json(output_path)
-    print(annotations)
-    check_annotation(annotations, visible_object_ids, visible_object_types)
+
+    from region_matching import get_data,process_data
+
+    # choose the scene
+    scene_id = 'scene0000_00'
+    region_view_dir_name = 'region_view_test'
+    # choose the region
+    region_name = '4_toliet region'
+    region_type = region_name.split('_')[1]
+
+    all_scene_info = np.load('all_render_param.npy', allow_pickle=True).item()
+    scene_info = all_scene_info[scene_id]
+    from utils_read import read_annotation_pickles
+
+    annotation_data = read_annotation_pickles(["embodiedscan_infos_train_full.pkl", "embodiedscan_infos_val_full.pkl",
+                                               "3rscan_infos_test_MDJH_aligned_full_10_visible.pkl",
+                                               "matterport3d_infos_test_full_10_visible.pkl"])
+
+    object_data = annotation_data[scene_id]
+    bboxes = object_data['bboxes']
+    object_ids = object_data['object_ids']
+    object_types = object_data['object_types']
+
+    image_paths = [f'data/{scene_id}/{region_view_dir_name}/{region_name}/'+img_name for img_name in  os.listdir(f'data/{scene_id}/{region_view_dir_name}/{region_name}') if img_name[-4:]=='.jpg']
+    # get visible object
+    visible_object_ids = np.load(f'data/{scene_id}/{region_view_dir_name}/{region_name}/object_filter.npy')
+    visible_object_types = [object_types[list(object_ids).index(idx)] for idx in visible_object_ids ]
+    annotations_out = annotate_region_image(image_paths, region_type, visible_object_ids, visible_object_types)
+    annotations = annotations_out
+
+    code_check_info = dict()
+    code_check_info['translation_success'] = []
+
+
+
+    # Save English and Chinese output
+
+
+    annotations_tran = []
+    for index_ in range(3):
+
+        out_of_it,success = strict_translate(annotations[index_],src_lang="English", tgt_lang="Chinese",show_out=False)
+        print(out_of_it,success)
+        code_check_info['translation_success'].append(success)
+        annotations_tran.append(out_of_it)
+
+    English_json = json.dumps({'object': annotations[0], 'group': annotations[1], 'region': annotations[2]})
+    Chinese_json = json.dumps({'object': annotations_tran[0], 'group': annotations_tran[1], 'region': annotations_tran[2]})
+
+    with open(f'data/{scene_id}/{region_view_dir_name}/{region_name}/English.json', 'w') as f:
+        f.write(English_json)
+    with open(f'data/{scene_id}/{region_view_dir_name}/{region_name}/Chinese.json', 'w', encoding='utf-8') as f:
+        f.write(Chinese_json)
+
+    code_check_info['forget_id'] = check_forget_id(annotations[0],object_ids=visible_object_ids,object_types=visible_object_types)
+    print(code_check_info)
+    np.save(f'data/{scene_id}/{region_view_dir_name}/{region_name}/region_text_anno_info.npy',code_check_info)
+
+
+
+

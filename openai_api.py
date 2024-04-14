@@ -37,7 +37,7 @@ def get_response(messages, model="gpt-3.5-turbo", max_tokens=1000):
     return response.choices[0].message.content.strip()   
         
 
-def mimic_chat_budget(user_content_groups, system_prompt=None, max_additional_attempts=0):
+def mimic_chat_budget(user_content_groups, system_prompt=None, max_additional_attempts=0, num_turns_expensive=1):
     """
         budget version of mimic_chat(). The first round of conversation is done by GPT-4 model, and the remaining rounds are done by GPT-3.5-turbo model.
         NOTE: need to convert into content groups first using get_content_groups_from_source_groups()
@@ -45,6 +45,8 @@ def mimic_chat_budget(user_content_groups, system_prompt=None, max_additional_at
             model (str): The name of the model to use.
             user_content_groups (list(list)): A list of groups(list), each group of contents is sent 'simutaneously' to the model to generate a response.
             system_prompt (str): A prompt for the system to keep in mind.
+            max_additional_attempts (int): The maximum number of additional attempts to make if the model responds with "Sorry, I don't understand."
+            num_turns_expensive (int): The number of rounds of 'expensive' conversation to conduct.
         Returns:
             messages (list): The mimic chat with multi-round conversation.
     """
@@ -53,7 +55,7 @@ def mimic_chat_budget(user_content_groups, system_prompt=None, max_additional_at
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     for i, content_group in enumerate(user_content_groups):
-        if i == 0:
+        if i < num_turns_expensive:
             model = "gpt-4-vision-preview"
         else:
             model = "gpt-3.5-turbo-0125"

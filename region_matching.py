@@ -55,26 +55,56 @@ def get_data(input_annotation_path):
     region_with_label = json.loads(s)
     return region_with_label
 
-def process_data(region_with_label, scene_id, object_ids, bboxes, center_x, center_y, num_pixels_per_meter):
-    '''process the annotation data'''
+def enlarge_poly(poly,ratio):
+    m_x,m_y = (np.array(poly)[:,0]).mean(),(np.array(poly)[:,1]).mean()
+    poly_new = []
+    for (x,y) in poly:
+        poly_new.append((m_x+(1.0+ratio)*(x-m_x),m_y+(1.0+ratio)*(y-m_y)))
+    return poly_new
+
+def process_data(region_with_label, scene_id, object_ids, bboxes, center_x, center_y, num_pixels_per_meter,enlarge_ratio=0.3 ,neglect_class=['wall'],img_save_root='.'):
+    '''
+    process the annotation data
+    get the corresponding object ids
+    '''
 
     img = cv2.imread(f'data/{scene_id}/render.png')
-    print(img.shape)
+
+    original_region_cover_list = []
+
+    # 首先在原始region anno上做一遍
 
     for region in region_with_label:
+
         poly = region['vertex']
         region['object_ids']=[]
+
         for _index in range(len(object_ids)):
             object_x = bboxes[_index][0]
             object_y = bboxes[_index][1]
             x, y = get_position_in_mesh_render_image((object_x, object_y), center_x, center_y, num_pixels_per_meter, img.shape[:2])
-            img[x-3:x+3, y-3:y+3] = (255, 0, 0)
-            #print(get_position_in_render_image((object_x, object_y)))
+
             if is_in_poly((x, y), poly):
                 region['object_ids'].append(object_ids[_index])
-    show_objects_in_bev = True
-    if show_objects_in_bev:
-        cv2.imwrite('testing.png', img)
+                original_region_cover_list.append(object_ids[_index])
+
+
+    # 接着在增扩后的region anno上做一遍(扩增不能占用其它区域的object)
+
+    for region in region_with_label:
+
+        poly = enlarge_poly(region['vertex'], enlarge_ratio)
+
+
+        for _index in range(len(object_ids)):
+            object_x = bboxes[_index][0]
+            object_y = bboxes[_index][1]
+            x, y = get_position_in_mesh_render_image((object_x, object_y), center_x, center_y, num_pixels_per_meter,
+                                                     img.shape[:2])
+
+            if is_in_poly((x, y), poly) and object_ids[_index] not in original_region_cover_list:
+                region['object_ids'].append(object_ids[_index])
+
     return region_with_label
 
 
@@ -83,7 +113,7 @@ if __name__ == "__main__":
     scene_id = 'scene0000_00'
 
     all_scene_info = np.load('all_render_param.npy', allow_pickle=True).item()
-    region_with_label = get_data(f'data/{scene_id}/region_segmentation_shujutang_0，shujutang_1.txt')
+    region_with_label = get_data(f'region_annos/{scene_id}/region_segmentation_Abir.txt')
     scene_info = all_scene_info[scene_id]
 
     from utils_read import read_annotation_pickles
@@ -92,6 +122,6 @@ if __name__ == "__main__":
     bboxes = object_data['bboxes']
     object_ids = object_data['object_ids']
 
-    region_with_label = process_data(region_with_label, scene_id, object_ids, bboxes, scene_info['center_x'], scene_info['center_y'], scene_info['num_pixels_per_meter'])
+    region_with_label = process_data([region_with_label[0]], scene_id, object_ids, bboxes, scene_info['center_x'], scene_info['center_y'], scene_info['num_pixels_per_meter'])
     print(region_with_label)
 
