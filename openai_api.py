@@ -8,7 +8,6 @@ from openai import OpenAI
 # prevent accidential activation of API key
 KEY_ACTIVATED = True
 
-# NOTE: not finished yet.
 def get_api_key(key_file=None):
     if key_file is None:
         key_file = "openai_api_key.txt"
@@ -24,7 +23,7 @@ def get_api_key(key_file=None):
     return api_key
 
 def get_client():
-    if random.random() < 0.5:
+    if random.random() <= 1: # always use the chatweb API key. The machine cannot connect to the public API.
         return OpenAI(api_key=get_api_key("chatweb_api_key.txt"), base_url="https://api.chatweb.plus/v1")
     return OpenAI(api_key=get_api_key())
 
