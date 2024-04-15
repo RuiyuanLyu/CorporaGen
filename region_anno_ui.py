@@ -44,6 +44,16 @@ SCENE_LIST = os.listdir(RENDER_IMAGE_PATH)
 SCENE_LIST = [s for s in SCENE_LIST if s.startswith('scene') or s.startswith('1mp3d') or s.startswith('3rscan')]
 SCENE_LIST.sort()
 
+def get_prev_scene_id(current_scene_id):
+    if current_scene_id == None or current_scene_id == 'None':
+        return None
+    else:
+        index = SCENE_LIST.index(current_scene_id)
+        if index == 0:
+            return None
+        else:
+            return SCENE_LIST[index - 1]
+
 def get_next_scene_id(current_scene_id):
     if current_scene_id == None or current_scene_id == 'None':
         return SCENE_LIST[0]
@@ -103,6 +113,7 @@ with gr.Blocks() as demo:
 
     with gr.Row():
         user_name = gr.Textbox(label="用户名", value="", placeholder="在此输入用户名，首位必须为字母，不要带空格。")
+        view_only = gr.Checkbox(label="只读模式", value=False)
         confirm_user_name_btn = gr.Button(value="确认并锁定用户名（刷新网页才能重置用户名）", label="确认用户名")
         check_annotated_btn = gr.Button(value="查看未标注场景数", label="查看未标注")
     with gr.Row():
@@ -202,6 +213,7 @@ with gr.Blocks() as demo:
         annotate_btn = gr.Button("标注单个区域")
         undo_btn = gr.Button("回退一步")
         save_btn = gr.Button("所有区域都已经标注完成，保存")
+        prev_scene_btn = gr.Button("上一张场景")
         next_scene_btn = gr.Button("下一张场景")
         clear_btn = gr.Button("清空当前场景所有标注（谨慎操作）")
 
@@ -211,7 +223,18 @@ with gr.Blocks() as demo:
 
     show_json = gr.JSON(label="Annotate History")
 
-
+    def view_only_mode(view_only):
+        input_img = gr.Image(label="Image", visible=not view_only)
+        output_img = gr.Image(label="Selected Polygon", visible=not view_only)
+        label = gr.Radio(REGIONS.keys(), label="label", visible=not view_only)
+        total_vertex_num = gr.Slider(label="Vertex Number", visible=not view_only,
+                                     minimum=3, maximum=20, step=1, value=4)
+        annotate_btn = gr.Button("标注单个区域", visible=not view_only)
+        undo_btn = gr.Button("回退一步", visible=not view_only)
+        save_btn = gr.Button("所有区域都已经标注完成，保存", visible=not view_only)
+        clear_btn = gr.Button("清空当前场景所有标注（谨慎操作）", visible=not view_only)
+        return input_img, output_img, label, total_vertex_num, annotate_btn, undo_btn, save_btn, clear_btn
+    view_only.change(fn=view_only_mode, inputs=[view_only], outputs=[input_img, output_img, label, total_vertex_num, annotate_btn, undo_btn, save_btn, clear_btn])
 
 
     def get_coverage_mask(h, w, poly):
@@ -521,6 +544,11 @@ with gr.Blocks() as demo:
             annotation_list, click_evt_list, vertex_list, poly_done, item_dict_list
 
         ],
+    )
+    prev_scene_btn.click(
+        fn=get_prev_scene_id,
+        inputs=[scene_id],
+        outputs=[scene_id]
     )
     next_scene_btn.click(
         fn=get_next_scene_id,
