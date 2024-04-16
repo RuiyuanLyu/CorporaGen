@@ -97,6 +97,7 @@ def rename_pictures_and_jsons(scene_id):
 
 if __name__ == "__main__":
     log_file_name = f"{__file__[:-3]}.log"
+    print(f"log will be written to {log_file_name}")
     # clear the log file
     with open(log_file_name, 'w'): 
         pass
@@ -107,22 +108,22 @@ if __name__ == "__main__":
     #     os.makedirs(TARGET_DIR)
     #################################################################################
     ## rename the pictures and jsons for the given scenes
-    scene_ids = ['3rscan0000', '3rscan0040', '3rscan0063', '3rscan0078', '3rscan0102', '3rscan0131', '3rscan0151', '3rscan0182', '3rscan0210', '3rscan0261', '3rscan0284', '3rscan0312', '3rscan0339', '3rscan0368', '3rscan0389', '3rscan0409', '3rscan0501', '3rscan0530', '3rscan0544', '3rscan0575', '3rscan0599', '3rscan0602', '3rscan0637', '3rscan0672', '3rscan0698', '3rscan0746', '3rscan0777', '3rscan0803', '3rscan0854', '3rscan0886', '3rscan0921', '3rscan0943', '3rscan0970', '3rscan0999', '3rscan1016', '3rscan1049', '3rscan1077', '3rscan1098', '3rscan1127', '3rscan1169', '3rscan1192', '3rscan1231', '3rscan1260', '3rscan1298', '3rscan1326', '3rscan1359']
-    import time
-    import cv2
-    for scene_id in tqdm(scene_ids):
-        # rename_pictures_and_jsons(scene_id)
-        # new task: rotate the painted images by 90 degrees counterclockwise
-        image_dir = os.path.join(ROOT_DIR, scene_id, 'painted_objects')
-        for file_name in os.listdir(image_dir):
-            if not file_name.endswith('.jpg'):
-                continue
-            src = os.path.join(image_dir, file_name)
-            img = cv2.imread(src)
-            img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
-            cv2.imwrite(src, img)
-            logging.info(f'Rotated "{src}" by 90 degrees counterclockwise')
-        time.sleep(0.1)
+    # scene_ids = ['3rscan0000', '3rscan0040', '3rscan0063', '3rscan0078', '3rscan0102', '3rscan0131', '3rscan0151', '3rscan0182', '3rscan0210', '3rscan0261', '3rscan0284', '3rscan0312', '3rscan0339', '3rscan0368', '3rscan0389', '3rscan0409', '3rscan0501', '3rscan0530', '3rscan0544', '3rscan0575', '3rscan0599', '3rscan0602', '3rscan0637', '3rscan0672', '3rscan0698', '3rscan0746', '3rscan0777', '3rscan0803', '3rscan0854', '3rscan0886', '3rscan0921', '3rscan0943', '3rscan0970', '3rscan0999', '3rscan1016', '3rscan1049', '3rscan1077', '3rscan1098', '3rscan1127', '3rscan1169', '3rscan1192', '3rscan1231', '3rscan1260', '3rscan1298', '3rscan1326', '3rscan1359']
+    # import time
+    # import cv2
+    # for scene_id in tqdm(scene_ids):
+    #     # rename_pictures_and_jsons(scene_id)
+    #     # new task: rotate the painted images by 90 degrees counterclockwise
+    #     image_dir = os.path.join(ROOT_DIR, scene_id, 'painted_objects')
+    #     for file_name in os.listdir(image_dir):
+    #         if not file_name.endswith('.jpg'):
+    #             continue
+    #         src = os.path.join(image_dir, file_name)
+    #         img = cv2.imread(src)
+    #         img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    #         cv2.imwrite(src, img)
+    #         logging.info(f'Rotated "{src}" by 90 degrees counterclockwise')
+    #     time.sleep(0.1)
     #################################################################################
     # rename the pictures and jsons for the given scenes with specific prefixes
     # import pandas as pd
@@ -134,22 +135,22 @@ if __name__ == "__main__":
     #     rename_pictures_and_jsons(scene_id)
     #     time.sleep(0.1)
     #################################################################################
-    ## copy the selected corpora data for the given scenes 
+    # copy the selected corpora data for the given scenes 
     # scene_ids_to_ignore = set(["1mp3d_0001_region8", "1mp3d_0002_region23", "3rscan0138", "3rscan0036", "scene0026_00", "scene0094_00", "scene0147_00"])
-    # scene_ids = os.listdir(os.path.join(ROOT_DIR, "matterport3d"))
+    scene_ids = os.listdir(os.path.join(ROOT_DIR, "matterport3d"))
     # scene_ids_scannet = os.listdir(os.path.join(ROOT_DIR, "scannet"))
     # scene_ids_3rscan = os.listdir(os.path.join(ROOT_DIR, "3rscan"))
     # scene_ids = scene_ids_mp3d + scene_ids_scannet + scene_ids_3rscan
-    # scene_ids.sort()
-    # model_names = ['cogvlm', 'InternVL-Chat-V1-2-Plus'][:1]
-    # tasks = []
-    # for scene_id in scene_ids:
-    #     if scene_id in scene_ids_to_ignore:
-    #         continue
-    #     for model_name in model_names:
-    #         tasks.append((scene_id, model_name))
-    # import mmengine
-    # mmengine.track_parallel_progress(copy_corpora_data, tasks, nproc=8)
+    scene_ids.sort()
+    model_names = ['cogvlm', 'InternVL-Chat-V1-2-Plus'][:1]
+    tasks = []
+    for scene_id in scene_ids:
+        # if scene_id in scene_ids_to_ignore:
+        #     continue
+        for model_name in model_names:
+            tasks.append((scene_id, model_name))
+    import mmengine
+    mmengine.track_parallel_progress(copy_corpora_data, tasks, nproc=8)
     #################################################################################
     ## copy all data for the given scenes 
     # scene_ids = ['3rscan0000', '3rscan0040', '3rscan0063', '3rscan0078', '3rscan0102', '3rscan0131', '3rscan0151', '3rscan0182', '3rscan0210', '3rscan0261', '3rscan0284', '3rscan0312', '3rscan0339', '3rscan0368', '3rscan0389', '3rscan0409', '3rscan0501', '3rscan0530', '3rscan0544', '3rscan0575', '3rscan0599', '3rscan0602', '3rscan0637', '3rscan0672', '3rscan0698', '3rscan0746', '3rscan0777', '3rscan0803', '3rscan0854', '3rscan0886', '3rscan0921', '3rscan0943', '3rscan0970', '3rscan0999', '3rscan1016', '3rscan1049', '3rscan1077', '3rscan1098', '3rscan1127', '3rscan1169', '3rscan1192', '3rscan1231', '3rscan1260', '3rscan1298', '3rscan1326', '3rscan1359']

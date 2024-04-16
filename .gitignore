@@ -7,6 +7,7 @@ data/
 data_zip/
 region_annos/
 selected_scenes/
+corpora_to_move/
 *.zip
 
 # API keys
