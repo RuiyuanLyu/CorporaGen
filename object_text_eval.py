@@ -1,27 +1,15 @@
 from utils.utils_read import load_json
-from object_text_anno import DATA_ROOT, map_text_to_bool
+from object_text_anno import DATA_ROOT, map_text_to_bool, remove_specific_expressions
 import os
 
-scene_ids = ["1mp3d_0001_region8", "1mp3d_0002_region23", "3rscan0138", "3rscan0036", "scene0026_00", "scene0094_00", "scene0147_00"][3:5]
+scene_ids = ["1mp3d_0001_region8", "1mp3d_0002_region23", "3rscan0138", "3rscan0036", "scene0026_00", "scene0094_00", "scene0147_00"][3:4]
 # scene_ids = ["scene0000_00"]
 model_names = ["cogvlm_crop", "XComposer2_crop", "gpt4v_crop", "gpt4v_paint_highdetail", "InternVL-Chat-V1-2-Plus_crop"][:]
-users_to_check = ["boyue", "QS_wangjing", "shujutang_01"][1:]
-
-STRINGS_TO_NEGLECT = ["似乎", "好像", "大概", "看起来", "可能",
-                      "图片中的", "图片", "照片中的", "照片"]
-def filter_text(text: str) -> str:
-    """
-    Remove some strings from the text.
-    """
-    prev_len = len(text)
-    for string in STRINGS_TO_NEGLECT:
-        text = text.replace(string, "")
-    new_len = len(text)
-    # if prev_len != new_len:
-    #     print(f"Infomation: {prev_len-new_len} chars of {text} are removed from the text.")   
-    return text.strip()
+users_to_check = ["boyue", "QS_wangjing", "QS_001", "用户名用QS_002", "shujutang_01"]
 
 
+
+user_eval_dict = {}
 for user in users_to_check:
     acc_dict_list = []
     for scene_id in scene_ids:
@@ -53,21 +41,34 @@ for user in users_to_check:
             from object_text_ui import KEYS
             keys_to_check = KEYS
             score = sum(acc_dict[key] for key in keys_to_check) / len(keys_to_check)
-            acc_dict["score"] = score
+            acc_dict["error_detected"] = 1 - score
+            corpora_source = annotation.get("corpora_source", "")
+            acc_dict["corpora_source"] = corpora_source.replace("corpora_object_", "")
             # acc_dict_list.append(acc_dict)
             ######################################################################
             # now we simply compute the length of the delta between the reference and the user's annotation
             import difflib
             original_annotation = annotation.get("translated_description", "")
+            dir_to_check2 = os.path.join(DATA_ROOT, scene_id, f"corpora_object_{model_names[-1]}")
+            file_name_to_check2 = os.path.join(dir_to_check2, file_name)
+            original_annotation2 = load_json(file_name_to_check2).get("translated_description", "")
             modified_annotation = annotation.get("modified_description", "")
             if not original_annotation or not modified_annotation:
                 print("Warning: original or modified annotation is empty.")
-            original_annotation = filter_text(original_annotation)
-            modified_annotation = filter_text(modified_annotation)
+            original_annotation = remove_specific_expressions(original_annotation)
+            original_annotation2 = remove_specific_expressions(original_annotation2)
+            modified_annotation = remove_specific_expressions(modified_annotation)
             d = difflib.Differ()
             delta = [(token[2:], token[0] if token[0] != " " else None)for token in d.compare(original_annotation, modified_annotation)]
             token_added = sum(len(token[0]) for token in delta if token[1] == "+")
             token_removed = sum(len(token[0]) for token in delta if token[1] == "-")
+            delta2 = [(token[2:], token[0] if token[0] != " " else None)for token in d.compare(original_annotation2, modified_annotation)]
+            token_added2 = sum(len(token[0]) for token in delta2 if token[1] == "+")
+            token_removed2 = sum(len(token[0]) for token in delta2 if token[1] == "-")
+            # take smaller one as the final token_added/removed
+            token_added = min(token_added, token_added2)
+            token_removed = min(token_removed, token_removed2)
+
             acc_dict["token_added"] = token_added
             acc_dict["token_removed"] = token_removed
             acc_dict_list.append(acc_dict)
@@ -75,8 +76,8 @@ for user in users_to_check:
     ## now we save the accuracy_dict_list to a csv file
     import pandas as pd
     df = pd.DataFrame(acc_dict_list)
-    df.to_csv(f"accuracy_dict_{user}.csv", index=True)
-    print(f"Accuracy of {user} on {len(scene_ids)} scenes has been saved.")
+    df.to_csv(f"evaluation_results/accuracy_dict_{user}.csv", index=True)
+    # print(f"Accuracy of {user} on {len(scene_ids)} scenes has been saved.")
     # print(df)
     #####################################################################
     ## also compute the average score
@@ -84,14 +85,29 @@ for user in users_to_check:
     # acc_dict_list = [acc_dict for acc_dict in acc_dict_list if acc_dict["scene_id"] == scene_id]
     acc_dict_list = [acc_dict for acc_dict in acc_dict_list if "meta" in acc_dict]
     ## filter out the annotations without meta or without visual_info_sufficient
-    # acc_dict_list = [acc_dict for acc_dict in acc_dict_list if acc_dict["meta"] and acc_dict["visual_info_sufficient"]]
-    score_list = [acc_dict["score"] for acc_dict in acc_dict_list]
+    FILTER_WO_META = True
+    if FILTER_WO_META:
+        acc_dict_list = [acc_dict for acc_dict in acc_dict_list if acc_dict.get("meta", False)]
+    corpora_source_list = [acc_dict.get("corpora_source", "") for acc_dict in acc_dict_list]
+    from collections import Counter
+    c = Counter(corpora_source_list)
+    print(f"Corpora source distribution for {user}: {c}")
+    score_list = [acc_dict["error_detected"] for acc_dict in acc_dict_list]
     avg_score = sum(score_list) / len(score_list)
-    print(f"Note:lower is better: lower score means more errors detected by user")
-    print(f"Average score eval by {user} is {sum(score_list):.2f}/{len(score_list)}={avg_score:.2f}:")
-    token_added_list = [acc_dict["token_added"] for acc_dict in acc_dict_list]
-    token_removed_list = [acc_dict["token_removed"] for acc_dict in acc_dict_list]
-    avg_token_added = sum(token_added_list) / len(token_added_list)
-    avg_token_removed = sum(token_removed_list) / len(token_removed_list)
-    print(f"Average token added/removed by {user} is {avg_token_added:.2f}/{avg_token_removed:.2f}:")
-
+    token_added_list = [acc_dict["token_added"] for acc_dict in acc_dict_list if acc_dict["token_added"] < 100]
+    token_removed_list = [acc_dict["token_removed"] for acc_dict in acc_dict_list if acc_dict["token_removed"] < 100]
+    import numpy as np
+    avg_token_added = np.mean(token_added_list)
+    avg_token_removed = np.mean(token_removed_list)
+    std_token_added = np.std(token_added_list)
+    std_token_removed = np.std(token_removed_list)
+    # NOTE: lower score is better (more errors detected by user)
+    user_eval_dict[user.strip("用户名用")] = {"num_objects": len(acc_dict_list), "avg_detect_score": avg_score, "avg_token_added": avg_token_added, "avg_token_removed": avg_token_removed, "std_token_added": std_token_added, "std_token_removed": std_token_removed}
+    # print(f"Average score eval by {user} is {sum(score_list):.2f}/{len(score_list)}={avg_score:.2f}:")
+    # print(f"Average token added/removed by {user} is {avg_token_added:.2f}/{avg_token_removed:.2f}:")
+    # print(f"Std token added/removed by {user} is {std_token_added:.2f}/{std_token_removed:.2f}:")
+df = pd.DataFrame(user_eval_dict).T
+df.to_csv("user_eval_dict.csv", index=True)
+print("User evaluation results:")
+print("Filter the annotations without meta or without visual_info_sufficient: ", FILTER_WO_META)
+print(df)

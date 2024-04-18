@@ -5,6 +5,7 @@ import numpy as np
 from object_text_anno import check_annotation_validity, map_choice_to_bool, map_CNchoice_to_ENtext, map_ENtext_to_CNchoice
 from utils.utils_read import load_json
 from difflib import Differ
+from object_text_anno import remove_specific_expressions
 
 
 QUESTIONS = {
@@ -123,19 +124,20 @@ with gr.Blocks() as demo:
                                 outputs=[user_name, user_name_locked, is_super_user, check_delta_btn, delta_description])
 
     def update_do_record_corpora_source_in_dir_name_visibility(user_name):
-        do_record_corpora_source_in_dir_name = gr.Checkbox(label=DO_RECORD_CORPORA_SOURCE_IN_DIR_NAME_GR_STR, value=False, visible=is_super_user)
+        do_record_corpora_source_in_dir_name = gr.Checkbox(label=DO_RECORD_CORPORA_SOURCE_IN_DIR_NAME_GR_STR, value=False, visible=user_name in SUPER_USERNAMES)
         return do_record_corpora_source_in_dir_name
     lock_user_name_btn.click(update_do_record_corpora_source_in_dir_name_visibility, inputs=[user_name], outputs=[do_record_corpora_source_in_dir_name])
 
-    def update_previous_user_choices(directory, user_name):
+    def update_previous_user_choices(directory, user_name, is_super_user):
         dir_to_check = os.path.join(directory, DEFAULT_SAVE_STR)
-        os.makedirs(dir_to_check, exist_ok=True)
+        if dir_to_check.startswith(DATA_ROOT):
+            os.makedirs(dir_to_check, exist_ok=True)
         previous_users = [name for name in os.listdir(dir_to_check) if os.path.isdir(os.path.join(dir_to_check, name))]
         previous_users = [name.replace("user_", "") for name in previous_users]
         if len(previous_users) == 0 or not is_super_user:
             return gr.Dropdown(label=PREVIOUS_USER_GR_STR, choices=[], value="", visible=False)
         return gr.Dropdown(label=PREVIOUS_USER_GR_STR, choices=previous_users, value="", visible=True)
-    directory.change(fn=update_previous_user_choices, inputs=[directory, user_name], outputs=[previous_user])
+    directory.change(fn=update_previous_user_choices, inputs=[directory, user_name, is_super_user], outputs=[previous_user])
 
     def update_valid_directories():
         """
@@ -261,6 +263,10 @@ with gr.Blocks() as demo:
         else:
             warning_text = None
         accuracy_dict = annotation.get("accuracy_dict", {})
+        original_description = remove_specific_expressions(original_description)
+        translated_description = remove_specific_expressions(translated_description)
+        if modified_description:
+            modified_description = remove_specific_expressions(modified_description)
         return original_description, translated_description, modified_description, warning_text, accuracy_dict
 
     def get_description_answers_image_path(object_name, directory, supp_corpora, supp_activated, do_record_corpora_source_in_dir_name, user_name, previous_user):
@@ -268,12 +274,12 @@ with gr.Blocks() as demo:
         Returns the description, answers, and image path of the given object.
         """
         json_file = os.path.join(directory, MAIN_CORPORA_STR, f"{object_name}.json")
-        load_STR = supp_corpora if do_record_corpora_source_in_dir_name and supp_activated else DEFAULT_SAVE_STR
-        user_json_file = os.path.join(directory, load_STR, f"user_{user_name}", f"{object_name}.json")
+        load_str = supp_corpora if do_record_corpora_source_in_dir_name and supp_activated else DEFAULT_SAVE_STR
+        user_json_file = os.path.join(directory, load_str, f"user_{user_name}", f"{object_name}.json")
         if os.path.exists(user_json_file):
             json_file = user_json_file
         if previous_user:
-            json_file = os.path.join(directory, load_STR, f"user_{previous_user}", f"{object_name}.json")
+            json_file = os.path.join(directory, load_str, f"user_{previous_user}", f"{object_name}.json")
         original_description, translated_description, modified_description, warning_text, accuracy_dict = _get_description(json_file)
         if modified_description:
             modified_description = gr.Textbox(label=MODIFIED_DESCRIPTION_GR_STR, value=modified_description, visible=True, interactive=False)
@@ -372,18 +378,20 @@ with gr.Blocks() as demo:
         for t in textboxes:
             value += t.strip(" ") + "。"
         value = value.replace("。。", "。")
+        value = value.replace("，。", "。")
+        value = value.replace("，，", "。")
         value = value.strip("。") + "。"
         return gr.Textbox(label="Preview Annotation", value=value, visible=False, interactive=False)
     for t in textboxes:
         t.change(fn=update_preview_description, inputs=[*textboxes], outputs=preview_description)
     save_btn.click(fn=update_preview_description, inputs=[*textboxes], outputs=preview_description)
 
-    def save_annotations(directory, supp_corpora, supp_activated, do_record_corpora_source_in_dir_name, user_name, previous_user, object_name, core_question, core_question2, preview_description, *questions_radio):
+    def save_annotations(directory, supp_corpora, supp_activated, do_record_corpora_source_in_dir_name, user_name,  previous_user, object_name, core_question, core_question2, preview_description, *questions_radio):
         """
         Saves the annotations to the given directory.
         """
-        corpora_STR = supp_corpora if supp_activated else MAIN_CORPORA_STR
-        json_file_path_raw = os.path.join(directory, corpora_STR, f"{object_name}.json")
+        corpora_str = supp_corpora if supp_activated else MAIN_CORPORA_STR
+        json_file_path_raw = os.path.join(directory, corpora_str, f"{object_name}.json")
         annotation = load_json(json_file_path_raw)
         annotation_to_save = {}
         assert isinstance(annotation, dict), f"Invalid annotation type: {type(annotation)}"
@@ -406,16 +414,18 @@ with gr.Blocks() as demo:
                 key = KEYS[i]
                 accuracy_dict[key] = "False"
         annotation_to_save["accuracy_dict"] = accuracy_dict
-        save_corpora_STR = DEFAULT_SAVE_STR
+        save_corpora_str = DEFAULT_SAVE_STR
         if do_record_corpora_source_in_dir_name:
             # the source of the annotation is always recorded now.
             # This is used to compatible with the previous version of the annotation tool, where the source of the annotation is recorded by the directory name.
-            save_corpora_STR = supp_corpora if supp_activated else MAIN_CORPORA_STR
+            save_corpora_str = supp_corpora if supp_activated else MAIN_CORPORA_STR
+        is_super_user = user_name in SUPER_USERNAMES
         if previous_user and is_super_user:
-            json_file_path_to_save = os.path.join(directory, save_corpora_STR, f"user_{user_name}", f"user_{previous_user}", f"{object_name}.json")
+            json_file_path_to_save = os.path.join(directory, save_corpora_str, f"user_{user_name}", f"user_{previous_user}", f"{object_name}.json")
         else:
-            json_file_path_to_save = os.path.join(directory, save_corpora_STR, f"user_{user_name}" , f"{object_name}.json")
-        os.makedirs(os.path.dirname(json_file_path_to_save), exist_ok=True)
+            json_file_path_to_save = os.path.join(directory, save_corpora_str, f"user_{user_name}" , f"{object_name}.json")
+        if json_file_path_to_save.startswith(DATA_ROOT):
+            os.makedirs(os.path.dirname(json_file_path_to_save), exist_ok=True)
         with open(json_file_path_to_save, "w", encoding="utf-8") as f:
             json.dump(annotation_to_save, f, ensure_ascii=False, indent=4)
         gr.Info(f"物体标注已保存至 {json_file_path_to_save}")
