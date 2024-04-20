@@ -557,12 +557,14 @@ with gr.Blocks() as demo:
     )
 demo.queue(concurrency_count=20)
 
+INFO_SAVE_DIR = "./splitted_infos/"
+import time 
 def get_scene_info(scene_id):
     global scene_info, render_info, output_dir, painted_dir
     if scene_id in scene_info:
         return scene_info[scene_id]
     else:
-        anno = anno_full.get(scene_id, None)
+        anno = read_annotation_pickles([os.path.join(INFO_SAVE_DIR, f"{scene_id}.pkl")])[scene_id]
         if anno is None:
             return None
         scene_info[scene_id] = {}
@@ -589,7 +591,18 @@ def get_scene_info(scene_id):
         scene_info[scene_id]["center_x"] = render_info[scene_id]["center_x"]
         scene_info[scene_id]["center_y"] = render_info[scene_id]["center_y"]
         scene_info[scene_id]["num_pixels_per_meter"] = render_info[scene_id]["num_pixels_per_meter"]
+        scene_info[scene_id]["timestamp"] = time.time()
+        shrink_scene_info(keep_num=100)
         return scene_info[scene_id]
+    
+def shrink_scene_info(keep_num=100):
+    # avoid too much memory usage
+    global scene_info
+    num_scene = len(scene_info)
+    if num_scene > keep_num:
+        scene_info = {k: v for k, v in sorted(scene_info.items(), key=lambda item: item[1]["timestamp"])[:keep_num]}
+    import gc
+    gc.collect()
 
 
 if __name__ == "__main__":
@@ -631,5 +644,6 @@ if __name__ == "__main__":
         if len(painted_files) == 0:
             print(f"No painted objects for {scene_id}")
             SCENE_LIST.remove(scene_id)
+    del anno_full
     demo.launch(show_error=True, allowed_paths=[painted_dir], server_port=7859)
 
