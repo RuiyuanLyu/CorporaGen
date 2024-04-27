@@ -23,7 +23,7 @@ import numpy as np
 from math import ceil
 import json
 import open3d as o3d
-from utils.utils_read import read_annotation_pickles
+from utils.utils_read import read_annotation_pickle, read_annotation_pickles
 # from render_bev_for_all import load_mesh, _render_2d_bev, take_bev_screenshot, process_mesh
 from region_matching import get_data, get_position_in_mesh_render_image, is_in_poly
 import matplotlib
@@ -70,11 +70,11 @@ REGIONS = {"起居室/会客区": "living region",
            "饭厅/进食区": "dinning region",
            "厨房/烹饪区": "cooking region",
            "浴室/洗澡区": "bathing region",
-           "储藏区": "storage region",
+           "储藏/收纳区": "storage region",
            "厕所/洗手间": "toliet region",
            "运动区/健身房": "sports region",
            "走廊/通道": "corridor region",
-           "空地": "open area region",
+           "开放（室外）空地": "open area region",
            "其它": "other region"}
 REGIONS_COLOR = {
     "living region": (0, 0, 255),
@@ -93,9 +93,14 @@ REGIONS_COLOR = {
 REGIONS_COLOR = {k: np.array(v) for k, v in REGIONS_COLOR.items()}
 
 
-def lang_translation(region_name):
+def translate_region_name_cn_en(region_name):
     return REGIONS.get(region_name, None)
 
+def translate_region_name_en_cn(region_name):
+    for k, v in REGIONS.items():
+        if v == region_name:
+            return k
+    return None
 
 with gr.Blocks() as demo:
     click_evt_list = gr.State([])
@@ -218,8 +223,8 @@ with gr.Blocks() as demo:
         clear_btn = gr.Button("清空当前场景所有标注（谨慎操作）")
 
     with gr.Row():
-        object_postion_img = gr.Image(label="辅助查看选择区", interactive=True, tool=[])
-        detail_show_img = gr.Image(label="辅助查看图片", tool=[])
+        object_postion_img = gr.Image(label="辅助查看选择区", interactive=True, tool=[], show_label=False)
+        detail_show_img = gr.Image(label="辅助查看图片", tool=[], show_label=False)
 
     show_json = gr.JSON(label="Annotate History")
 
@@ -313,7 +318,7 @@ with gr.Blocks() as demo:
                       item_dict_list, store_vertex_list])
 
 
-    def new_draw_dot(scene_id, img, to_rotate_clockwise_90, evt: gr.SelectData):
+    def visualize_object_pos(scene_id, img, to_rotate_clockwise_90, evt: gr.SelectData):
         # import pdb; pdb.set_trace()
         out = img.copy()
         min_distance = np.inf
@@ -356,10 +361,12 @@ with gr.Blocks() as demo:
                                                      get_scene_info(scene_id)["num_pixels_per_meter"],
                                                      img.shape[:2])
         out = cv2.arrowedLine(out, (s_y, s_x), (e_y, e_x), (255, 0, 0), 2)
+        for x, y in zip(xs, ys):
+            out = cv2.circle(out, (y, x), int(size*0.8), (0, 0, 255), -1)
         out[
         max(p[0] - size, 0): min(p[0] + size, out.shape[0] - 1),
         max(p[1] - size, 0): min(p[1] + size, out.shape[1] - 1),
-        ] = np.array([0, 0, 255]).astype(np.uint8)
+        ] = np.array([255, 0, 0]).astype(np.uint8)
         detail_img = gr.update(value=get_scene_info(scene_id)["useful_object"][min_object_id])
 
         if scene_id[:6] == '3rscan':
@@ -396,9 +403,10 @@ with gr.Blocks() as demo:
         m_y = evt.index[0]
         for anno_ in anno_result:
             label_ = anno_["label"]
+            chinese_label_ = translate_region_name_en_cn(label_)
             poly_ = anno_["vertex"]
             if is_in_poly((m_x, m_y), poly_):
-                return label_, anno_result
+                return f"{label_}:{chinese_label_}", anno_result
         return "no annotation", anno_result
 
 
@@ -419,7 +427,7 @@ with gr.Blocks() as demo:
 
             annotation = {}
             annotation["id"] = len(annotation_list)
-            annotation["label"] = lang_translation(label)
+            annotation["label"] = translate_region_name_cn_en(label)
 
             annotation["vertex"] = copy.deepcopy(store_vertex_list)
             annotation_list.append(annotation)
@@ -504,7 +512,7 @@ with gr.Blocks() as demo:
     )
 
     object_postion_img.select(
-        new_draw_dot, [scene_id, input_img, to_rotate_clockwise_90],
+        visualize_object_pos, [scene_id, input_img, to_rotate_clockwise_90],
         [object_postion_img, detail_show_img, to_rotate_clockwise_90]
     )
     anno_result_img.select(
@@ -564,7 +572,7 @@ def get_scene_info(scene_id):
     if scene_id in scene_info:
         return scene_info[scene_id]
     else:
-        anno = read_annotation_pickles([os.path.join(INFO_SAVE_DIR, f"{scene_id}.pkl")])[scene_id]
+        anno = read_annotation_pickle(os.path.join(INFO_SAVE_DIR, f"{scene_id}.pkl"), show_progress=False)[scene_id]
         if anno is None:
             return None
         scene_info[scene_id] = {}
@@ -592,15 +600,15 @@ def get_scene_info(scene_id):
         scene_info[scene_id]["center_y"] = render_info[scene_id]["center_y"]
         scene_info[scene_id]["num_pixels_per_meter"] = render_info[scene_id]["num_pixels_per_meter"]
         scene_info[scene_id]["timestamp"] = time.time()
-        shrink_scene_info(keep_num=100)
+        shrink_scene_info(keep_num=20)
         return scene_info[scene_id]
     
-def shrink_scene_info(keep_num=100):
-    # avoid too much memory usage
+def shrink_scene_info(keep_num=20):
+    # avoid too much memory usage, delete "old" scenes
     global scene_info
     num_scene = len(scene_info)
     if num_scene > keep_num:
-        scene_info = {k: v for k, v in sorted(scene_info.items(), key=lambda item: item[1]["timestamp"])[:keep_num]}
+        scene_info = {k: v for k, v in sorted(scene_info.items(), key=lambda item: item[1]["timestamp"])[-keep_num:]}
     import gc
     gc.collect()
 
