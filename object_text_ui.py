@@ -117,8 +117,8 @@ with gr.Blocks() as demo:
             user_name = gr.Textbox(label="用户名", value=user_name, interactive=False)
             user_name_locked = True
             print(f"Super user: {is_super_user}")
-        check_delta_btn = gr.Button(value=CHECK_DELTA_BTN_GR_STR, visible=is_super_user)
-        delta_description = gr.HighlightedText(label=DELTA_DESCRIPTION_GR_STR, combine_adjacent=True, show_legend=True,color_map={"-": "red", "+": "green"}, visible=is_super_user, interactive=False)
+        check_delta_btn = gr.Button(value=CHECK_DELTA_BTN_GR_STR, visible=user_name in SUPER_USERNAMES)
+        delta_description = gr.HighlightedText(label=DELTA_DESCRIPTION_GR_STR, combine_adjacent=True, show_legend=True,color_map={"-": "red", "+": "green"}, visible=user_name in SUPER_USERNAMES, interactive=False)
         return user_name, user_name_locked, is_super_user, check_delta_btn, delta_description
     lock_user_name_btn.click(lock_user_name, inputs=[user_name, user_name_locked],
                                 outputs=[user_name, user_name_locked, is_super_user, check_delta_btn, delta_description])
@@ -136,7 +136,7 @@ with gr.Blocks() as demo:
         previous_users = [name.replace("user_", "") for name in previous_users]
         if len(previous_users) == 0 or not is_super_user:
             return gr.Dropdown(label=PREVIOUS_USER_GR_STR, choices=[], value="", visible=False)
-        return gr.Dropdown(label=PREVIOUS_USER_GR_STR, choices=previous_users, value="", visible=True)
+        return gr.Dropdown(label=PREVIOUS_USER_GR_STR, choices=previous_users, value=previous_users[0], visible=True)
     directory.change(fn=update_previous_user_choices, inputs=[directory, user_name, is_super_user], outputs=[previous_user])
 
     def update_valid_directories():
