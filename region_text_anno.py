@@ -91,7 +91,7 @@ def get_visible_objects_dict(dataset_tar, scene_id_tar):
     """
     pickle_file_val = 'embodiedscan_infos_val_full.pkl'
     pickle_file_train = 'embodiedscan_infos_train_full.pkl'
-    from utils_read import read_annotation_pickles
+    from utils.utils_read import read_annotation_pickles
     anno_dict = read_annotation_pickles([pickle_file_val, pickle_file_train])
     keys = sorted(list(anno_dict.keys()))
     for key_index in range(len(keys)):
@@ -123,7 +123,7 @@ def prepare_visible_objects(visible_view_object_dict, view_ids, object_ids, obje
         visible_object_ids_pre += visible_view_object_dict[view_id].tolist()
     visible_object_ids_pre = sorted(list(set(visible_object_ids_pre)))
     visible_object_ids, visible_object_types = [], []
-    from utils_read import EXCLUDED_OBJECTS
+    from utils.utils_read import EXCLUDED_OBJECTS
     for object_id in visible_object_ids_pre:
         object_index = np.where(object_ids == object_id)[0][0]
         object_type = object_types[object_index]
@@ -218,47 +218,64 @@ def check_and_filter_json_files(raw_annos,object_ids, object_types,d_list = DESC
 
     return filter_dicts
 
+from object_text_anno import mmengine_track_func
 
-
-
-
-
-if __name__ == "__main__":
-
-    # choose the scene
-    scene_id = 'scene0000_00'
-    region_view_dir_name = 'region_view_test'
-    # choose the region
-    region_name = '4_toliet region'
+@mmengine_track_func
+def annotate_region(scene_id, region_name):
     region_type = region_name.split('_')[1]
-
-    all_scene_info = np.load('all_render_param.npy', allow_pickle=True).item()
-    scene_info = all_scene_info[scene_id]
-    from utils_read import read_annotation_pickles
-
-    annotation_data = read_annotation_pickles(["embodiedscan_infos_train_full.pkl", "embodiedscan_infos_val_full.pkl",
-                                               "3rscan_infos_test_MDJH_aligned_full_10_visible.pkl",
-                                               "matterport3d_infos_test_full_10_visible.pkl"])
-
+    # scene_info = all_scene_info[scene_id]
     object_data = annotation_data[scene_id]
     bboxes = object_data['bboxes']
     object_ids = object_data['object_ids']
     object_types = object_data['object_types']
-
-    image_paths = [f'data/{scene_id}/{region_view_dir_name}/{region_name}/'+img_name for img_name in  os.listdir(f'data/{scene_id}/{region_view_dir_name}/{region_name}') if img_name[-4:]=='.jpg']
+    # region_dir = f'data/{scene_id}/{REGION_VIEW_DIR_NAME}/{region_name}'
+    region_dir = os.path.join('data', scene_id, REGION_VIEW_DIR_NAME, region_name)
+    if os.path.exists(os.path.join(region_dir, 'struction.npy')):
+        # already annotated
+        return
+    image_paths = [os.path.join(region_dir, img_name) for img_name in os.listdir(region_dir) if img_name[-4:] == '.jpg']
     # get visible object
-    visible_object_ids = np.load(f'data/{scene_id}/{region_view_dir_name}/{region_name}/object_filter.npy')
+    visible_object_ids = np.load(os.path.join(region_dir, 'object_filter.npy'))
     visible_object_types = [object_types[list(object_ids).index(idx)] for idx in visible_object_ids ]
     import time
     a = time.time()
     annotations_out = annotate_region_image(image_paths, region_type, visible_object_ids, visible_object_types)
     annotations = annotations_out
     print(annotations)
-    filter_annos = check_and_filter_json_files(annotations,visible_object_ids,visible_object_types)
+    filter_annos = check_and_filter_json_files(annotations, visible_object_ids, visible_object_types)
     print(filter_annos)
     print(time.time()-a)
     if filter_annos is not None:
-        np.save(f'data/{scene_id}/{region_view_dir_name}/{region_name}/struction.npy',filter_annos)
+        np.save(os.path.join(region_dir,'struction.npy'), filter_annos)
+
+if __name__ == "__main__":
+    DATA_ROOT = 'data'
+    REGION_VIEW_DIR_NAME = 'region_views'
+    # choose the scene
+    # scene_id = 'scene0000_00'
+    # choose the region
+    # region_name = '4_toliet region'
+
+    all_scene_info = np.load('all_render_param.npy', allow_pickle=True).item()
+    from utils.utils_read import read_annotation_pickles
+
+    annotation_data = read_annotation_pickles(["embodiedscan_infos_train_full.pkl", "embodiedscan_infos_val_full.pkl",
+                                               "3rscan_infos_test_MDJH_aligned_full_10_visible.pkl",
+                                               "matterport3d_infos_test_full_10_visible.pkl"])
+    scene_ids = os.listdir(DATA_ROOT)
+    scene_ids = [scene_id for scene_id in scene_ids if scene_id.startswith('scene') or scene_id.startswith('1mp3d')]
+    scene_ids = sorted(scene_ids)
+    tasks = []
+    for scene_id in scene_ids:
+        dir_to_check = os.path.join(DATA_ROOT, scene_id, REGION_VIEW_DIR_NAME)
+        if not os.path.exists(dir_to_check):
+            continue
+        region_names = os.listdir(dir_to_check)
+        region_names = [region_name for region_name in region_names if region_name.endswith('region')]
+        region_names = sorted(region_names)
+        tasks += [(scene_id, region_name) for region_name in region_names]
+    import mmengine
+    mmengine.utils.track_parallel_progress(annotate_region, tasks, nproc=8)
 
 
 
