@@ -200,7 +200,7 @@ def get_scene_prefix(path):
     else:
         return ""
 
-def read_annotation_pickle(path):
+def read_annotation_pickle(path, show_progress=True):
     """
     Returns: A dictionary. Format. scene_id : (bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, image_paths)
     bboxes: numpy array of bounding boxes, shape (N, 9): xyz, lwh, ypr
@@ -219,7 +219,7 @@ def read_annotation_pickle(path):
     object_int_to_type = {v: k for k, v in object_type_to_int.items()}
     datalist = data["data_list"]
     output_data = {}
-    pbar = tqdm(range(len(datalist)))
+    pbar = tqdm(range(len(datalist))) if show_progress else range(len(datalist))
     for scene_idx in pbar:
         images = datalist[scene_idx]["images"]
         intrinsic = datalist[scene_idx].get("cam2img", None)  # a 4x4 matrix
@@ -279,8 +279,8 @@ def read_annotation_pickle(path):
             intrinsics.append(intrinsic)
             depth_intrinsics.append(depth_intrinsic)
             image_paths.append(img_path)
-
-        pbar.set_description(f"Processing scene {scene_id}")
+        if show_progress:
+            pbar.set_description(f"Processing scene {scene_id}")
         output_data[scene_id] = {
             "bboxes": bboxes,
             "object_ids": object_ids,
