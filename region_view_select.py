@@ -335,7 +335,7 @@ if __name__ == '__main__':
 
     blurry_image_ids_path = f'data/{scene_id}/blurry_image_ids.json'
 
-    output_dir = f'data/{scene_id}/region_view_test'
+    output_dir = f'data/{scene_id}/region_views'
     os.makedirs(output_dir, exist_ok=True)
 
     real_image_paths = [f'data/{scene_id}/posed_images'+path[-10:]

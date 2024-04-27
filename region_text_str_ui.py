@@ -46,7 +46,7 @@ FEATURES_tran = {FEATURES[key]: key for key in FEATURES.keys()}
 scene_list = ['scene0000_00']
 region_list = ['4_toliet region']
 
-region_view_dir_name = 'region_view_test'
+region_view_dir_name = 'region_views'
 
 
 

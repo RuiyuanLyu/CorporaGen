@@ -30,7 +30,7 @@ region_list = ['0_cooking region']
 anno_full =read_annotation_pickles(["embodiedscan_infos_train_full.pkl", "embodiedscan_infos_val_full.pkl",
                                                "3rscan_infos_test_MDJH_aligned_full_10_visible.pkl","matterport3d_infos_test_full_10_visible.pkl"])
 
-region_view_dir_name = 'region_view_test'
+region_view_dir_name = 'region_views'
 
 
 
