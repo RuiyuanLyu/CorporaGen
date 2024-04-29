@@ -622,10 +622,10 @@ if __name__ == "__main__":
     # 不用显示的类型（但会记录）
     exclude_type = ["wall", "ceiling", "floor"]
     # 存储所有场景标注信息的列表
-    anno_full = read_annotation_pickles(['embodiedscan_infos_train_full.pkl',
-                                         'embodiedscan_infos_val_full.pkl',
-                                         '3rscan_infos_test_MDJH_aligned_full_10_visible.pkl',
-                                         'matterport3d_infos_test_full_10_visible.pkl'])
+    # anno_full = read_annotation_pickles(['embodiedscan_infos_train_full.pkl',
+    #                                      'embodiedscan_infos_val_full.pkl',
+    #                                      '3rscan_infos_test_MDJH_aligned_full_10_visible.pkl',
+    #                                      'matterport3d_infos_test_full_10_visible.pkl'])
     # 存储渲染参数的文件（坐标变换要用到）
     render_info = np.load('all_render_param.npy', allow_pickle=True).item()
     # 输出文件夹
@@ -639,10 +639,10 @@ if __name__ == "__main__":
     scene_info = {}
     from tqdm import tqdm
     for scene_id in tqdm(SCENE_LIST):
-        anno = anno_full.get(scene_id, None)
-        if anno is None:
-            print(f"No annotation for {scene_id}")
-            continue
+        # anno = anno_full.get(scene_id, None)
+        # if anno is None:
+        #     print(f"No annotation for {scene_id}")
+        #     continue
         painted_img_dir = f"{painted_dir}/{scene_id}/painted_objects"
         if not os.path.exists(painted_img_dir):
             print(f"No painted objects for {scene_id}")
@@ -652,6 +652,6 @@ if __name__ == "__main__":
         if len(painted_files) == 0:
             print(f"No painted objects for {scene_id}")
             SCENE_LIST.remove(scene_id)
-    del anno_full
-    demo.launch(show_error=True, allowed_paths=[painted_dir], server_port=7859)
+    # del anno_full
+    demo.launch(show_error=True, allowed_paths=[painted_dir], server_port=7857)
 

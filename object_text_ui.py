@@ -67,9 +67,9 @@ with gr.Blocks() as demo:
         MODIFIED_DESCRIPTION_GR_STR = "修改后的描述"
         modified_description = gr.Textbox(label=MODIFIED_DESCRIPTION_GR_STR, value="", visible=True, interactive=False, lines=3)
         DELTA_DESCRIPTION_GR_STR = "变化的部分"
-        delta_description = gr.HighlightedText(label=DELTA_DESCRIPTION_GR_STR,combine_adjacent=True,show_legend=True,color_map={"-": "red", "+": "green"}, visible=False, interactive=False)
+        delta_description = gr.HighlightedText(label=DELTA_DESCRIPTION_GR_STR,combine_adjacent=True,show_legend=True,color_map={"-": "red", "+": "green"}, visible=True, interactive=True)
         CHECK_DELTA_BTN_GR_STR = "检查加载的描述和原始描述的变化（如果在下面修改区进行了修改，这里会自动更新，不需要点击）"
-        check_delta_btn = gr.Button(value=CHECK_DELTA_BTN_GR_STR, visible=False)
+    check_delta_btn = gr.Button(value=CHECK_DELTA_BTN_GR_STR, visible=True)
     with gr.Row():
         core_question = gr.Radio(label=QUESTIONS["meta"], choices=["是", "否", "不要选这个选项"], value="不要选这个选项", interactive=True)
         core_question2 = gr.Radio(label=QUESTIONS["visual_info_sufficient"], choices=["是", "否", "不要选这个选项"], value="不要选这个选项", interactive=True)
@@ -117,8 +117,8 @@ with gr.Blocks() as demo:
             user_name = gr.Textbox(label="用户名", value=user_name, interactive=False)
             user_name_locked = True
             print(f"Super user: {is_super_user}")
-        check_delta_btn = gr.Button(value=CHECK_DELTA_BTN_GR_STR, visible=user_name in SUPER_USERNAMES)
-        delta_description = gr.HighlightedText(label=DELTA_DESCRIPTION_GR_STR, combine_adjacent=True, show_legend=True,color_map={"-": "red", "+": "green"}, visible=user_name in SUPER_USERNAMES, interactive=False)
+        # check_delta_btn = gr.Button(value=CHECK_DELTA_BTN_GR_STR, visible=(user_name in SUPER_USERNAMES))
+        # delta_description = gr.HighlightedText(label=DELTA_DESCRIPTION_GR_STR, combine_adjacent=True, show_legend=True,color_map={"-": "red", "+": "green"}, visible=(user_name in SUPER_USERNAMES), interactive=False)
         return user_name, user_name_locked, is_super_user, check_delta_btn, delta_description
     lock_user_name_btn.click(lock_user_name, inputs=[user_name, user_name_locked],
                                 outputs=[user_name, user_name_locked, is_super_user, check_delta_btn, delta_description])
