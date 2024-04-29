@@ -4,40 +4,95 @@ import os
 import json
 import openai
 import random
-from openai import OpenAI
+import logging
+from openai import OpenAI, AzureOpenAI
+import time
 # prevent accidential activation of API key
 KEY_ACTIVATED = True
-
+global num_calls_api_key
+num_calls_api_key = 0
 def get_api_key(key_file=None):
     if key_file is None:
-        key_file = "openai_api_key.txt"
+        key_file = "api_keys/openai_api_key.txt"
     if not KEY_ACTIVATED:
         print("WARNING: API key not ACTIVATED. Please activate it in the code.")
         return " "
     with open(key_file, "r") as f:
         api_keys = [line.strip() for line in f.readlines()]
+        api_keys = [key for key in api_keys if key.strip() and not key.startswith("#")]
     if len(api_keys) == 0:
         print(f"WARNING: No API key found. Please add one in the file: {key_file}.")
         return " "
-    api_key = random.choice(api_keys)
+    # api_key = random.choice(api_keys)
+    index = num_calls_api_key % len(api_keys)
+    api_key = api_keys[index]
+    num_calls_api_key += 1
     return api_key
 
-def get_client():
-    if random.random() <= 1: # always use the chatweb API key. The machine cannot connect to the public API.
-        return OpenAI(api_key=get_api_key("chatweb_api_key.txt"), base_url="https://api.chatweb.plus/v1")
+def get_client(model=""):
+    if '4' in model and 'vision' in model:
+        return AzureOpenAI(api_key=get_api_key("api_keys/gpt_4_vision_pjm.txt"),
+                    api_version="2024-02-15-preview",
+                    base_url="https://gpt-4-vision-pjm.openai.azure.com/openai/deployments/gpt-4-vision-preview")
+    if '0125' in model:
+        return AzureOpenAI(api_key=get_api_key("api_keys/gpt_35_turbo_0125_pjm.txt"),
+                    api_version="2024-02-15-preview",
+                    base_url="https://gpt-35-turbo-0125-pjm.openai.azure.com/openai/deployments/gpt-35-turbo-1106")
+    # if random.random() <= 1: # always use the chatweb API key. The machine cannot connect to the public API.
+    #     return OpenAI(api_key=get_api_key("api_keys/chatweb_api_key.txt"), base_url="https://api.chatweb.plus/v1")
     return OpenAI(api_key=get_api_key())
 
-def get_response(messages, model="gpt-3.5-turbo", max_tokens=1000):
-    client = get_client()
-    response = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        max_tokens=max_tokens
-    )
-    return response.choices[0].message.content.strip()   
-        
+def get_full_response(messages, model="gpt-3.5-turbo", max_tokens=1000, max_tries=3, report_token_usage=False, json_mode=False):
+    """
+        Get a text response from the OpenAI API. Returns None if max_tries is reached.
+        Returns:
+            response (str): The text response.
+            prompt_tokens (optional, int): The number of tokens used in the prompt.
+            completion_tokens (optional, int): The number of tokens used in the completion.
+    """
+    client = get_client(model)
+    try:
+        if json_mode:
+            response = client.chat.completions.create(
+                model=model,
+                response_format={"type": "json_object"},
+                messages=messages,
+                max_tokens=max_tokens
+            )
+        else:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens
+            )
+        if response is None:
+            raise Exception("No response returned.")
+    except Exception as e:
+        if isinstance(e, openai.BadRequestError):
+            logging.error(f"Error: {e.message}")
+            return None, 0, 0 if report_token_usage else None
+        print(f"Error: {e}")
+        if max_tries > 0:
+            time.sleep(10)
+            return get_full_response(messages, model=model, max_tokens=max_tokens, max_tries=max_tries-1, report_token_usage=report_token_usage, json_mode=json_mode)
+        else:
+            return None, 0, 0 if report_token_usage else None
+    if report_token_usage:
+        prompt_tokens = response.usage.prompt_tokens
+        completion_tokens = response.usage.completion_tokens
+        return response, prompt_tokens, completion_tokens
+    return response
 
-def mimic_chat_budget(user_content_groups, system_prompt=None, max_additional_attempts=0, num_turns_expensive=1):
+def step_token_length(prompt_length, step, max_steps, max_tokens):
+    # to reduce the "max tokens" usage, we gradually increase the token length
+    return max_tokens
+    # future_length = max_tokens - prompt_length
+    # if future_length <= 0:
+    #     return 0
+    # future_steps = max_steps - step
+    # return prompt_length + int(future_length / future_steps)
+
+def mimic_chat_budget(user_content_groups, system_prompt=None, max_additional_attempts=0, num_turns_expensive=1, report_token_usage=False, max_token_length=1000, json_mode=False):
     """
         budget version of mimic_chat(). The first round of conversation is done by GPT-4 model, and the remaining rounds are done by GPT-3.5-turbo model.
         NOTE: need to convert into content groups first using get_content_groups_from_source_groups()
@@ -47,16 +102,20 @@ def mimic_chat_budget(user_content_groups, system_prompt=None, max_additional_at
             system_prompt (str): A prompt for the system to keep in mind.
             max_additional_attempts (int): The maximum number of additional attempts to make if the model responds with "Sorry, I don't understand."
             num_turns_expensive (int): The number of rounds of 'expensive' conversation to conduct.
+            report_token_usage (bool): Whether to report the total number of tokens used in the entire conversation.
         Returns:
             messages (list): The mimic chat with multi-round conversation.
+            token_usage (optional) (dict): A dictionary containing the total number of tokens used in the entire conversation.
     """
-    client = get_client()
     messages = []
+    token_usage = {"prompt_tokens": 0, "completion_tokens": 0}
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
+    prompt_tokens, completion_tokens = 0, 0
     for i, content_group in enumerate(user_content_groups):
         if i < num_turns_expensive:
             model = "gpt-4-vision-preview"
+            # model = "gpt-4-turbo-2024-04-09"
         else:
             model = "gpt-3.5-turbo-0125"
             # remove the image urls from the previous rounds
@@ -68,19 +127,16 @@ def mimic_chat_budget(user_content_groups, system_prompt=None, max_additional_at
                     if content_component["type"] == "image_url":
                         message["content"].remove(content_component)
         messages.append({"role": "user", "content": content_group})
-        try:
-            full_response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_tokens=2000,
-            )
-        except Exception as e:
-            print(f"Error: {e}")
-            if max_additional_attempts > 0:
-                return mimic_chat_budget(user_content_groups, system_prompt=system_prompt, max_additional_attempts=max_additional_attempts-1)
-            else:
-                return messages
-        
+        # prompt tokens and completion tokens are counted separately for each round of conversation.
+        steped_length = step_token_length(prompt_tokens + completion_tokens, i, len(user_content_groups), max_token_length)
+        full_response, prompt_tokens, completion_tokens = get_full_response(messages, model=model, max_tokens=steped_length, max_tries=3, report_token_usage=True, json_mode=json_mode)
+        token_usage["prompt_tokens"] += prompt_tokens
+        token_usage["completion_tokens"] += completion_tokens
+        if full_response is None:
+            print("WARNING: No response returned. The result may not be accurate.")
+            if report_token_usage:
+                return messages, token_usage
+            return messages
         response = full_response.choices[0].message.content.strip()            
         messages.append({"role": "assistant", "content": response})
         # print(response)
@@ -91,6 +147,8 @@ def mimic_chat_budget(user_content_groups, system_prompt=None, max_additional_at
             else:
                 # print("WARNING: Maximum additional attempts reached. The result may not be accurate.")
                 pass
+    if report_token_usage:
+        return messages, token_usage
     return messages
  
 
@@ -106,24 +164,16 @@ def mimic_chat(user_content_groups, model=None, system_prompt=None):
         Returns:
             messages (list): The mimic chat with multi-round conversation.
     """
-    client = get_client()
     model = model if model else "gpt-3.5-turbo"
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     for content_group in user_content_groups:
         messages.append({"role": "user", "content": content_group})
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_tokens=1000,
-            )
-        except Exception as e:
-            print(f"Error: {e}")
-            exit()
+        response = get_full_response(messages, model=model, max_tokens=1000)
         response = response.choices[0].message.content.strip()
         messages.append({"role": "assistant", "content": response})
+    
     return messages
 
     
@@ -256,26 +306,29 @@ def num_tokens_from_string(string: str, encoding_name: str = "cl100k_base") -> i
     return num_tokens
 
 if __name__ == "__main__":
-    api_key = get_api_key()
-    image_path = "02300_annotated.jpg"
-    user_message1 = "I will provide you with a photo of an area inside a room and highlight some key objects in it with 3D boxes. Please describe the main furniture and decorations in the area, along with their placement, in approximately 150 words. When mentioning objects, use angle brackets to enclose the nouns, such as <01 piano>."
-    # description = picture_description_by_LLM([image_path], user_message1, save_json_path="testing_description.json")
-    user_message2 = "Considering these layouts, can you describe the area's intended use and functionality, as well as provide insights into its level of congestion, organization, lighting, and the presence of any storytelling elements?"
-    source_groups = [
-        [user_message1, image_path],
-        [user_message2]
-    ]
-    content_groups = get_content_groups_from_source_groups(source_groups)
-    system_prompt = "You are an expert interior designer, who is very sensitive at room furnitures and their placements."
-    conversation = mimic_chat(content_groups, model="gpt-4-vision-preview", system_prompt=system_prompt)
-    # conversation = mimic_chat(user_content_groups)
-    for message in conversation:
-        # skip the image urls
-        if message["role"] == "assistant":
-            continue
-        else:
-            for content_component in message["content"]:
-                if content_component["type"] == "image_url":
-                    del content_component["image_url"]
-    print(conversation)
+    text = "Hello, who are you?"
+    messages = get_messages_from_single_content(text)
+    get_full_response(messages, max_tokens=1000)
+    # api_key = get_api_key()
+    # image_path = "02300_annotated.jpg"
+    # user_message1 = "I will provide you with a photo of an area inside a room and highlight some key objects in it with 3D boxes. Please describe the main furniture and decorations in the area, along with their placement, in approximately 150 words. When mentioning objects, use angle brackets to enclose the nouns, such as <01 piano>."
+    # # description = picture_description_by_LLM([image_path], user_message1, save_json_path="testing_description.json")
+    # user_message2 = "Considering these layouts, can you describe the area's intended use and functionality, as well as provide insights into its level of congestion, organization, lighting, and the presence of any storytelling elements?"
+    # source_groups = [
+    #     [user_message1, image_path],
+    #     [user_message2]
+    # ]
+    # content_groups = get_content_groups_from_source_groups(source_groups)
+    # system_prompt = "You are an expert interior designer, who is very sensitive at room furnitures and their placements."
+    # conversation = mimic_chat(content_groups, model="gpt-4-vision-preview", system_prompt=system_prompt)
+    # # conversation = mimic_chat(user_content_groups)
+    # for message in conversation:
+    #     # skip the image urls
+    #     if message["role"] == "assistant":
+    #         continue
+    #     else:
+    #         for content_component in message["content"]:
+    #             if content_component["type"] == "image_url":
+    #                 del content_component["image_url"]
+    # print(conversation)
 

@@ -1,7 +1,7 @@
 import os
 import json
 from tqdm import tqdm
-from utils.openai_api import mimic_chat, mimic_chat_budget, get_content_groups_from_source_groups, num_tokens_from_string, get_response
+from utils.openai_api import mimic_chat, mimic_chat_budget, get_content_groups_from_source_groups, num_tokens_from_string, get_full_response
 from utils.utils_read import load_json
 from functools import wraps
 
@@ -146,7 +146,7 @@ def summarize(text):
         {"role": "user", "content": user_message2}
     ]
 
-    return get_response(messages, model="gpt-3.5-turbo-0125")
+    return get_full_response(messages, model="gpt-3.5-turbo-0125")
 
 def check_annotation_validity_path(json_dir):
     valid_dict = {}
