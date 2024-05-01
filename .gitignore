@@ -8,10 +8,12 @@ data_zip/
 region_annos/
 selected_scenes/
 corpora_to_move/
+corpora_to_move
+object_functions_in_region/
 *.zip
 
 # API keys
-*api_key*.txt
+api_keys/*.txt
 
 # Python cache files
 **.pyc

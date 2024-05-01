@@ -57,6 +57,7 @@ def translate_object_type(object_name:str):
     str_to_check = re.sub(r'[\d<>_]', '', object_name.lower())
     return OBJECTS.get(str_to_check, object_name)
 
+
 region_view_dir_name = 'region_views'
 def _get_regions(scene_id):
     regions = os.listdir(f'data/{scene_id}/{region_view_dir_name}')
@@ -69,7 +70,6 @@ SCENE_LIST = [name for name in SCENE_LIST if name.startswith('scene') or name.st
 SCENE_LIST = [name for name in SCENE_LIST if os.path.isdir(os.path.join('data',name, region_view_dir_name))]
 SCENE_LIST = [name for name in SCENE_LIST if len(_get_regions(name))>0]
 SCENE_LIST.sort()
-
 
 
 
@@ -89,7 +89,7 @@ def read_str_list_from_json(file_name,encoding='gbk'):
 
 with gr.Blocks() as demo:
     ###############################################################################################3
-    ## functions definition here    
+    ## functions definition here
 
     def check_user_name_validity(user_name):
         if len(user_name) == 0 or ' ' in user_name or not user_name[0].isalpha():
@@ -120,8 +120,9 @@ with gr.Blocks() as demo:
             large_class_frame = gr.Dataframe(visible=False)
             wall_text = gr.Textbox(visible=False)
             floor_text = gr.Textbox(visible=False)
-
-            return [],loc_relation_frame,logic_relation_frame,large_class_frame,check_id_choice,wall_text,floor_text,None,None,None,None,None,[{}]*6,[{}]*6,'请选择区域',None,None,None,None,None
+            object_text1 = gr.Textbox(visible=False)
+            object_text2 = gr.Textbox(visible=False)
+            return [],loc_relation_frame,logic_relation_frame,large_class_frame,check_id_choice,wall_text,floor_text,None,None,None,None,None,[{}]*6,[{}]*6,'请选择区域',None,None,None,None,None,object_text1,object_text2,None
 
         show_image_path =[f'data/{scene_id}/{region_view_dir_name}/{region_id}/'+img_file for img_file in os.listdir(f'data/{scene_id}/{region_view_dir_name}/{region_id}') if img_file[-4:]=='.jpg']
         if os.path.exists(f'data/{scene_id}/{region_view_dir_name}/{region_id}/struction_trans_{user_name}.npy'):
@@ -150,7 +151,7 @@ with gr.Blocks() as demo:
         loc_relation_list.append(['','','','',''])
 
         loc_relation_frame = gr.Dataframe(
-            label='物体间位置关系表格',
+            label='物体间位置关系表格，我们不需要遍历所有的位置关系，但是明显的位置关系必须都覆盖到',
             headers=["物体A", "翻译A", "物体B", "翻译B", "物体A相对于物体B位置关系"],
             datatype=["str", "str", "str", "str", "str"],
             row_count=len(loc_relation_dict.keys()),
@@ -164,7 +165,7 @@ with gr.Blocks() as demo:
             logic_relation_list.append([object_tuple[0], translate_object_type(object_tuple[0]), object_tuple[1], translate_object_type(object_tuple[1]), logic_relation_dict[object_tuple]])
         logic_relation_list.append(['','','','',''])
         logic_relation_frame = gr.Dataframe(
-            label='物体间逻辑关系表格',
+            label='物体间逻辑关系表格，物体在这个区域的日常生活中发挥其功能时，会不可避免地与另一个物体产生关联',
             headers=["物体A", "翻译A", "物体B", "翻译B", "物体A相对于物体B逻辑关系"],
             datatype=["str", "str", "str", "str", "str"],
             row_count=len(logic_relation_dict.keys()),
@@ -184,7 +185,7 @@ with gr.Blocks() as demo:
         large_class_list.append(['',''])
 
         large_class_frame = gr.Dataframe(
-            label='物体大类/功能组表格',
+            label='物体大类/功能组表格，在区域内可能有一些物体同属于一个更大的类别，或者组合起来发挥特定的功能',
             headers=["物体列表", "描述"],
             datatype=["str", "str"],
             row_count=cnt,
@@ -206,13 +207,24 @@ with gr.Blocks() as demo:
 
         object_list = object_function_dict.keys()
         region_info_text = f'选取的区域为{REGIONS_tran[region_id.split("_")[1]]}，总共有{len(show_image_path)}张展示图片，包含的物体个数为{len(object_list)}，分别是：'
+        text_ = ''
         for object_ in object_list:
             region_info_text+=object_+translate_object_type(object_)+'，'
-        region_info_text=region_info_text[:-1]+'。'
+            text_+=object_+translate_object_type(object_)+'，'
+        region_info_text=region_info_text[:-1]+'。物体的位置关系有：'
+        for k in RELATIONS_tran.keys():
+            region_info_text+=(k+'，')
+        region_info_text = region_info_text[:-1] + '。'
+
+        object_text1 = gr.Textbox(text_[:-1],visible=True,interactive=True)
+        object_text2 = gr.Textbox(text_[:-1],visible=True,interactive=True)
+
+
         check_id_choice = gr.Dropdown(object_list,visible=True,interactive=True)
+        render_image_path=f'data/{scene_id}/{region_view_dir_name}/{region_id}.png'
 
         return show_image_path,loc_relation_frame,logic_relation_frame,large_class_frame,check_id_choice,wall_text,floor_text,None,show_image_path[0],show_image_path[0],show_image_path[0],show_image_path[0],\
-               [{}]*6,region_info,region_info_text,None,None,None,None,None
+               [{}]*6,region_info,region_info_text,None,None,None,None,None,object_text1,object_text2,gr.update(value=render_image_path)
 
     def object_function_process(scene_id,region_id,user_name):
         '''
@@ -233,7 +245,7 @@ with gr.Blocks() as demo:
         object_function_dict = region_info[3]
         object_function_text = []
         for object_name in object_function_dict.keys():
-            object_function_text.append(gr.Textbox(label=f'{object_name}在区域的角色',value=object_function_dict[object_name],visible=True,interactive=True))
+            object_function_text.append(gr.Textbox(label=f'{object_name}在区域的角色，请思考：位置的特殊性（我们注意到这个物体的位置原因，和这个物体的位置如何使得它与同类不同），功能的特殊性（对于区域的贡献/作用）',value=object_function_dict[object_name],visible=True,interactive=True))
         for _ in range(MAX_OBJECT_NUM-len(object_function_dict.keys())):
             object_function_text.append(gr.Textbox(visible=False))
         return object_function_text
@@ -273,22 +285,22 @@ with gr.Blocks() as demo:
 
 
             Space_Q1 = gr.Textbox(label='有关空间的问题1', visible=False)
-            Space_A1 = gr.Textbox(label='有关空间的回答1', visible=False)
+            Space_A1 = gr.Textbox(label='回答1', visible=False)
 
             Space_Q2 = gr.Textbox(label='有关空间的问题2', visible=False)
-            Space_A2 = gr.Textbox(label='有关空间的回答2', visible=False)
+            Space_A2 = gr.Textbox(label='回答2', visible=False)
 
             Explain_Q1 = gr.Textbox(label='有关解释的问题1', visible=False)
-            Explain_A1 = gr.Textbox(label='有关解释的回答1', visible=False)
+            Explain_A1 = gr.Textbox(label='回答1', visible=False)
 
             Explain_Q2 = gr.Textbox(label='有关解释的问题2', visible=False)
-            Explain_A2 = gr.Textbox(label='有关解释的回答2', visible=False)
+            Explain_A2 = gr.Textbox(label='回答2', visible=False)
 
             Situate_Q1 = gr.Textbox(label='有关情境的问题1', visible=False)
-            Situate_A1 = gr.Textbox(label='有关情境的回答1', visible=False)
+            Situate_A1 = gr.Textbox(label='回答1', visible=False)
 
             Situate_Q2 = gr.Textbox(label='有关情境的问题2', visible=False)
-            Situate_A2 = gr.Textbox(label='有关情境的回答2', visible=False)
+            Situate_A2 = gr.Textbox(label='回答2', visible=False)
 
 
             return Space_Q1,Space_A1,Space_Q2,Space_A2,Explain_Q1,Explain_A1,Explain_Q2,Explain_A2,Situate_Q1,Situate_A1,Situate_Q2,Situate_A2
@@ -299,44 +311,44 @@ with gr.Blocks() as demo:
                                   allow_pickle=True)
 
             Space_Q1 = gr.Textbox(label='有关空间的问题1',value=region_info[-1]['Space_Q1'], visible=True, interactive=True)
-            Space_A1 = gr.Textbox(label='有关空间的回答1',value=region_info[-1]['Space_A1'], visible=True, interactive=True)
+            Space_A1 = gr.Textbox(label='回答1',value=region_info[-1]['Space_A1'], visible=True, interactive=True)
 
             Space_Q2 = gr.Textbox(label='有关空间的问题2',value=region_info[-1]['Space_Q2'], visible=True, interactive=True)
-            Space_A2 = gr.Textbox(label='有关空间的回答2',value=region_info[-1]['Space_A2'], visible=True, interactive=True)
+            Space_A2 = gr.Textbox(label='回答2',value=region_info[-1]['Space_A2'], visible=True, interactive=True)
 
             Explain_Q1 = gr.Textbox(label='有关解释的问题1',value=region_info[-1]['Explain_Q1'], visible=True, interactive=True)
-            Explain_A1 = gr.Textbox(label='有关解释的回答1',value=region_info[-1]['Explain_A1'], visible=True, interactive=True)
+            Explain_A1 = gr.Textbox(label='回答1',value=region_info[-1]['Explain_A1'], visible=True, interactive=True)
 
             Explain_Q2 = gr.Textbox(label='有关解释的问题2',value=region_info[-1]['Explain_Q2'], visible=True, interactive=True)
-            Explain_A2 = gr.Textbox(label='有关解释的回答2',value=region_info[-1]['Explain_A2'], visible=True, interactive=True)
+            Explain_A2 = gr.Textbox(label='回答2',value=region_info[-1]['Explain_A2'], visible=True, interactive=True)
 
             Situate_Q1 = gr.Textbox(label='有关情境的问题1',value=region_info[-1]['Situate_Q1'], visible=True, interactive=True)
-            Situate_A1 = gr.Textbox(label='有关情境的回答1',value=region_info[-1]['Situate_A1'], visible=True, interactive=True)
+            Situate_A1 = gr.Textbox(label='回答1',value=region_info[-1]['Situate_A1'], visible=True, interactive=True)
 
             Situate_Q2 = gr.Textbox(label='有关情境的问题2',value=region_info[-1]['Situate_Q2'], visible=True, interactive=True)
-            Situate_A2 = gr.Textbox(label='有关情境的回答2',value=region_info[-1]['Situate_A2'], visible=True, interactive=True)
+            Situate_A2 = gr.Textbox(label='回答2',value=region_info[-1]['Situate_A2'], visible=True, interactive=True)
 
             return Space_Q1, Space_A1, Space_Q2, Space_A2, Explain_Q1, Explain_A1, Explain_Q2, Explain_A2, Situate_Q1, Situate_A1, Situate_Q2, Situate_A2
 
 
         else:
-            Space_Q1 = gr.Textbox(label='有关空间的问题1', visible=True,interactive=True)
-            Space_A1 = gr.Textbox(label='有关空间的回答1', visible=True,interactive=True)
+            Space_Q1 = gr.Textbox('',label='有关空间的问题1', visible=True,interactive=True)
+            Space_A1 = gr.Textbox('',label='回答1', visible=True,interactive=True)
 
-            Space_Q2 = gr.Textbox(label='有关空间的问题2', visible=True,interactive=True)
-            Space_A2 = gr.Textbox(label='有关空间的回答2', visible=True,interactive=True)
+            Space_Q2 = gr.Textbox('',label='有关空间的问题2', visible=True,interactive=True)
+            Space_A2 = gr.Textbox('',label='回答2', visible=True,interactive=True)
 
-            Explain_Q1 = gr.Textbox(label='有关解释的问题1', visible=True,interactive=True)
-            Explain_A1 = gr.Textbox(label='有关解释的回答1', visible=True,interactive=True)
+            Explain_Q1 = gr.Textbox('',label='有关解释的问题1', visible=True,interactive=True)
+            Explain_A1 = gr.Textbox('',label='回答1', visible=True,interactive=True)
 
-            Explain_Q2 = gr.Textbox(label='有关解释的问题2', visible=True,interactive=True)
-            Explain_A2 = gr.Textbox(label='有关解释的回答2', visible=True,interactive=True)
+            Explain_Q2 = gr.Textbox('',label='有关解释的问题2', visible=True,interactive=True)
+            Explain_A2 = gr.Textbox('',label='回答2', visible=True,interactive=True)
 
-            Situate_Q1 = gr.Textbox(label='有关情境的问题1', visible=True,interactive=True)
-            Situate_A1 = gr.Textbox(label='有关情境的回答1', visible=True,interactive=True)
+            Situate_Q1 = gr.Textbox('',label='有关情境的问题1', visible=True,interactive=True)
+            Situate_A1 = gr.Textbox('',label='回答1', visible=True,interactive=True)
 
-            Situate_Q2 = gr.Textbox(label='有关情境的问题2', visible=True,interactive=True)
-            Situate_A2 = gr.Textbox(label='有关情境的回答2', visible=True,interactive=True)
+            Situate_Q2 = gr.Textbox('',label='有关情境的问题2', visible=True,interactive=True)
+            Situate_A2 = gr.Textbox('',label='回答2', visible=True,interactive=True)
 
             return Space_Q1,Space_A1,Space_Q2,Space_A2,Explain_Q1,Explain_A1,Explain_Q2,Explain_A2,Situate_Q1,Situate_A1,Situate_Q2,Situate_A2
 
@@ -421,27 +433,20 @@ with gr.Blocks() as demo:
 
         list_success = True
 
-        wall_list_str = '['
-        for s in wall_text:
-            if s == '<':
-                wall_list_str+="'<"
-            elif s == '>':
-                wall_list_str+=">'"
-            else:
-                wall_list_str+=s
-        wall_list_str+=']'
-        floor_list_str = '['
-        for s in floor_text:
-            if s == '<':
-                floor_list_str += "'<"
-            elif s == '>':
-                floor_list_str += ">'"
-            else:
-                floor_list_str += s
-        floor_list_str += ']'
+        def get_arrow_item(s):
+            _index = 0
+            output_list = []
+            while '<' in s[_index:] and '>' in s[_index:]:
+                a = s[_index:].index('<')
+                b = s[_index:].index('>')
+                output_list.append(s[_index + a:_index + b + 1])
+                _index = _index + b + 1
+            return output_list
+
+
         try:
-            wall_list = eval(wall_list_str)
-            floor_list = eval(floor_list_str)
+            wall_list = get_arrow_item(wall_text)
+            floor_list = get_arrow_item(floor_text)
         except:
             gr.Info('输入文本框的格式错误！！')
 
@@ -505,7 +510,7 @@ with gr.Blocks() as demo:
         loc_relation_list.append(['', '', '', '', ''])
 
         loc_relation_frame = gr.Dataframe(
-            label='物体间位置关系表格',
+            label='物体间位置关系表格，我们不需要遍历所有的位置关系，但是明显的位置关系必须都覆盖到',
             headers=["物体A", "翻译A", "物体B", "翻译B", "物体A相对于物体B位置关系"],
             datatype=["str", "str", "str", "str", "str"],
             row_count=len(loc_relation_dict.keys()),
@@ -520,7 +525,7 @@ with gr.Blocks() as demo:
                                         translate_object_type(object_tuple[1]), logic_relation_dict[object_tuple]])
         loc_relation_list.append(['', '', '', '', ''])
         logic_relation_frame = gr.Dataframe(
-            label='物体间逻辑关系表格',
+            label='物体间逻辑关系表格，物体在这个区域的日常生活中发挥其功能时，会不可避免地与另一个物体产生关联',
             headers=["物体A", "翻译A", "物体B", "翻译B", "物体A相对于物体B逻辑关系"],
             datatype=["str", "str", "str", "str", "str"],
             row_count=len(logic_relation_dict.keys()),
@@ -556,7 +561,7 @@ with gr.Blocks() as demo:
         object_function_text = []
         for object_name in object_function_dict.keys():
             object_function_text.append(
-                gr.Textbox(label=f'{object_name}的作用', value=object_function_dict[object_name], visible=True,
+                gr.Textbox(label=f'{object_name}在区域的角色，请思考：位置的特殊性（我们注意到这个物体的位置原因，和这个物体的位置如何使得它与同类不同），功能的特殊性（对于区域的贡献/作用）', value=object_function_dict[object_name], visible=True,
                            interactive=True))
         for _ in range(MAX_OBJECT_NUM - len(object_function_dict.keys())):
             object_function_text.append(gr.Textbox(visible=False))
@@ -606,7 +611,7 @@ with gr.Blocks() as demo:
             large_class_list.append([object_text[:-1], large_class_dict[object_tuple]])
         large_class_list.append(['',''])
         large_class_frame = gr.Dataframe(
-            label='物体大类/功能组表格',
+            label='物体大类/功能组表格，在区域内可能有一些物体同属于一个更大的类别，或者组合起来发挥特定的功能',
             headers=["物体列表", "描述"],
             datatype=["str", "str"],
             row_count=len(large_class_dict.keys()),
@@ -650,16 +655,21 @@ with gr.Blocks() as demo:
         save_path = f'data/{scene_id}/{region_view_dir_name}/{region_id}/struction_trans_{user_name}.npy'
         np.save(save_path, region_info)
         gr.Info(f'标注已经保存到{save_path}!')
+        save_path2 = f'data/{scene_id}/{region_view_dir_name}/{region_id}/struction_trans_{user_name}.json'
+        with open(save_path2, 'w', encoding='utf-8') as f:
+            json.dump(region_info, f)
+        # gr.Info(f'标注已经保存到{save_path2}!')
         return scene_id,None
 
     ###############################################################################################3
-    ## UI definition here    
+    ## UI definition here
 
     show_image_index = gr.State(0)
     show_image_path = gr.State([])
     region_info = gr.State([{},{},{},{},{},{}])
     Initial_region_info = gr.State([])
     user_name_locked = gr.State(False)
+    store_swap_index = gr.State([])
 
     with gr.Row():
         user_name = gr.Textbox(label="用户名", value="", placeholder="在此输入用户名，首位必须为字母，不要带空格。")
@@ -669,8 +679,11 @@ with gr.Blocks() as demo:
 
     with gr.Row():
         scene_choice = gr.Dropdown(SCENE_LIST, label="需要修改的场景")
-        region_choice = gr.Dropdown(['测试区域'], label="需要修改的区域")
+        region_choice = gr.Dropdown(['测试区域'], label="需要修改的区域", allow_custom_value=True)
+
+    render_img = gr.Image(label='区域俯视图')
     region_info_text = gr.Textbox(label="区域信息",value="请选择区域")
+
     ###########################
     # object relation related
     ###########################
@@ -678,7 +691,10 @@ with gr.Blocks() as demo:
         show_image = gr.Image(label='区域场景展示')
         with gr.Column():
             loc_relation_frame = gr.DataFrame(visible=False)
+            swap_button = gr.Button('交换该行A与B')
+            delete_button = gr.Button('删除该行')
             logic_relation_frame = gr.DataFrame(visible=False)
+            delete_button2 = gr.Button('删除该行')
     with gr.Row():
         wall_text = gr.Textbox(visible=False)
         floor_text = gr.Textbox(visible=False)
@@ -700,6 +716,8 @@ with gr.Blocks() as demo:
     object_function_info = gr.Textbox(label='物体角色',interactive=False)
     object_function_gen_button = gr.Button("生成物体功能标注(每次更改完必点)")
     object_function_reset_button = gr.Button("重置物体功能标注")
+
+    object_text1 = gr.Textbox(visible=False)
 
     ###########################
     # object group (large class) related
@@ -726,32 +744,37 @@ with gr.Blocks() as demo:
     region_feature_reset_button = gr.Button("重置标注")
 
 
+    object_text2 = gr.Textbox(visible=False)
+
+
     # 空间QA
     with gr.Row():
         with gr.Column():
             Space_Q1 = gr.Textbox(label='有关空间的问题1',visible=False)
-            Space_A1 = gr.Textbox(label='有关空间的回答1',visible=False)
+            Space_A1 = gr.Textbox(label='回答1',visible=False)
         with gr.Column():
             Space_Q2 = gr.Textbox(label='有关空间的问题2', visible=False)
-            Space_A2 = gr.Textbox(label='有关空间的回答2', visible=False)
+            Space_A2 = gr.Textbox(label='回答2', visible=False)
     # 解释QA
     with gr.Row():
         with gr.Column():
             Explain_Q1 = gr.Textbox(label='有关解释的问题1', visible=False)
-            Explain_A1 = gr.Textbox(label='有关解释的回答1', visible=False)
+            Explain_A1 = gr.Textbox(label='回答1', visible=False)
         with gr.Column():
             Explain_Q2 = gr.Textbox(label='有关解释的问题2', visible=False)
-            Explain_A2 = gr.Textbox(label='有关解释的回答2', visible=False)
+            Explain_A2 = gr.Textbox(label='回答2', visible=False)
     # 情境QA
     with gr.Row():
         with gr.Column():
             Situate_Q1 = gr.Textbox(label='有关情境的问题1', visible=False)
-            Situate_A1 = gr.Textbox(label='有关情境的回答1', visible=False)
+            Situate_A1 = gr.Textbox(label='回答1', visible=False)
         with gr.Column():
             Situate_Q2 = gr.Textbox(label='有关情境的问题2', visible=False)
-            Situate_A2 = gr.Textbox(label='有关情境的回答2', visible=False)
+            Situate_A2 = gr.Textbox(label='回答2', visible=False)
     Q_and_A_info = gr.Textbox(interactive=False)
     Q_and_A_gen_button = gr.Button("生成问题回答标注(每次更改完必点)")
+
+
 
 
     Save_button = gr.Button("保存标注",visible=True)
@@ -759,7 +782,7 @@ with gr.Blocks() as demo:
     check_id_image = gr.Image()
 
     ###############################################################################################3
-    ## function connection here    
+    ## function connection here
 
     confirm_user_name_btn.click(lock_user_name, inputs=[user_name, user_name_locked],
                                 outputs=[user_name, user_name_locked])
@@ -767,7 +790,7 @@ with gr.Blocks() as demo:
     scene_choice.change(fn=get_region_options, inputs=[scene_choice], outputs=[region_choice])
     region_choice.change(fn=data_process, inputs=[scene_choice,region_choice,user_name],outputs=[show_image_path,loc_relation_frame,logic_relation_frame,large_class_frame,check_id_choice,wall_text,floor_text,check_id_image,
                                                                                        show_image,show_image_copy1,show_image_copy2,show_image_copy3,region_info,Initial_region_info,region_info_text,
-                                                                                       loc_relation_info,object_function_info,large_class_info,region_feature_info,Q_and_A_info])
+                                                                                       loc_relation_info,object_function_info,large_class_info,region_feature_info,Q_and_A_info,object_text1,object_text2,render_img])
     region_choice.change(fn=object_function_process, inputs=[scene_choice,region_choice,user_name], outputs=object_function_text)
     region_choice.change(fn=region_feature_process, inputs=[scene_choice, region_choice,user_name], outputs=region_feature_text)
     region_choice.change(fn=Q_A_process,inputs=[scene_choice, region_choice,user_name], outputs=[Space_Q1,Space_A1,Space_Q2,Space_A2,Explain_Q1,Explain_A1,Explain_Q2,Explain_A2,Situate_Q1,Situate_A1,Situate_Q2,Situate_A2])
@@ -796,8 +819,42 @@ with gr.Blocks() as demo:
 
 
 
+    def AB_pre_swap(evt: gr.SelectData):
+
+        return evt.index
+    def AB_do_swap(loc_relation_frame,store_swap_index):
+
+        tmp = loc_relation_frame.loc[store_swap_index[0],'物体B']
+        loc_relation_frame.loc[store_swap_index[0],'物体B'] = loc_relation_frame.loc[store_swap_index[0],'物体A']
+        loc_relation_frame.loc[store_swap_index[0],'物体A'] = tmp
+        tmp = loc_relation_frame.loc[store_swap_index[0], '翻译B']
+        loc_relation_frame.loc[store_swap_index[0], '翻译B'] = loc_relation_frame.loc[store_swap_index[0], '翻译A']
+        loc_relation_frame.loc[store_swap_index[0], '翻译A'] = tmp
+        return loc_relation_frame
+
+    def AB_delete(loc_relation_frame,store_swap_index):
+        loc_relation_frame.loc[store_swap_index[0],'物体A'] = ''
+        loc_relation_frame.loc[store_swap_index[0],'物体B'] = ''
+        loc_relation_frame.loc[store_swap_index[0], '翻译A'] = ''
+        loc_relation_frame.loc[store_swap_index[0], '翻译B']= ''
+        loc_relation_frame.loc[store_swap_index[0],'物体A相对于物体B位置关系'] = ''
+        return loc_relation_frame
+    def AB_delete2(loc_relation_frame,store_swap_index):
+        loc_relation_frame.loc[store_swap_index[0], '物体A'] = ''
+        loc_relation_frame.loc[store_swap_index[0], '物体B'] = ''
+        loc_relation_frame.loc[store_swap_index[0], '翻译A'] = ''
+        loc_relation_frame.loc[store_swap_index[0], '翻译B'] = ''
+        loc_relation_frame.loc[store_swap_index[0], '物体A相对于物体B逻辑关系'] = ''
+        return loc_relation_frame
 
     check_id_choice.select(fn=image_match, inputs=[scene_choice,region_choice,check_id_choice],outputs=[check_id_image])
+
+    loc_relation_frame.select(fn=AB_pre_swap,inputs=[],outputs=[store_swap_index])
+    logic_relation_frame.select(fn=AB_pre_swap, inputs=[], outputs=[store_swap_index])
+    swap_button.click(fn=AB_do_swap,inputs=[loc_relation_frame,store_swap_index],outputs=[loc_relation_frame])
+    delete_button.click(fn=AB_delete,inputs=[loc_relation_frame,store_swap_index],outputs=[loc_relation_frame])
+    delete_button2.click(fn=AB_delete2, inputs=[logic_relation_frame, store_swap_index], outputs=[logic_relation_frame])
+
 
     Save_button.click(fn=annotation_save, inputs=[scene_choice,region_choice,region_info,user_name,loc_relation_info,object_function_info,large_class_info,region_feature_info],outputs=[scene_choice,region_choice])
 
