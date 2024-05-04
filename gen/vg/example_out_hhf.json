@@ -1,0 +1,98 @@
+{
+    "scene0000_00": [
+        {
+            "scene_id": "scene0000_00",
+            "response_step_1": "In the room, there is [a window 1] on the wall. [The white table 3] is located near [the window 1]. Adjacent to it, [the counter 4] displays wooden cabinets. [The light brown wooden cabinet 44] stands close by. [A blue dish rack 52] rests on [the counter 4]. [The tall, narrow wooden case 67] is positioned at a distance. A [clear glass cup 154] sits on [the table 3].",
+            "response_step_2": "Near the window in the room, [the white table 3] is located next to [a window 1] that is closer to [the counter 4]. Adjacent to the table, [the counter 4] displays wooden cabinets, with [the light brown wooden cabinet 44] standing close by. A [blue dish rack 52] rests on the counter, while [a clear glass cup 154] sits on the table. Further away, [the tall, narrow wooden case 67] is positioned.",
+            "sentence": "Near the window in the room, the white table is located next to a window that is closer to the counter. Adjacent to the table, the counter displays wooden cabinets, with the light brown wooden cabinet standing close by. A blue dish rack rests on the counter, while a clear glass cup sits on the table. Further away, the tall, narrow wooden case is positioned.",
+            "positive": {
+                "3": [
+                    [
+                        29,
+                        44
+                    ]
+                ],
+                "1": [
+                    [
+                        64,
+                        72
+                    ]
+                ],
+                "4": [
+                    [
+                        91,
+                        102
+                    ],
+                    [
+                        127,
+                        138
+                    ]
+                ],
+                "44": [
+                    [
+                        170,
+                        200
+                    ]
+                ],
+                "52": [
+                    [
+                        222,
+                        236
+                    ]
+                ],
+                "154": [
+                    [
+                        265,
+                        282
+                    ]
+                ],
+                "67": [
+                    [
+                        316,
+                        344
+                    ]
+                ]
+            },
+            "refined_caption": "Near the window in the room, [the white table 3] is located next to [a window 1] that is closer to [the counter 4]. Adjacent to the table, [the counter 4] displays wooden cabinets, with [the light brown wooden cabinet 44] standing close by. A [blue dish rack 52] rests on the counter, while [a clear glass cup 154] sits on the table. Further away, [the tall, narrow wooden case 67] is positioned."
+        },
+        {
+            "scene_id": "scene0000_00",
+            "response_step_1": "In the bathroom, there is [a window 2] letting in natural light above [a cabinet 42]. Adjacent to the window, there is [a sink 11] with a wide basin. [A mirror 65] hangs on the wall above the sink. Nearby, [a shower 5] enclosed in glass with a tile floor is situated. On the countertop close to the sink, there is [a transparent cylindrical cup 147], and [a towel 168] is hanging from a metallic ring beside it.",
+            "response_step_2": "In the bathroom, [a window 2] above [a cabinet 42] lets in natural light. Adjacent to the window, [a sink 11] with a wide basin is positioned, and a mirror 65 hangs on the wall above it. Nearby, [a shower 5] enclosed in glass with a tile floor is located. On the countertop close to the sink, there is [a transparent cylindrical cup 147] below the mirror. A towel 168 is hanging from a metallic ring beside it. Additionally, the carpet 166 is in front of the sink.",
+            "sentence": "In the bathroom, a window above a cabinet lets in natural light. Adjacent to the window, a sink with a wide basin is positioned, and a mirror hangs on the wall above it. Nearby, a shower enclosed in glass with a tile floor is located. On the countertop close to the sink, there is a transparent cylindrical cup below the mirror. A towel is hanging from a metallic ring beside it. Additionally, the carpet is in front of the sink.",
+            "positive": {
+                "2": [
+                    [
+                        17,
+                        25
+                    ]
+                ],
+                "42": [
+                    [
+                        32,
+                        41
+                    ]
+                ],
+                "11": [
+                    [
+                        89,
+                        95
+                    ]
+                ],
+                "5": [
+                    [
+                        178,
+                        186
+                    ]
+                ],
+                "147": [
+                    [
+                        281,
+                        310
+                    ]
+                ]
+            },
+            "refined_caption": "In the bathroom, [a window 2] above [a cabinet 42] lets in natural light. Adjacent to the window, [a sink 11] with a wide basin is positioned, and a mirror hangs on the wall above it. Nearby, [a shower 5] enclosed in glass with a tile floor is located. On the countertop close to the sink, there is [a transparent cylindrical cup 147] below the mirror. A towel is hanging from a metallic ring beside it. Additionally, the carpet is in front of the sink."
+        }
+    ]
+}

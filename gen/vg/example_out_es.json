@@ -1,0 +1,23 @@
+{
+    "scan_id": "scannet/scene0072_01",
+    "target_id": 20,
+    "distractor_ids": [
+        8,
+        28,
+        29
+    ],
+    "text": "find the pillow that is on top of the shelf",
+    "target": "pillow",
+    "anchors": [
+        "shelf"
+    ],
+    "anchor_ids": [
+        22
+    ],
+    "tokens_positive": [
+        [
+            9,
+            15
+        ]
+    ]
+}
