@@ -112,7 +112,7 @@ def annotate_object_by_image(image_path, max_additional_attempts=0, with_highlig
     annotation = {"original_description": raw_annotation[0], "simplified_description": raw_annotation[1]}
     return annotation
 
-def translate(text, src_lang="English", tgt_lang="Chinese"):
+def translate(text, src_lang="English", tgt_lang="Chinese", object_type_hint=None):
     """
         Translates text using the OpenAI API.
         Args:
@@ -126,6 +126,8 @@ def translate(text, src_lang="English", tgt_lang="Chinese"):
     src_lang = src_lang.capitalize()
     tgt_lang = tgt_lang.capitalize()
     system_prompt = f"You are an excellent translator, who does more than rigidly translating {src_lang} into {tgt_lang}. Your choice of words and phrases is natural and fluent. The expressions are easy to understand. The expected reader is a middle-school student."
+    if object_type_hint is not None:
+        system_prompt += f" The user will provide a description of a {object_type_hint}."
     source_groups = [
         [user_message],
     ]
@@ -354,7 +356,7 @@ def summarize_annotation_from_file(json_path, force_summarize=False):
         json.dump(annotation, f, indent=4)
     return annotation
 
-with open("expressions_to_remove.txt", "r") as f:
+with open("expressions_to_remove.txt", "r", encoding="utf-8") as f:
     lines = f.readlines()
     EXPRESSION_TO_REMOVE = [line.strip() for line in lines]
 

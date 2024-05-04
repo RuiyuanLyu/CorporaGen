@@ -31,11 +31,12 @@ def get_api_key(key_file=None):
     return api_key
 
 def get_client(model=""):
+    # print(f"Using model: {model}")
     if '4' in model and 'vision' in model:
         return AzureOpenAI(api_key=get_api_key("api_keys/gpt_4_vision_pjm.txt"),
                     api_version="2024-02-15-preview",
                     base_url="https://gpt-4-vision-pjm.openai.azure.com/openai/deployments/gpt-4-vision-preview")
-    if '0125' in model:
+    if '35' in model or '3.5' in model:
         return AzureOpenAI(api_key=get_api_key("api_keys/gpt_35_turbo_0125_pjm.txt"),
                     api_version="2024-02-15-preview",
                     base_url="https://gpt-35-turbo-0125-pjm.openai.azure.com/openai/deployments/gpt-35-turbo-1106")
@@ -190,7 +191,7 @@ def get_content_groups_from_source_groups(source_groups, high_detail=False):
     for source_group in source_groups:
         content_group = []
         for source in source_group:
-            if os.path.exists(source):
+            if os.path.exists(source) and (source.endswith(".jpg") or source.endswith(".png")):
                 content_group.append(_get_image_content_for_api(source, high_detail=high_detail))
             else:
                 if len(source_group) == 1:
