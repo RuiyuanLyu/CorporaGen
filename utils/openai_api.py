@@ -24,6 +24,7 @@ def get_api_key(key_file=None):
         print(f"WARNING: No API key found. Please add one in the file: {key_file}.")
         return " "
     # api_key = random.choice(api_keys)
+    global num_calls_api_key
     index = num_calls_api_key % len(api_keys)
     api_key = api_keys[index]
     num_calls_api_key += 1
