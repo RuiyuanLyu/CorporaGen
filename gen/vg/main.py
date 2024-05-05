@@ -29,20 +29,27 @@ example_dict = {
         ]
     ]
 }
-
 REFERING_TYPES = [
-    "category", 
-    "appearance",
+    "fine grained category",
+    "coarse grained category",
+    "color",
+    "texture",
     "material",
+    "weight",
     "size",
-    "state",
-    "position",
+    "shape",
     "placement",
+    "state",
     "function",
-    "other_features"
+    "other features"
 ]
 
-
+def check_object_text_anno_is_valid(json_data):
+    accuracy_dict = json_data.get("accuracy_dict", {})
+    if not (accuracy_dict.get("meta", "") and accuracy_dict.get("visual_info_sufficient", "")):
+        return False
+    return True
+    
 # def generate_object_type_reference(scene_id):
 def back_translate_text_anno_json(json_path):
     with open(json_path, "r", encoding="utf-8") as f:
@@ -50,6 +57,9 @@ def back_translate_text_anno_json(json_path):
     object_type = os.path.basename(json_path).split("_")[1]
     if json_data.get("modified_description_en", ""):
         return
+    if not check_object_text_anno_is_valid(json_data):
+        # The description is not accurate enough. Skip.
+        return 
     modified_description = json_data.get("modified_description", "")
     if modified_description:
         back_translated_description = translate(modified_description, "zh", "en", object_type_hint=object_type)
@@ -64,6 +74,7 @@ def extract_attribute_from_text(text):
     response = messages[-1]
     assert response["role"] == "assistant"
     response_dict = json.loads(response["content"])
+    response_dict = {k.lower().replace(" ", "_"): v for k, v in response_dict.items()}
     return response_dict
 
 def extract_attribute_from_json(json_path):
@@ -72,11 +83,23 @@ def extract_attribute_from_json(json_path):
     text = json_data.get("modified_description_en", "")
     if not text:
         return
+    if json_data.get("attributes", ""):
+        return
     response_dict = extract_attribute_from_text(text)
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     json_data["attributes"] = response_dict
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(json_data, f, indent=4, ensure_ascii=False)
+
+def generate_reference_from_attributes(attribute_dict):
+    attributes = {k.lower().replace(" ", "_").replace("-", "_"): v for k, v in attribute_dict.items()}
+    sentence_list = []
+    # Define templates for different parts of the sentence
+    from gen.vg.object_templates import OBJECT_TEMPLATES
+    sentence_list = [template.format(**attributes) for template in OBJECT_TEMPLATES]
+    # Return the full description as a single string
+    return sentence_list
+
 
 if __name__ == '__main__':
     scene_id = "0_demo"
@@ -84,8 +107,18 @@ if __name__ == '__main__':
     object_text_annos_dir = os.path.join(scene_dir, "corpora_object", "user_shujutang_czc")
     object_text_anno_paths = os.listdir(object_text_annos_dir)
     object_text_anno_paths = [os.path.join(object_text_annos_dir, p) for p in object_text_anno_paths if p.endswith(".json")]
-    mmengine.utils.track_parallel_progress(back_translate_text_anno_json, object_text_anno_paths, nproc=8)        
-    extract_attribute_from_json(object_text_anno_paths[0])
+    # mmengine.utils.track_parallel_progress(back_translate_text_anno_json, object_text_anno_paths, nproc=8)  
+    # mmengine.utils.track_parallel_progress(extract_attribute_from_json, object_text_anno_paths, nproc=8)      
+    #########################
+    # Test code
+    with open(object_text_anno_paths[0], "r", encoding="utf-8") as f:
+        json_data = json.load(f)
+    attribute_dict = json_data.get("attributes", {})
+    sentences = generate_reference_from_attributes(attribute_dict)
+    import pdb; pdb.set_trace()
+    #########################
+
+
     scene_id = "scene0000_00"
     annotation_path = os.path.join(SPLIT_DATA_ROOT, f"{scene_id}.pkl")
     anno_embodiedscan = read_annotation_pickle(annotation_path, show_progress=False)[scene_id]
