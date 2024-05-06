@@ -11,7 +11,7 @@ OBJECT_TEMPLATES = [
     "The {fine_grained_category}, {placement}, is a testament to {material} craftsmanship.",
     "Sleek and {size}, the {color} {fine_grained_category} boasts a {texture} that is both {function}.",
     "With a {shape} shape and {color} {texture} texture, the {fine_grained_category} is a {coarse_grained_category} staple.",
-    "In a vibrant {color}, the {fine_grained_category} is {placement}, ready to elevate any {function}.",
+    "In a vibrant {color} color, the {fine_grained_category} is {placement}, ready to elevate any {function}.",
     
     # Condition and State
     "This {fine_grained_category} maintains a {material} quality that is {function}.",
@@ -19,7 +19,7 @@ OBJECT_TEMPLATES = [
     "Showcasing minimal signs of wear, the {color} {fine_grained_category} is in a {state} and is {placement}.",
     
     # Functionality and Purpose
-    "This serves a {function}.",
+    "This {fine_grained_category} serves a {function}.",
     "Ideal for {function}, this {coarse_grained_category} is {placement} and {size}.",
     "This is designed for {function}, with a focus on {material} material and {texture} quality.",
     

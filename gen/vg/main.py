@@ -96,9 +96,43 @@ def generate_reference_from_attributes(attribute_dict):
     sentence_list = []
     # Define templates for different parts of the sentence
     from gen.vg.object_templates import OBJECT_TEMPLATES
-    sentence_list = [template.format(**attributes) for template in OBJECT_TEMPLATES]
-    # Return the full description as a single string
+    import random
+    templates = random.sample(OBJECT_TEMPLATES, 3)
+    sentence_list = [template.format(**attributes) for template in templates]
     return sentence_list
+
+def generate_reference_dict_from_sentence(sentence, target_object_type):
+    """
+        Generate a reference dict from a sentence and a target object type.
+        NOTE: The scan id and target id are not set in this function.
+    """
+    reference_dict = {
+        "scan_id": None,
+        "target_id": None,
+        "distractor_ids": [],
+        "text": sentence,
+        "target": target_object_type,
+        "anchors": [],
+        "anchor_ids": [],
+        "tokens_positive": find_matches(sentence, target_object_type)
+    }
+    return reference_dict
+
+def find_matches(sentence, s):
+    """
+    Find all occurrences of string s in sentence.
+    Returns a list of lists [[start, end], [start, end],...] of the matches.
+    """
+    matches = []
+    start = 0
+    while True:
+        start = sentence.find(s, start)
+        if start == -1:  
+            break
+        end = start + len(s)
+        matches.append([start, end])
+        start += 1
+    return matches
 
 
 if __name__ == '__main__':
