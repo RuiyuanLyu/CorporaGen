@@ -52,6 +52,10 @@ def check_object_text_anno_is_valid(json_data):
     
 # def generate_object_type_reference(scene_id):
 def back_translate_text_anno_json(json_path):
+    """
+        Back-translate the modified_description field in the json file to English, and store it in the original json file.
+        Returns None.
+    """
     with open(json_path, "r", encoding="utf-8") as f:
         json_data = json.load(f)
     object_type = os.path.basename(json_path).split("_")[1]
@@ -78,6 +82,10 @@ def extract_attribute_from_text(text):
     return response_dict
 
 def extract_attribute_from_json(json_path):
+    """
+        Extract attributes from a json file and store them in the json file.
+        Returns None.
+    """
     with open(json_path, "r", encoding="utf-8") as f:
         json_data = json.load(f)
     text = json_data.get("modified_description_en", "")
@@ -91,7 +99,7 @@ def extract_attribute_from_json(json_path):
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(json_data, f, indent=4, ensure_ascii=False)
 
-def generate_reference_from_attributes(attribute_dict):
+def generate_reference_from_attributes(attribute_dict, scan_id=None, target_id=None):
     attributes = {k.lower().replace(" ", "_").replace("-", "_"): v for k, v in attribute_dict.items()}
     sentence_list = []
     # Define templates for different parts of the sentence
@@ -99,16 +107,18 @@ def generate_reference_from_attributes(attribute_dict):
     import random
     templates = random.sample(OBJECT_TEMPLATES, 3)
     sentence_list = [template.format(**attributes) for template in templates]
-    return sentence_list
+    target_object_type = attributes.get("fine_grained_category", "")
+    reference_list = [generate_reference_dict_from_sentence(sentence, target_object_type, scan_id, target_id) for sentence in sentence_list]
+    return reference_list
 
-def generate_reference_dict_from_sentence(sentence, target_object_type):
+def generate_reference_dict_from_sentence(sentence, target_object_type, scan_id=None, target_id=None):
     """
         Generate a reference dict from a sentence and a target object type.
-        NOTE: The scan id and target id are not set in this function.
+        NOTE: The scan id and target id are not set in this function if they are not provided.
     """
     reference_dict = {
-        "scan_id": None,
-        "target_id": None,
+        "scan_id": scan_id,
+        "target_id": target_id,
         "distractor_ids": [],
         "text": sentence,
         "target": target_object_type,
@@ -134,6 +144,27 @@ def find_matches(sentence, s):
         start += 1
     return matches
 
+def generate_reference_pipelined(json_path, scan_id):
+    """
+        pipeline to generate reference from a single json file.
+        Args:
+            json_path: path to the json file.
+            scan_id: the scan id of the scene. e.g. "scannet/scene0072_01"
+        Returns a list of reference dicts.
+    """
+    back_translate_text_anno_json(json_path)
+    extract_attribute_from_json(json_path)
+    base_name = os.path.basename(json_path)
+    object_id = base_name.split("_")[0]
+    object_type = base_name.split("_")[1]
+    with open(json_path, "r", encoding="utf-8") as f:
+        json_data = json.load(f)
+    attribute_dict = json_data.get("attributes", {})
+    reference_list = generate_reference_from_attributes(attribute_dict, scan_id=scan_id, target_id=object_id)
+    # for a full scene, the reference list will also be a list of reference dicts, as it is for each object in the scene.
+    # for a single object, the reference list may also contain multiple reference dicts.
+    return reference_list
+
 
 if __name__ == '__main__':
     scene_id = "0_demo"
@@ -148,7 +179,6 @@ if __name__ == '__main__':
     with open(object_text_anno_paths[0], "r", encoding="utf-8") as f:
         json_data = json.load(f)
     attribute_dict = json_data.get("attributes", {})
-    sentences = generate_reference_from_attributes(attribute_dict)
     import pdb; pdb.set_trace()
     #########################
 
