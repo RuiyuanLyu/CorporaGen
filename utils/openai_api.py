@@ -178,7 +178,33 @@ def mimic_chat(user_content_groups, model=None, system_prompt=None):
     
     return messages
 
+import cv2
+import numpy as np
+def create_grid(image_paths):
+    assert len(image_paths) <= 6, "The number of images should be less than or equal to 6."
+    images = [cv2.imread(path) for path in image_paths]
+    if any(img is None for img in images):
+        raise ValueError("One or more images could not be loaded.")
+    if not all(img.shape == images[0].shape for img in images):
+        raise ValueError("All images must have the same shape.")
+    height, width, _ = images[0].shape
+    num_rows, num_cols = (3,2) if height < width else (2,3)
+    grid = np.zeros((height*num_rows, width*num_cols, 3), dtype=np.uint8)
+    for i in range(num_rows):
+        for j in range(num_cols):
+            if i*num_cols+j < len(images):
+                grid[i*height:(i+1)*height, j*width:(j+1)*width] = images[i*num_cols+j]
+    cv2.imwrite('temp.jpg', grid)
     
+def check_img_path_exists(image_path):
+    if not isinstance(image_path, str):
+        return False
+    if not os.path.exists(image_path):
+        return False
+    if not (image_path.endswith(".jpg") or image_path.endswith(".png")):
+        return False
+    return True
+
 def get_content_groups_from_source_groups(source_groups, high_detail=False):
     """
         Change the format of the input data to the format required by the OpenAI API.
@@ -190,14 +216,28 @@ def get_content_groups_from_source_groups(source_groups, high_detail=False):
     content_groups = []
     for source_group in source_groups:
         content_group = []
+        images = [source for source in source_group if check_img_path_exists(source)]
+        merge_mode = False
+        if len(images) > 10:
+            # so many images, use the high detail API and merge every 4 images into one
+            merge_mode = True
         for source in source_group:
-            if os.path.exists(source) and (source.endswith(".jpg") or source.endswith(".png")):
-                content_group.append(_get_image_content_for_api(source, high_detail=high_detail))
+            if check_img_path_exists(source):
+                if not merge_mode:
+                    content_group.append(_get_image_content_for_api(source, high_detail=high_detail))
             else:
                 if len(source_group) == 1:
                     content_group = source
                 else:
+                    if merge_mode:
+                        source += "The images are provided in a grid format."
                     content_group.append(_get_text_content_for_api(source))
+        if merge_mode:
+            images_lists = [images[i:i+6] for i in range(0, len(images), 6)]
+            for image_list in images_lists:
+                # text first, then images
+                create_grid(image_list)
+                content_group.append(_get_image_content_for_api("temp.jpg", high_detail=True))
         content_groups.append(content_group)
     return content_groups
         
