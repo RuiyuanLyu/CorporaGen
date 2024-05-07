@@ -3,6 +3,15 @@ import json
 from tqdm import tqdm
 from utils.openai_api import mimic_chat, mimic_chat_budget, get_content_groups_from_source_groups, num_tokens_from_string, get_full_response
 from utils.utils_read import load_json
+import re
+
+def is_chinese(text):
+    # 正则表达式匹配中文字符
+    pattern = re.compile(r'[\u4e00-\u9fff]')
+    if pattern.search(text):
+        return True
+    else:
+        return False
 
 def list_translate(texts, src_lang="English", tgt_lang="Chinese"):
     """
@@ -17,7 +26,7 @@ def list_translate(texts, src_lang="English", tgt_lang="Chinese"):
     user_message = str(texts)
     src_lang = src_lang.capitalize()
     tgt_lang = tgt_lang.capitalize()
-    system_prompt = f'You are an excellent translator.I will give you a list of sentences, you are supposed to translate every sentence in the list from {src_lang} to {tgt_lang}. The result should be only a list (Use double quotation marks as string delimiters, like this:["here is a example","you are happy"]). Repeat: provide a list in the answer.'
+    system_prompt = f'You are an excellent translator.I will give you a list of sentences, you are supposed to translate every sentence in the list from {src_lang} to {tgt_lang}. The result should be only a list (Use double quotation marks as string delimiters, like this:["这是一个枕头","这些物品是室内物品"]). Repeat: provide a list in the answer.'
     source_groups = [
         [user_message],
     ]
@@ -61,14 +70,12 @@ def strict_list_translate_part(texts,src_lang="English", tgt_lang="Chinese",max_
     while not success and _try<max_try:
         _try+=1
         success = True
-        out = list_translate(texts,src_lang, tgt_lang)
-        a=b=-1
-        for _index in range(len(out)):
-            if out[_index]=='[':
-                a = _index
-        for _index in range(len(out)):
-            if out[_index]==']':
-                b = _index
+        out = list_translate(texts, src_lang, tgt_lang)
+        if not isinstance(out,str):
+            success = False
+            continue
+        a = out.find('[')
+        b = out.find(']')
         if a==-1 or b==-1:
             success = False
             continue
@@ -81,6 +88,10 @@ def strict_list_translate_part(texts,src_lang="English", tgt_lang="Chinese",max_
 
         if len(texts_out)!=len(texts):
             success = False
+        if tgt_lang =="Chinese":
+            all_chinese = all([is_chinese(text) for text in texts_out])
+            if not all_chinese:
+                success = False
     if success:
         return texts_out,_try
     else:

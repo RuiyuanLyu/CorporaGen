@@ -74,6 +74,7 @@ def get_full_response(messages, model="gpt-3.5-turbo", max_tokens=1000, max_trie
             logging.error(f"Error: {e.message}")
             return None, 0, 0 if report_token_usage else None
         print(f"Error: {e}")
+        print(f"WARNING: Triggered by messages: {messages}")
         if max_tries > 0:
             time.sleep(10)
             return get_full_response(messages, model=model, max_tokens=max_tokens, max_tries=max_tries-1, report_token_usage=report_token_usage, json_mode=json_mode)
@@ -172,10 +173,12 @@ def mimic_chat(user_content_groups, model=None, system_prompt=None):
         messages.append({"role": "system", "content": system_prompt})
     for content_group in user_content_groups:
         messages.append({"role": "user", "content": content_group})
-        response = get_full_response(messages, model=model, max_tokens=1000)
-        response = response.choices[0].message.content.strip()
+        full_response, prompt_tokens, completion_tokens = get_full_response(messages, model=model, max_tokens=1000, report_token_usage=True)
+        if full_response is None:
+            print("WARNING: No response returned. The result may not be accurate.")
+            return messages
+        response = full_response.choices[0].message.content.strip()
         messages.append({"role": "assistant", "content": response})
-    
     return messages
 
 import cv2
