@@ -11,13 +11,16 @@ def anno_translation(region_info_file,src_lang,tgt_lang,need_translate_index = [
     if not region_info.any():
         return region_info
     if os.path.exists(save_file):
-        return np.load(save_file,allow_pickle=True)
+        # load from save_file if exists. 
+        region_info = np.load(save_file, allow_pickle=True)
+        # The translation might be imperfect. So we need to load from region_info_file if the save_file is empty.
+        if not region_info.any():
+            region_info = np.load(region_info_file, allow_pickle=True)
     total_list = []
     for _index in need_translate_index:
         total_list += [region_info[_index][k] for k in region_info[_index].keys()]
-    # import pdb; pdb.set_trace()
+    # If some are already in Chinese, we don't need to translate them, which is implemented in strict_list_translate.
     output_list, num_trys = strict_list_translate(total_list, src_lang, tgt_lang)
-    # logging.warning(f"Translated with {num_trys} trys, prompt_tokens: {token_usage['prompt_tokens']}, completion_tokens: {token_usage['completion_tokens']}")
     logging.warning(f"Translated with {num_trys} trys for {region_info_file}")
     if num_trys >= 10:
         logging.warning(f"Failed to translate {region_info_file}")

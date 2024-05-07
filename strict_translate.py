@@ -6,12 +6,24 @@ from utils.utils_read import load_json
 import re
 
 def is_chinese(text):
-    # 正则表达式匹配中文字符
     pattern = re.compile(r'[\u4e00-\u9fff]')
     if pattern.search(text):
         return True
     else:
         return False
+def is_english(text):
+    pattern = re.compile(r'^[A-Za-z]+$')
+    if pattern.search(text):
+        return True
+    else:
+        return False
+def is_lang(text, lang):
+    if lang.lower()=="english":
+        return is_english(text)
+    elif lang.lower()=="chinese":
+        return is_chinese(text)
+    else:
+        raise NotImplementedError
 
 def list_translate(texts, src_lang="English", tgt_lang="Chinese"):
     """
@@ -98,15 +110,36 @@ def strict_list_translate_part(texts,src_lang="English", tgt_lang="Chinese",max_
         return [],_try
         
 def strict_list_translate(texts:list[str],src_lang="English", tgt_lang="Chinese",max_try=10):
-    parts = disassemble_parts(texts)
-    out_list = []
+    """
+        Translates a list of text using the OpenAI API.
+        Strictly checks the output to make sure the output is a list of strings.
+        The return will always be the same length as the input list, but some texts might be unchanged.
+        Args:
+            texts: a list of text to be translated. If a text is already in the target language, it will be skipped.
+        Returns:
+            A list of translated text strings, num tries, and total token usage.
+    """
+
+    need_translation_mask = [not is_lang(text, tgt_lang) for text in texts]
+    if not any(need_translation_mask):
+        return texts,0
+    need_translation_texts = [text for text,need_translation in zip(texts,need_translation_mask) if need_translation]
+    parts = disassemble_parts(need_translation_texts)
+    translated_list = []
     max_num_tries = 0
     total_token_usage = {}
     for part in parts:
         part_translated, num_tries = strict_list_translate_part(part, src_lang, tgt_lang, max_try)
-        out_list.extend(part_translated)
+        translated_list.extend(part_translated)
         max_num_tries = max(max_num_tries, num_tries)
-    return out_list, max_num_tries
+    output_list = []
+    for text,need_translation in zip(texts,need_translation_mask):
+        if need_translation:
+            output_list.append(translated_list.pop(0))
+        else:
+            output_list.append(text)
+    return output_list, max_num_tries
+
 
 def strict_check(text):
     angle_list = []
