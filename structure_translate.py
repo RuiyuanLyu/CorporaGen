@@ -4,6 +4,7 @@ import os
 from object_text_anno import mmengine_track_func
 from strict_translate import strict_list_translate, is_chinese
 
+
 @mmengine_track_func
 def anno_translation(region_info_file,src_lang,tgt_lang,need_translate_index = [1,3,4,5]):
     save_file = region_info_file.replace('.npy','_trans.npy')
@@ -16,17 +17,22 @@ def anno_translation(region_info_file,src_lang,tgt_lang,need_translate_index = [
         # The translation might be imperfect. So we need to load from region_info_file if the save_file is empty.
         if not region_info.any():
             region_info = np.load(region_info_file, allow_pickle=True)
+    assert region_info.any(), f"{region_info_file} should not be empty"
     total_list = []
     for _index in need_translate_index:
         total_list += [region_info[_index][k] for k in region_info[_index].keys()]
     # If some are already in Chinese, we don't need to translate them, which is implemented in strict_list_translate.
-    output_list, num_trys = strict_list_translate(total_list, src_lang, tgt_lang)
-    logging.warning(f"Translated with {num_trys} trys for {region_info_file}")
-    if num_trys >= 10:
-        logging.warning(f"Failed to translate {region_info_file}")
-        # return region_info
-        np.save(save_file, None)
-        return None
+    output_list, num_trys = strict_list_translate(total_list, src_lang, tgt_lang, max_try=3)
+    if num_trys > 0:
+        logging.warning(f"Translated with {num_trys} trys for {region_info_file}")
+    else: 
+        logging.warning(f"{region_info_file} is already in Chinese")
+        return region_info
+    if num_trys >= 3:
+        # Do not save partial results if the length do not match.
+        if len(output_list) != len(total_list):
+            np.save(save_file, None)
+            return None
     start = 0
     for _index in need_translate_index:
         for key in region_info[_index].keys():
@@ -36,6 +42,36 @@ def anno_translation(region_info_file,src_lang,tgt_lang,need_translate_index = [
         logging.warning(f"Warning: NOT all translated texts are chinese for {region_info_file}")
     np.save(save_file,region_info)
     return region_info
+
+@mmengine_track_func
+def check_translation(region_info_file,src_lang,tgt_lang,need_translate_index = [1,3,4,5]):
+    # check the length of "total list" is the same
+    translation_file = region_info_file.replace('.npy','_trans.npy')
+    region_info = np.load(region_info_file,allow_pickle=True)
+    if not region_info.any():
+        logging.warning(f"{region_info_file} is empty, Nothing to translate")
+        return False
+    if not os.path.exists(translation_file):
+        logging.warning(f"{translation_file} does not exist")
+        return False
+    trans_info = np.load(translation_file,allow_pickle=True)
+    if not trans_info.any():
+        logging.warning(f"{translation_file} is empty")
+        return False
+    total_list = []
+    for _index in need_translate_index:
+        total_list += [region_info[_index][k] for k in region_info[_index].keys()]
+    total_list2 = []
+    for _index in need_translate_index:
+        total_list2 += [trans_info[_index][k] for k in trans_info[_index].keys()]
+    ret = len(total_list) == len(total_list2)
+    if not ret:
+        logging.warning(f"The length of total_list is not the same in {region_info_file} and {translation_file}")
+        return False
+    ret = all([is_chinese(x) for x in total_list2])
+    if not ret:
+        logging.warning(f"Not all texts in {translation_file} are in Chinese")
+    return ret
 
 
 if __name__ == "__main__":
@@ -73,7 +109,8 @@ if __name__ == "__main__":
                 continue
             tasks.append((region_info_file,"English","Chinese"))
 
-    anno_translation(tasks[0])
+    # anno_translation(tasks[0])
     import mmengine
-    mmengine.utils.track_parallel_progress(anno_translation, tasks, nproc=8)
+    # mmengine.utils.track_parallel_progress(anno_translation, tasks, nproc=8)
+    mmengine.utils.track_parallel_progress(check_translation, tasks, nproc=8)
 

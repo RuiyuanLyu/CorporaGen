@@ -48,7 +48,7 @@ def list_translate(texts, src_lang="English", tgt_lang="Chinese"):
         if message["role"] == "assistant":
             return message["content"]
         
-def disassemble_parts(texts:list[str], max_token_length=600, max_list_length=10):
+def disassemble_parts(texts:list[str], max_token_length=600, max_list_length=1):
     """
         disassembles the text into parts that are smaller than the maximum token length.
         Returns:
@@ -70,7 +70,9 @@ def disassemble_parts(texts:list[str], max_token_length=600, max_list_length=10)
         parts.append(current_part)
     return parts
 
-def strict_list_translate_part(texts,src_lang="English", tgt_lang="Chinese",max_try=10):
+from object_text_anno import translate
+
+def strict_list_translate_part(texts,src_lang="English", tgt_lang="Chinese",max_try=3):
     """
         Translates a list of text using the OpenAI API.
         Strictly checks the output to make sure the output is a list of strings.
@@ -79,6 +81,8 @@ def strict_list_translate_part(texts,src_lang="English", tgt_lang="Chinese",max_
     """
     success = False
     _try = 0
+    if len(texts) == 1:
+        return [translate(texts[0], src_lang, tgt_lang)], 1
     while not success and _try<max_try:
         _try+=1
         success = True
@@ -107,9 +111,9 @@ def strict_list_translate_part(texts,src_lang="English", tgt_lang="Chinese",max_
     if success:
         return texts_out,_try
     else:
-        return [],_try
+        return texts,_try
         
-def strict_list_translate(texts:list[str],src_lang="English", tgt_lang="Chinese",max_try=10):
+def strict_list_translate(texts:list[str],src_lang="English", tgt_lang="Chinese",max_try=3):
     """
         Translates a list of text using the OpenAI API.
         Strictly checks the output to make sure the output is a list of strings.
