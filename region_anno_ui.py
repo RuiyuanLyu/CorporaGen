@@ -156,8 +156,9 @@ with gr.Blocks() as demo:
 
     def check_annotated_scenes(user_name):
         missing_scenes = []
+        global output_dir
         for scene_id in SCENE_LIST:
-            file_path_to_save = os.path.join(get_scene_info(scene_id)["output_dir"], f'region_segmentation_{user_name}.txt')
+            file_path_to_save = os.path.join(f"{output_dir}/{scene_id}", f'region_segmentation_{user_name}.txt')
             painted_img_dir = f"{painted_dir}/{scene_id}/painted_objects"
             if not os.path.exists(painted_img_dir):
                 continue
