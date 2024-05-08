@@ -19,9 +19,28 @@ def check_all_users(scene_ids):
         all_users.update(user_names)
     return all_users
 
+import difflib
+def compute_delta(original, modified):
+    d = difflib.Differ()
+    delta = [(token[2:], token[0] if token[0] != " " else None)for token in d.compare(original, modified)]
+    token_added = sum(len(token[0]) for token in delta if token[1] == "+")
+    token_removed = sum(len(token[0]) for token in delta if token[1] == "-")
+    return token_added, token_removed
+
+def compute_min_delta(originals, modified):
+    if isinstance(originals, str):
+        originals = [originals]
+    min_added, min_removed = float('inf'), float('inf')
+    for original in originals:
+        token_added, token_removed = compute_delta(original, modified)
+        min_added = min(min_added, token_added)
+        min_removed = min(min_removed, token_removed)
+    return min_added, min_removed
+
 if __name__ == "__main__":
     scene_ids = os.listdir(DATA_ROOT)
-    scene_ids = [scene_id for scene_id in scene_ids if scene_id.startswith("scene") or scene_id.startswith("1mp3d_0000_region")]
+    # scene_ids = [scene_id for scene_id in scene_ids if scene_id.startswith("scene") or scene_id.startswith("1mp3d_0000_region")]
+    scene_ids = [scene_id for scene_id in scene_ids if scene_id.startswith("scene") or scene_id.startswith("1mp3d") or scene_id.startswith("3rscan")]
     # all_users = check_all_users(scene_ids)
     # all_users = sorted(all_users)
     # print(f"All users: {all_users}")
@@ -73,28 +92,21 @@ if __name__ == "__main__":
                 # acc_dict_list.append(acc_dict)
                 ######################################################################
                 # now we simply compute the length of the delta between the reference and the user's annotation
-                import difflib
-                original_annotation = annotation.get("translated_description", "")
-                dir_to_check2 = os.path.join(DATA_ROOT, scene_id, f"corpora_object_{model_names[-1]}")
-                file_name_to_check2 = os.path.join(dir_to_check2, file_name)
-                original_annotation2 = load_json(file_name_to_check2).get("translated_description", "")
+                # original_annotation = annotation.get("translated_description", "")
+                original_annotations = []
+                for model_name in model_names:
+                    source_to_load = os.path.join(DATA_ROOT, scene_id, f"corpora_object_{model_name}", file_name)
+                    if not os.path.exists(source_to_load):
+                        continue
+                    original_annotation = load_json(source_to_load).get("translated_description", "")
+                    original_annotation = remove_specific_expressions(original_annotation)
+                    original_annotations.append(original_annotation)
                 modified_annotation = annotation.get("modified_description", "")
-                if not original_annotation or not modified_annotation:
-                    print("Warning: original or modified annotation is empty.")
-                original_annotation = remove_specific_expressions(original_annotation)
-                original_annotation2 = remove_specific_expressions(original_annotation2)
+                if not modified_annotation:
+                    print("Warning: modified annotation is empty.")
+                    continue
                 modified_annotation = remove_specific_expressions(modified_annotation)
-                d = difflib.Differ()
-                delta = [(token[2:], token[0] if token[0] != " " else None)for token in d.compare(original_annotation, modified_annotation)]
-                token_added = sum(len(token[0]) for token in delta if token[1] == "+")
-                token_removed = sum(len(token[0]) for token in delta if token[1] == "-")
-                delta2 = [(token[2:], token[0] if token[0] != " " else None)for token in d.compare(original_annotation2, modified_annotation)]
-                token_added2 = sum(len(token[0]) for token in delta2 if token[1] == "+")
-                token_removed2 = sum(len(token[0]) for token in delta2 if token[1] == "-")
-                # take smaller one as the final token_added/removed
-                token_added = min(token_added, token_added2)
-                token_removed = min(token_removed, token_removed2)
-
+                token_added, token_removed = compute_min_delta(original_annotations, modified_annotation)
                 acc_dict["token_added"] = token_added
                 acc_dict["token_removed"] = token_removed
                 acc_dict_list.append(acc_dict)
