@@ -12,13 +12,15 @@ MAX_OBJECT_NUM =30
 REGIONS = {"起居室/会客区": "living region",
            "书房/工作学习区": "study region",
            "卧室/休息区": "resting region", # previously "sleeping region"
+           "睡眠/休息区": "sleeping region",
            "饭厅/进食区": "dinning region",
            "厨房/烹饪区": "cooking region",
            "浴室/洗澡区": "bathing region",
-           "储藏区": "storage region",
+           "储藏/收纳区": "storage region",
            "厕所/洗手间": "toliet region",
+           "运动区/健身房": "sports region",
            "走廊/通道": "corridor region",
-           "空地": "open area region",
+           "开放（室外）空地": "open area region",
            "其它": "other region"}
 REGIONS_tran = {REGIONS[key]: key for key in REGIONS.keys()}
 
@@ -39,7 +41,7 @@ def relation_en(text):
 # 区域特点映射
 FEATURES = {'location and function description':'区域定位和功能描述',
             'space layout and dimensions':'空间布局与尺寸',
-            'doors,windows, walls, floors and ceilings':'门窗, 墙面,地面与天花板',
+            'doors, windows, walls, floors and ceilings':'门窗, 墙面, 地面与天花板',
             'soft fitting elements and decorative details':'软装元素与装饰细节',
             'lighting design':'照明设计',
             'color matching and style theme':'色彩搭配与风格主题',
@@ -110,7 +112,7 @@ with gr.Blocks() as demo:
         regions = _get_regions(scene_id)
         if len(regions) == 0:
             gr.Info(f"场景{scene_id}暂时没有区域信息，未来会补充。请切换到其他场景。")
-        return gr.Dropdown(regions, label="需要修改的区域")
+        return gr.Dropdown(regions, label="需要修改的区域", value=regions[0])
 
     def data_process(scene_id,region_id,user_name):
         if scene_id==None or region_id==None:
@@ -157,7 +159,7 @@ with gr.Blocks() as demo:
             row_count=len(loc_relation_dict.keys()),
             col_count=(5, "fixed"),
             value=loc_relation_list,
-            visible=True,
+            visible=False,
             interactive=True
         )
         logic_relation_list = []
@@ -224,7 +226,7 @@ with gr.Blocks() as demo:
         render_image_path=f'data/{scene_id}/{region_view_dir_name}/{region_id}.png'
 
         return show_image_path,loc_relation_frame,logic_relation_frame,large_class_frame,check_id_choice,wall_text,floor_text,None,show_image_path[0],show_image_path[0],show_image_path[0],show_image_path[0],\
-               [{}]*6,region_info,region_info_text,None,None,None,None,None,object_text1,object_text2,gr.update(value=render_image_path)
+               [{},{},{},{},{},{}],region_info,region_info_text,None,None,None,None,None,object_text1,object_text2,gr.update(value=render_image_path)
 
     def object_function_process(scene_id,region_id,user_name):
         '''
@@ -274,7 +276,8 @@ with gr.Blocks() as demo:
         region_feature_dict = region_info[5]
         region_feature_text = []
         for d_name in region_feature_dict.keys():
-            region_feature_text.append(gr.Textbox(label=f'{FEATURES[d_name]}',value=region_feature_dict[d_name],visible=True,interactive=True))
+            show_dname = d_name.replace(',', ', ').replace('  ', ' ')
+            region_feature_text.append(gr.Textbox(label=f'{FEATURES[show_dname]}',value=region_feature_dict[d_name],visible=True,interactive=True))
 
         return region_feature_text
     def Q_A_process(scene_id,region_id,user_name):
@@ -283,96 +286,105 @@ with gr.Blocks() as demo:
         '''
         if scene_id==None or region_id==None:
 
-
-            Space_Q1 = gr.Textbox(label='有关空间的问题1', visible=False)
+            Space_Q1 = gr.Textbox(label='有关探索的问题1', visible=False)
             Space_A1 = gr.Textbox(label='回答1', visible=False)
-
-            Space_Q2 = gr.Textbox(label='有关空间的问题2', visible=False)
+            Space_Q2 = gr.Textbox(label='有关探索的问题2', visible=False)
             Space_A2 = gr.Textbox(label='回答2', visible=False)
+            Space_Q3 = gr.Textbox(label='有关探索的问题3', visible=False)
+            Space_A3 = gr.Textbox(label='回答3', visible=False)
 
-            Explain_Q1 = gr.Textbox(label='有关解释的问题1', visible=False)
-            Explain_A1 = gr.Textbox(label='回答1', visible=False)
-
-            Explain_Q2 = gr.Textbox(label='有关解释的问题2', visible=False)
-            Explain_A2 = gr.Textbox(label='回答2', visible=False)
-
-            Situate_Q1 = gr.Textbox(label='有关情境的问题1', visible=False)
-            Situate_A1 = gr.Textbox(label='回答1', visible=False)
-
-            Situate_Q2 = gr.Textbox(label='有关情境的问题2', visible=False)
-            Situate_A2 = gr.Textbox(label='回答2', visible=False)
+            Function_Q1 = gr.Textbox(label='有关需求的问题1', visible=False)
+            Function_A1 = gr.Textbox(label='回答1', visible=False)
+            Function_Q2 = gr.Textbox(label='有关需求的问题2', visible=False)
+            Function_A2 = gr.Textbox(label='回答2', visible=False)
+            Function_Q3 = gr.Textbox(label='有关需求的问题3', visible=False)
+            Function_A3 = gr.Textbox(label='回答3', visible=False)
 
 
-            return Space_Q1,Space_A1,Space_Q2,Space_A2,Explain_Q1,Explain_A1,Explain_Q2,Explain_A2,Situate_Q1,Situate_A1,Situate_Q2,Situate_A2
 
+            return Space_Q1,Space_A1,Space_Q2,Space_A2,Space_Q3,Space_A3,Function_Q1,Function_A1,Function_Q2,Function_A2,Function_Q3,Function_A3
         if os.path.exists(f'data/{scene_id}/{region_view_dir_name}/{region_id}/struction_trans_{user_name}.npy'):
 
             region_info = np.load(f'data/{scene_id}/{region_view_dir_name}/{region_id}/struction_trans_{user_name}.npy',
                                   allow_pickle=True)
+            
+            if 'Function_A3' not in region_info[-1].keys():
 
-            Space_Q1 = gr.Textbox(label='有关空间的问题1',value=region_info[-1]['Space_Q1'], visible=True, interactive=True)
+                Space_Q1 = gr.Textbox(label='有关探索的问题1', visible=True, interactive=True)
+                Space_A1 = gr.Textbox(label='回答1', visible=True, interactive=True)
+                Space_Q2 = gr.Textbox(label='有关探索的问题2', visible=True, interactive=True)
+                Space_A2 = gr.Textbox(label='回答2', visible=True, interactive=True)
+                Space_Q3 = gr.Textbox(label='有关探索的问题3', visible=True, interactive=True)
+                Space_A3 = gr.Textbox(label='回答3', visible=True, interactive=True)
+
+                Function_Q1 = gr.Textbox(label='有关需求的问题1', visible=True, interactive=True)
+                Function_A1 = gr.Textbox(label='回答1', visible=True, interactive=True)
+                Function_Q2 = gr.Textbox(label='有关需求的问题2', visible=True, interactive=True)
+                Function_A2 = gr.Textbox(label='回答2', visible=True, interactive=True)
+                Function_Q3 = gr.Textbox(label='有关需求的问题3', visible=True, interactive=True)
+                Function_A3 = gr.Textbox(label='回答3', visible=True, interactive=True)
+
+                return Space_Q1, Space_A1, Space_Q2, Space_A2, Space_Q3, Space_A3, Function_Q1, Function_A1, Function_Q2, Function_A2, Function_Q3, Function_A3
+
+            Space_Q1 = gr.Textbox(label='有关探索的问题1',value=region_info[-1]['Space_Q1'], visible=True, interactive=True)
             Space_A1 = gr.Textbox(label='回答1',value=region_info[-1]['Space_A1'], visible=True, interactive=True)
-
-            Space_Q2 = gr.Textbox(label='有关空间的问题2',value=region_info[-1]['Space_Q2'], visible=True, interactive=True)
+            Space_Q2 = gr.Textbox(label='有关探索的问题2',value=region_info[-1]['Space_Q2'], visible=True, interactive=True)
             Space_A2 = gr.Textbox(label='回答2',value=region_info[-1]['Space_A2'], visible=True, interactive=True)
+            Space_Q3 = gr.Textbox(label='有关探索的问题3',value=region_info[-1]['Space_Q3'], visible=True, interactive=True)
+            Space_A3 = gr.Textbox(label='回答3',value=region_info[-1]['Space_A3'], visible=True, interactive=True)
 
-            Explain_Q1 = gr.Textbox(label='有关解释的问题1',value=region_info[-1]['Explain_Q1'], visible=True, interactive=True)
-            Explain_A1 = gr.Textbox(label='回答1',value=region_info[-1]['Explain_A1'], visible=True, interactive=True)
+            Function_Q1 = gr.Textbox(label='有关需求的问题1',value=region_info[-1]['Function_Q1'], visible=True, interactive=True)
+            Function_A1 = gr.Textbox(label='回答1',value=region_info[-1]['Function_A1'], visible=True, interactive=True)
+            Function_Q2 = gr.Textbox(label='有关需求的问题2',value=region_info[-1]['Function_Q2'], visible=True, interactive=True)
+            Function_A2 = gr.Textbox(label='回答2',value=region_info[-1]['Function_A2'], visible=True, interactive=True)
+            Function_Q3 = gr.Textbox(label='有关需求的问题3',value=region_info[-1]['Function_Q3'], visible=True, interactive=True)
+            Function_A3 = gr.Textbox(label='回答3',value=region_info[-1]['Function_A3'], visible=True, interactive=True)
 
-            Explain_Q2 = gr.Textbox(label='有关解释的问题2',value=region_info[-1]['Explain_Q2'], visible=True, interactive=True)
-            Explain_A2 = gr.Textbox(label='回答2',value=region_info[-1]['Explain_A2'], visible=True, interactive=True)
 
-            Situate_Q1 = gr.Textbox(label='有关情境的问题1',value=region_info[-1]['Situate_Q1'], visible=True, interactive=True)
-            Situate_A1 = gr.Textbox(label='回答1',value=region_info[-1]['Situate_A1'], visible=True, interactive=True)
 
-            Situate_Q2 = gr.Textbox(label='有关情境的问题2',value=region_info[-1]['Situate_Q2'], visible=True, interactive=True)
-            Situate_A2 = gr.Textbox(label='回答2',value=region_info[-1]['Situate_A2'], visible=True, interactive=True)
-
-            return Space_Q1, Space_A1, Space_Q2, Space_A2, Explain_Q1, Explain_A1, Explain_Q2, Explain_A2, Situate_Q1, Situate_A1, Situate_Q2, Situate_A2
+            return Space_Q1,Space_A1,Space_Q2,Space_A2,Space_Q3,Space_A3,Function_Q1,Function_A1,Function_Q2,Function_A2,Function_Q3,Function_A3
 
 
         else:
-            Space_Q1 = gr.Textbox('',label='有关空间的问题1', visible=True,interactive=True)
-            Space_A1 = gr.Textbox('',label='回答1', visible=True,interactive=True)
+            Space_Q1 = gr.Textbox(label='有关探索的问题1',visible=True,interactive=True)
+            Space_A1 = gr.Textbox(label='回答1', visible=True,interactive=True)
+            Space_Q2 = gr.Textbox(label='有关探索的问题2',visible=True,interactive=True)
+            Space_A2 = gr.Textbox(label='回答2',visible=True,interactive=True)
+            Space_Q3 = gr.Textbox(label='有关探索的问题3', visible=True,interactive=True)
+            Space_A3 = gr.Textbox(label='回答3', visible=True,interactive=True)
 
-            Space_Q2 = gr.Textbox('',label='有关空间的问题2', visible=True,interactive=True)
-            Space_A2 = gr.Textbox('',label='回答2', visible=True,interactive=True)
+            Function_Q1 = gr.Textbox(label='有关需求的问题1', visible=True,interactive=True)
+            Function_A1 = gr.Textbox(label='回答1', visible=True,interactive=True)
+            Function_Q2 = gr.Textbox(label='有关需求的问题2',visible=True,interactive=True)
+            Function_A2 = gr.Textbox(label='回答2',visible=True,interactive=True)
+            Function_Q3 = gr.Textbox(label='有关需求的问题3', visible=True,interactive=True)
+            Function_A3 = gr.Textbox(label='回答3',visible=True,interactive=True)
 
-            Explain_Q1 = gr.Textbox('',label='有关解释的问题1', visible=True,interactive=True)
-            Explain_A1 = gr.Textbox('',label='回答1', visible=True,interactive=True)
 
-            Explain_Q2 = gr.Textbox('',label='有关解释的问题2', visible=True,interactive=True)
-            Explain_A2 = gr.Textbox('',label='回答2', visible=True,interactive=True)
+            return Space_Q1,Space_A1,Space_Q2,Space_A2,Space_Q3,Space_A3,Function_Q1,Function_A1,Function_Q2,Function_A2,Function_Q3,Function_A3
 
-            Situate_Q1 = gr.Textbox('',label='有关情境的问题1', visible=True,interactive=True)
-            Situate_A1 = gr.Textbox('',label='回答1', visible=True,interactive=True)
-
-            Situate_Q2 = gr.Textbox('',label='有关情境的问题2', visible=True,interactive=True)
-            Situate_A2 = gr.Textbox('',label='回答2', visible=True,interactive=True)
-
-            return Space_Q1,Space_A1,Space_Q2,Space_A2,Explain_Q1,Explain_A1,Explain_Q2,Explain_A2,Situate_Q1,Situate_A1,Situate_Q2,Situate_A2
-
-    def Q_A_gen(Space_Q1, Space_A1, Space_Q2, Space_A2, Explain_Q1, Explain_A1, Explain_Q2, Explain_A2, Situate_Q1, Situate_A1, Situate_Q2, Situate_A2,region_info):
+    def Q_A_gen(Space_Q1,Space_A1,Space_Q2,Space_A2,Space_Q3,Space_A3,Function_Q1,Function_A1,Function_Q2,Function_A2,Function_Q3,Function_A3,region_info):
         Q_A_dict = {}
+
         Q_A_dict['Space_Q1'] = Space_Q1
         Q_A_dict['Space_A1'] = Space_A1
         Q_A_dict['Space_Q2'] = Space_Q2
         Q_A_dict['Space_A2'] = Space_A2
+        Q_A_dict['Space_Q3'] = Space_Q3
+        Q_A_dict['Space_A3'] = Space_A3
 
-        Q_A_dict['Explain_Q1'] = Explain_Q1
-        Q_A_dict['Explain_A1'] = Explain_A1
-        Q_A_dict['Explain_Q2'] = Explain_Q2
-        Q_A_dict['Explain_A2'] = Explain_A2
+        Q_A_dict['Function_Q1'] = Function_Q1
+        Q_A_dict['Function_A1'] = Function_A1
+        Q_A_dict['Function_Q2'] = Function_Q2
+        Q_A_dict['Function_A2'] = Function_A2
+        Q_A_dict['Function_Q3'] = Function_Q3
+        Q_A_dict['Function_A3'] = Function_A3
 
-        Q_A_dict['Situate_Q1'] = Situate_Q1
-        Q_A_dict['Situate_A1'] = Situate_A1
-        Q_A_dict['Situate_Q2'] = Situate_Q2
-        Q_A_dict['Situate_A2'] = Situate_A2
         for key_ in Q_A_dict:
             if 'Q' in key_:
                 if (Q_A_dict[key_]=='' and Q_A_dict[key_.replace('Q','A')]!='') or (Q_A_dict[key_]!=''  and Q_A_dict[key_.replace('Q','A')]==''):
                     gr.Info('问题/答案不能只有一个不为空')
-                    return region_info,'Fail'
+                    return region_info,'生成失败\n问题/答案不能只有一个不为空'
 
         if len(region_info)>6:
             region_info[6]=Q_A_dict
@@ -412,6 +424,8 @@ with gr.Blocks() as demo:
 
         dataframe_success = True
         object_dict = list(Initial_region_info[3].keys())
+        problem_set = ['位置关系表格中的物体名称不合法','位置关系表格中的位置关系没从规定中选取','功能关系表格中的物体名称不合法','墙/地面文本格式错误']
+        problem_loc = [[],[],[],[]]
         # check for loc_relation_frame
 
         for _index in range(len(loc_relation_frame['物体A'])):
@@ -420,6 +434,11 @@ with gr.Blocks() as demo:
                 if loc_relation_frame['物体A'][_index] not in object_dict or loc_relation_frame['物体B'][
                     _index] not in object_dict or loc_relation_frame['物体A相对于物体B位置关系'][
                     _index] not in RELATIONS_tran.keys():
+                    if loc_relation_frame['物体A'][_index] not in object_dict or loc_relation_frame['物体B'][
+                    _index] not in object_dict:
+                        problem_loc[0].append(_index+1)
+                    if loc_relation_frame['物体A相对于物体B位置关系'][_index] not in RELATIONS_tran.keys():
+                        problem_loc[1].append(_index+1)
                     dataframe_success = False
 
         for _index in range(len(logic_relation_frame['物体A'])):
@@ -428,6 +447,7 @@ with gr.Blocks() as demo:
                     logic_relation_frame['物体A相对于物体B逻辑关系'][_index] == ''):
                 if logic_relation_frame['物体A'][_index] not in object_dict or logic_relation_frame['物体B'][
                     _index] not in object_dict:
+                    problem_loc[2].append(_index+1)
                     dataframe_success = False
 
 
@@ -447,19 +467,21 @@ with gr.Blocks() as demo:
         try:
             wall_list = get_arrow_item(wall_text)
             floor_list = get_arrow_item(floor_text)
+            for t in [*wall_list, *floor_list]:
+                if t not in object_dict:
+                    list_success = False
         except:
-            gr.Info('输入文本框的格式错误！！')
-
-            return region_info, 'Fail!'
-
-        for t in [*wall_list,*floor_list]:
-            if t not in object_dict:
-                list_success = False
-
+            list_success = False
 
         if not dataframe_success or not list_success:
-            gr.Info('输入表格/文本框的数据错误！！')
-            return region_info,'Fail!'
+            gr.Info('输入表格/文本框的数据格式错误,具体错误位置可在文本框查看')
+            show_info_text = '生成失败\n'
+            for i in [0,1,2]:
+                if len(problem_loc[i])>0:
+                    show_info_text+=f'{problem_set[i]},错误位置为第{problem_loc[i]}行，请修改!\n'
+            if not list_success:
+                show_info_text+= '墙/地面文本框的输入格式错误，请修改!'
+            return region_info,show_info_text
         else:
             loc_dict = {}
             log_dict = {}
@@ -516,7 +538,7 @@ with gr.Blocks() as demo:
             row_count=len(loc_relation_dict.keys()),
             col_count=(5, "fixed"),
             value=loc_relation_list,
-            visible=True,
+            visible=False,
             interactive=True
         )
         logic_relation_list = []
@@ -571,6 +593,7 @@ with gr.Blocks() as demo:
     def large_class_info_gen(large_class_frame,region_info,Initial_region_info):
 
         object_dict = list(Initial_region_info[3].keys())
+        wrong_line_set = set()
 
         dataframe_success = True
         for _index in range(len(large_class_frame['物体列表'])):
@@ -580,20 +603,25 @@ with gr.Blocks() as demo:
                 for object_ in object_list:
                     if object_ not in object_dict:
                         dataframe_success = False
+                        wrong_line_set.add(_index+1)
 
 
 
+        new_dict = {}
 
 
         if not dataframe_success:
-            gr.Info('输入表格/文本框的数据错误！！')
-            return region_info,'Fail!'
+            gr.Info('输入表格/文本框的数据格式错误,具体错误位置可在文本框查看')
+            show_info_text = '生成失败\n'
+            show_info_text += f'大类表格物体列表格式错误,错误在第{wrong_line_set}行!'
+            return region_info,show_info_text
         else:
             for _index in range(len(large_class_frame['物体列表'])):
 
                 if not (large_class_frame['物体列表'][_index] == '' and large_class_frame['描述'][_index] == ''):
                     object_tuple = tuple(large_class_frame['物体列表'][_index].split('/'))
-                    region_info[4][object_tuple] = large_class_frame['描述'][_index]
+                    new_dict[object_tuple] = large_class_frame['描述'][_index]
+        region_info[4] = new_dict
 
         return region_info,str(region_info[4])
 
@@ -645,8 +673,9 @@ with gr.Blocks() as demo:
 
         return region_feature_text
 
-    def annotation_save(scene_id,region_id,region_info,user_name,loc_relation_info,object_function_info,large_class_info,region_feature_info):
-        texts =[loc_relation_info,object_function_info,large_class_info,region_feature_info]
+    def annotation_save(scene_id,region_id,region_info,user_name,loc_relation_info,object_function_info,large_class_info,region_feature_info,Q_and_A_info):
+        texts =[loc_relation_info,object_function_info,large_class_info,region_feature_info,Q_and_A_info]
+
 
         for t in texts:
             if t==None or t=='' or t=='Fail':
@@ -655,6 +684,16 @@ with gr.Blocks() as demo:
         save_path = f'data/{scene_id}/{region_view_dir_name}/{region_id}/struction_trans_{user_name}.npy'
         np.save(save_path, region_info)
         gr.Info(f'标注已经保存到{save_path}!')
+        for d in region_info:
+            delete_key = []
+            for key_ in d.keys():
+
+                if isinstance(key_, tuple):
+                    delete_key.append(key_)
+            for key_ in delete_key:
+                d[str(key_)] = d.pop(key_)
+
+
         save_path2 = f'data/{scene_id}/{region_view_dir_name}/{region_id}/struction_trans_{user_name}.json'
         with open(save_path2, 'w', encoding='utf-8') as f:
             json.dump(region_info, f)
@@ -691,8 +730,8 @@ with gr.Blocks() as demo:
         show_image = gr.Image(label='区域场景展示')
         with gr.Column():
             loc_relation_frame = gr.DataFrame(visible=False)
-            swap_button = gr.Button('交换该行A与B')
-            delete_button = gr.Button('删除该行')
+            swap_button = gr.Button('交换该行A与B', visible=False)
+            delete_button = gr.Button('删除该行', visible=False)
             logic_relation_frame = gr.DataFrame(visible=False)
             delete_button2 = gr.Button('删除该行')
     with gr.Row():
@@ -750,27 +789,20 @@ with gr.Blocks() as demo:
     # 空间QA
     with gr.Row():
         with gr.Column():
-            Space_Q1 = gr.Textbox(label='有关空间的问题1',visible=False)
+            Space_Q1 = gr.Textbox(label='有关探索的问题1',visible=False)
             Space_A1 = gr.Textbox(label='回答1',visible=False)
-        with gr.Column():
-            Space_Q2 = gr.Textbox(label='有关空间的问题2', visible=False)
+            Space_Q2 = gr.Textbox(label='有关探索的问题2', visible=False)
             Space_A2 = gr.Textbox(label='回答2', visible=False)
-    # 解释QA
-    with gr.Row():
+            Space_Q3 = gr.Textbox(label='有关探索的问题3', visible=False)
+            Space_A3 = gr.Textbox(label='回答3', visible=False)
         with gr.Column():
-            Explain_Q1 = gr.Textbox(label='有关解释的问题1', visible=False)
-            Explain_A1 = gr.Textbox(label='回答1', visible=False)
-        with gr.Column():
-            Explain_Q2 = gr.Textbox(label='有关解释的问题2', visible=False)
-            Explain_A2 = gr.Textbox(label='回答2', visible=False)
-    # 情境QA
-    with gr.Row():
-        with gr.Column():
-            Situate_Q1 = gr.Textbox(label='有关情境的问题1', visible=False)
-            Situate_A1 = gr.Textbox(label='回答1', visible=False)
-        with gr.Column():
-            Situate_Q2 = gr.Textbox(label='有关情境的问题2', visible=False)
-            Situate_A2 = gr.Textbox(label='回答2', visible=False)
+            Function_Q1 = gr.Textbox(label='有关需求的问题1', visible=False)
+            Function_A1 = gr.Textbox(label='回答1', visible=False)
+            Function_Q2 = gr.Textbox(label='有关需求的问题2', visible=False)
+            Function_A2 = gr.Textbox(label='回答2', visible=False)
+            Function_Q3 = gr.Textbox(label='有关需求的问题3', visible=False)
+            Function_A3 = gr.Textbox(label='回答3', visible=False)
+
     Q_and_A_info = gr.Textbox(interactive=False)
     Q_and_A_gen_button = gr.Button("生成问题回答标注(每次更改完必点)")
 
@@ -788,12 +820,21 @@ with gr.Blocks() as demo:
                                 outputs=[user_name, user_name_locked])
     scene_choice.select(fn=get_region_options, inputs=[scene_choice], outputs=[region_choice])
     scene_choice.change(fn=get_region_options, inputs=[scene_choice], outputs=[region_choice])
+    region_choice.select(fn=data_process, inputs=[scene_choice,region_choice,user_name],outputs=[show_image_path,loc_relation_frame,logic_relation_frame,large_class_frame,check_id_choice,wall_text,floor_text,check_id_image,
+                                                                                       show_image,show_image_copy1,show_image_copy2,show_image_copy3,region_info,Initial_region_info,region_info_text,
+                                                                                       loc_relation_info,object_function_info,large_class_info,region_feature_info,Q_and_A_info,object_text1,object_text2,render_img])
+    region_choice.select(fn=object_function_process, inputs=[scene_choice,region_choice,user_name], outputs=object_function_text)
+    region_choice.select(fn=region_feature_process, inputs=[scene_choice, region_choice,user_name], outputs=region_feature_text)
+    region_choice.select(fn=Q_A_process,inputs=[scene_choice, region_choice,user_name], outputs=[Space_Q1,Space_A1,Space_Q2,Space_A2,Space_Q3,Space_A3,
+                                                                                                 Function_Q1,Function_A1,Function_Q2,Function_A2,Function_Q3,Function_A3])
+
     region_choice.change(fn=data_process, inputs=[scene_choice,region_choice,user_name],outputs=[show_image_path,loc_relation_frame,logic_relation_frame,large_class_frame,check_id_choice,wall_text,floor_text,check_id_image,
                                                                                        show_image,show_image_copy1,show_image_copy2,show_image_copy3,region_info,Initial_region_info,region_info_text,
                                                                                        loc_relation_info,object_function_info,large_class_info,region_feature_info,Q_and_A_info,object_text1,object_text2,render_img])
     region_choice.change(fn=object_function_process, inputs=[scene_choice,region_choice,user_name], outputs=object_function_text)
     region_choice.change(fn=region_feature_process, inputs=[scene_choice, region_choice,user_name], outputs=region_feature_text)
-    region_choice.change(fn=Q_A_process,inputs=[scene_choice, region_choice,user_name], outputs=[Space_Q1,Space_A1,Space_Q2,Space_A2,Explain_Q1,Explain_A1,Explain_Q2,Explain_A2,Situate_Q1,Situate_A1,Situate_Q2,Situate_A2])
+    region_choice.change(fn=Q_A_process,inputs=[scene_choice, region_choice,user_name], outputs=[Space_Q1,Space_A1,Space_Q2,Space_A2,Space_Q3,Space_A3,
+                                                                                                 Function_Q1,Function_A1,Function_Q2,Function_A2,Function_Q3,Function_A3])
 
     show_image.select(fn=img_change,inputs=[show_image_index,show_image_path],outputs=[show_image_index,show_image,show_image_copy1,show_image_copy2,show_image_copy3])
     show_image_copy1.select(fn=img_change,inputs=[show_image_index,show_image_path],outputs=[show_image_index,show_image,show_image_copy1,show_image_copy2,show_image_copy3])
@@ -814,7 +855,8 @@ with gr.Blocks() as demo:
     region_feature_gen_button.click(fn=reg_info_gen,inputs=[*region_feature_text,region_info],outputs=[region_info,region_feature_info])
     region_feature_reset_button.click(fn=reg_reset,inputs=[Initial_region_info],outputs=region_feature_text)
 
-    Q_and_A_gen_button.click(fn=Q_A_gen, inputs=[Space_Q1,Space_A1,Space_Q2,Space_A2,Explain_Q1,Explain_A1,Explain_Q2,Explain_A2,Situate_Q1,Situate_A1,Situate_Q2,Situate_A2,region_info],
+    Q_and_A_gen_button.click(fn=Q_A_gen, inputs=[Space_Q1,Space_A1,Space_Q2,Space_A2,Space_Q3,Space_A3,
+                                                                                                 Function_Q1,Function_A1,Function_Q2,Function_A2,Function_Q3,Function_A3,region_info],
                                  outputs=[region_info, Q_and_A_info])
 
 
@@ -856,7 +898,7 @@ with gr.Blocks() as demo:
     delete_button2.click(fn=AB_delete2, inputs=[logic_relation_frame, store_swap_index], outputs=[logic_relation_frame])
 
 
-    Save_button.click(fn=annotation_save, inputs=[scene_choice,region_choice,region_info,user_name,loc_relation_info,object_function_info,large_class_info,region_feature_info],outputs=[scene_choice,region_choice])
+    Save_button.click(fn=annotation_save, inputs=[scene_choice,region_choice,region_info,user_name,loc_relation_info,object_function_info,large_class_info,region_feature_info,Q_and_A_info],outputs=[scene_choice,region_choice])
 
 
 
