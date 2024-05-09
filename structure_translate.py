@@ -1,7 +1,7 @@
 import numpy as np
 import logging
 import os
-from object_text_anno import mmengine_track_func
+from utils.decorators import mmengine_track_func
 from strict_translate import strict_list_translate, is_chinese
 
 

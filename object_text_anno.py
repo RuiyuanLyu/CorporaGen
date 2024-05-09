@@ -3,16 +3,7 @@ import json
 from tqdm import tqdm
 from utils.openai_api import mimic_chat, mimic_chat_budget, get_content_groups_from_source_groups, num_tokens_from_string, get_full_response
 from utils.utils_read import load_json
-from functools import wraps
-
-def mmengine_track_func(func):
-    @wraps(func)
-    def wrapped_func(args):
-        result = func(*args)
-        return result
-
-    return wrapped_func
-
+from utils.decorators import mmengine_track_func
 
 def annotate_objects_by_directory(image_dir, output_dir, skip_existing=True, force_invalid=True, max_additional_attempts=0, pick_ids=None, with_highlight=True, high_detail=False):
     """

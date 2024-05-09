@@ -37,15 +37,7 @@ global TRACKED
 TRACKED = False
 
 
-def mmengine_track_func(func):
-    @wraps(func)
-    def wrapped_func(args):
-        global TRACKED
-        TRACKED = True
-        result = func(*args)
-        return result
-
-    return wrapped_func
+from utils.decorators import mmengine_track_func
 
 
 @mmengine_track_func

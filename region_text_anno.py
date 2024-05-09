@@ -229,7 +229,7 @@ def check_and_filter_json_files(raw_annos, object_ids, object_types, d_list=DESC
         return None
 
 
-from object_text_anno import mmengine_track_func
+from utils.decorators import mmengine_track_func
 
 @mmengine_track_func
 def annotate_region(scene_id, region_name, max_additional_tries=4):

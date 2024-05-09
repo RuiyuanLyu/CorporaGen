@@ -38,13 +38,7 @@ def copy_tree(src, dst):
 def contains_prefix(string, prefixes):
     return any(string.startswith(prefix) for prefix in prefixes)
 
-from functools import wraps
-def mmengine_track_func(func):
-    @wraps(func)
-    def wrapped_func(args):
-        result = func(*args)
-        return result
-    return wrapped_func
+from utils.decorators import mmengine_track_func
 
 @mmengine_track_func
 def copy_corpora_data(scene_id, model_name):
