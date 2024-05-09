@@ -180,3 +180,23 @@ def euler_angles_to_matrix(euler_angles: np.ndarray, convention: str) -> np.ndar
         for c, e in zip(convention, np.split(euler_angles, 3, axis=-1))
     ]
     return np.matmul(np.matmul(matrices[0], matrices[1]), matrices[2])
+
+def is_inside_box(points, center, size, rotation_mat):
+    """
+        Check if points are inside a 3D bounding box.
+        Args:
+            points: 3D points, numpy array of shape (n, 3).
+            center: center of the box, numpy array of shape (3, ).
+            size: size of the box, numpy array of shape (3, ).
+            rotation_mat: rotation matrix of the box, numpy array of shape (3, 3).
+        Returns:
+            Boolean array of shape (n, ) indicating if each point is inside the box.
+    """
+    assert points.shape[1] == 3, "points should be of shape (n, 3)"
+    center = np.array(center)
+    size = np.array(size)
+    rotation_mat = np.array(rotation_mat)
+    pcd_local = rotation_mat.T @ (points - center)
+    pcd_local = pcd_local / size * 2.0  # scale to [-1, 1]
+    pcd_local = abs(pcd_local)
+    return (pcd_local[:, 0] <= 1) & (pcd_local[:, 1] <= 1) & (pcd_local[:, 2] <= 1)
