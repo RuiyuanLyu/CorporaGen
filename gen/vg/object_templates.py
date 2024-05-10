@@ -28,4 +28,6 @@ OBJECT_TEMPLATES = [
     "The {fine_grained_category}, {placement}, is a blend of {material}, {texture}, and {shape} shape, perfect for {function}.",
     "Exhibiting a {texture} and {shape}, the {color} {fine_grained_category} is a {state} {material} {coarse_grained_category}, {placement} and ready for {function}.",
     "The {fine_grained_category}, with its {texture} and {shape}, is a {color} {material} masterpiece, {placement} and {size}, ideal for {function}."
+
+
 ]
