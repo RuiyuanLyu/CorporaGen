@@ -193,10 +193,12 @@ def is_inside_box(points, center, size, rotation_mat):
             Boolean array of shape (n, ) indicating if each point is inside the box.
     """
     assert points.shape[1] == 3, "points should be of shape (n, 3)"
-    center = np.array(center)
-    size = np.array(size)
+    center = np.array(center) # n, 3
+    size = np.array(size) # n, 3
     rotation_mat = np.array(rotation_mat)
-    pcd_local = rotation_mat.T @ (points - center)
-    pcd_local = pcd_local / size * 2.0  # scale to [-1, 1]
+    assert rotation_mat.shape == (3, 3), f"R should be shape (3,3), but got {rotation_mat.shape}"
+    # pcd_local = (rotation_mat.T @ (points - center).T).T  The expressions are equivalent
+    pcd_local = (points - center) @ rotation_mat # n, 3
+    pcd_local = pcd_local / size * 2.0  # scale to [-1, 1] # n, 3
     pcd_local = abs(pcd_local)
     return (pcd_local[:, 0] <= 1) & (pcd_local[:, 1] <= 1) & (pcd_local[:, 2] <= 1)
