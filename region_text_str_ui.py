@@ -8,7 +8,7 @@ import logging
 from copy import deepcopy
 
 # 最大可能包含的物品数
-MAX_OBJECT_NUM = 30
+MAX_OBJECT_NUM = 100
 
 # 区域名称映射
 REGIONS = {"起居室/会客区": "living region",
@@ -127,33 +127,36 @@ with gr.Blocks() as demo:
             gr.Info(f"场景{scene_id}暂时没有区域信息，未来会补充。请切换到其他场景。")
         return gr.Dropdown(regions, label="需要修改的区域", value=regions[0])
 
+
     def _load_region_info(scene_id, region_id, user_name):
         region_info = np.load(f'data/{scene_id}/{region_view_dir_name}/{region_id}/struction_trans.npy',
-                                  allow_pickle=True)
+                              allow_pickle=True)
         objects_orig = set(region_info[3].keys())
         if os.path.exists(f'data/{scene_id}/{region_view_dir_name}/{region_id}/struction_trans_{user_name}.npy'):
-            region_info_mod = np.load(f'data/{scene_id}/{region_view_dir_name}/{region_id}/struction_trans_{user_name}.npy',
-                                  allow_pickle=True)
+            region_info_mod = np.load(
+                f'data/{scene_id}/{region_view_dir_name}/{region_id}/struction_trans_{user_name}.npy',
+                allow_pickle=True)
+            print(region_info_mod)
             objects_mod = set(region_info_mod[3].keys())
-            if objects_mod!= objects_orig:
-                gr.Info(f"怀疑之前保存错误，没有保存修改的内容。")
+            if objects_mod != objects_orig:
+                gr.Info(f"怀疑之前保存错误，没有加载修改后的内容。")
             else:
                 region_info = region_info_mod
                 gr.Info(f"检测到标注已经修改！已加载修改后的信息")
 
-        # for i in range(len(region_info)):
-        #     if i == 2:
-        #         # skip for wall_floor_addition
-        #         continue
-        #     dict_i = region_info[i]
-        #     if isinstance(dict_i, dict):
-        #         new_dict_i = {}
-        #         for key in dict_i.keys():
-        #             if isinstance(key, str):
-        #                 new_key = eval(key)
-        #             new_dict_i[new_key] = dict_i[key]
-        #         region_info[i] = new_dict_i
+        for i in range(len(region_info)):
+            dict_i = region_info[i]
+            if isinstance(dict_i, dict):
+                new_dict_i = {}
+                for key in dict_i.keys():
+                    if isinstance(key, str) and key[0]=='(':
+                        new_key = eval(key)
+                        new_dict_i[new_key] = dict_i[key]
+                    else:
+                        new_dict_i[key]=dict_i[key]
+                region_info[i] = new_dict_i
         return region_info
+
 
     def data_process(scene_id, region_id, user_name):
         if scene_id == None or region_id == None:
@@ -168,7 +171,8 @@ with gr.Blocks() as demo:
             object_text3 = gr.Textbox(visible=False)
             object_text4 = gr.Textbox(visible=False)
             return [], loc_relation_frame, logic_relation_frame, large_class_frame, check_id_choice, wall_text, floor_text, None, None, None, None, None, [
-                {}] * 6, [{}] * 6, '请选择区域', None, None, None, None, None, object_text1, object_text2,None,object_text3,object_text4
+                {}] * 6, [
+                       {}] * 6, '请选择区域', None, None, None, None, None, object_text1, object_text2, None, object_text3, object_text4
 
         show_image_path = [f'data/{scene_id}/{region_view_dir_name}/{region_id}/' + img_file for img_file in
                            os.listdir(f'data/{scene_id}/{region_view_dir_name}/{region_id}') if img_file[-4:] == '.jpg']
@@ -179,6 +183,7 @@ with gr.Blocks() as demo:
         object_function_dict = region_info[3]
         large_class_dict = region_info[4]
         region_feature_dict = region_info[5]
+        print(region_info)
 
         loc_relation_list = []
 
@@ -255,22 +260,22 @@ with gr.Blocks() as demo:
             text_ += object_ + translate_object_type(object_) + '，'
         region_info_text = region_info_text[:-1]
 
-        info_text ='，当下面的文本涉及具体单个物体时，需要用前面的<英文名_序号>指代，例如文中出现的'
+        info_text = '，当下面的文本涉及具体单个物体时，需要用前面的<英文名_序号>指代，例如文中出现的'
         object_list = list(object_list)
 
-
         if len(object_list) > 0:
-            info_text+=translate_object_type(object_list[0])+'或'+re.sub(r'[\d<>_]', '', object_list[0].lower())+'要改成'+object_list[0]+','
-        info_text = info_text[:-1]+'，此外，原文本中可能<>里是中文也要将其改为<英文名_序号>的形式。'
+            info_text += translate_object_type(object_list[0]) + '或' + re.sub(r'[\d<>_]', '',
+                                                                              object_list[0].lower()) + '要改成' + \
+                         object_list[0] + ','
+        info_text = info_text[:-1] + '，此外，原文本中可能<>里是中文也要将其改为<英文名_序号>的形式。'
 
-        region_info_text +=info_text
-        text_ = text_[:-1]+info_text
+        region_info_text += info_text
+        text_ = text_[:-1] + info_text
 
         object_text1 = gr.Textbox(text_, visible=True, interactive=False)
         object_text2 = gr.Textbox(text_, visible=True, interactive=False)
         object_text3 = gr.Textbox(text_, visible=True, interactive=False)
         object_text4 = gr.Textbox(text_, visible=True, interactive=False)
-
 
         check_id_choice = gr.Dropdown(object_list, visible=True, interactive=True)
         render_image_path = f'data/{scene_id}/{region_view_dir_name}/{region_id}.png'
@@ -278,7 +283,8 @@ with gr.Blocks() as demo:
         return show_image_path, loc_relation_frame, logic_relation_frame, large_class_frame, check_id_choice, wall_text, floor_text, None, \
                show_image_path[0], show_image_path[0], show_image_path[0], show_image_path[0], \
                [{}, {}, {}, {}, {},
-                {}], region_info, region_info_text, None, None, None, None, None, object_text1, object_text2,  gr.update(value=render_image_path),object_text3,object_text4
+                {}], region_info, region_info_text, None, None, None, None, None, object_text1, object_text2, gr.update(
+            value=render_image_path), object_text3, object_text4
 
 
     def object_function_process(scene_id, region_id, user_name):
@@ -291,7 +297,7 @@ with gr.Blocks() as demo:
                 object_function_text.append(gr.Textbox(visible=False))
 
             return object_function_text
-        
+
         region_info = _load_region_info(scene_id, region_id, user_name)
         object_function_dict = region_info[3]
         object_function_text = []
@@ -299,6 +305,8 @@ with gr.Blocks() as demo:
             object_function_text.append(gr.Textbox(
                 label=f'{object_name}在区域的角色，请思考：位置的特殊性（我们注意到这个物体的位置原因，和这个物体的位置如何使得它与同类不同），功能的特殊性（对于区域的贡献/作用）',
                 value=object_function_dict[object_name], visible=True, interactive=True))
+        if MAX_OBJECT_NUM - len(object_function_dict.keys()) < 0:
+            gr.Warning(f"场景{scene_id}的区域{region_id}物体数量过多，请重新选择区域。")
         for _ in range(MAX_OBJECT_NUM - len(object_function_dict.keys())):
             object_function_text.append(gr.Textbox(visible=False))
         return object_function_text
@@ -355,19 +363,19 @@ with gr.Blocks() as demo:
                                   allow_pickle=True)
 
             if 'Function_A3' not in region_info[-1].keys():
-                Space_Q1 = gr.Textbox('',label='有关探索的问题1', visible=True, interactive=True)
-                Space_A1 = gr.Textbox('',label='回答1', visible=True, interactive=True)
-                Space_Q2 = gr.Textbox('',label='有关探索的问题2', visible=True, interactive=True)
-                Space_A2 = gr.Textbox('',label='回答2', visible=True, interactive=True)
-                Space_Q3 = gr.Textbox('',label='有关探索的问题3', visible=True, interactive=True)
-                Space_A3 = gr.Textbox('',label='回答3', visible=True, interactive=True)
+                Space_Q1 = gr.Textbox('', label='有关探索的问题1', visible=True, interactive=True)
+                Space_A1 = gr.Textbox('', label='回答1', visible=True, interactive=True)
+                Space_Q2 = gr.Textbox('', label='有关探索的问题2', visible=True, interactive=True)
+                Space_A2 = gr.Textbox('', label='回答2', visible=True, interactive=True)
+                Space_Q3 = gr.Textbox('', label='有关探索的问题3', visible=True, interactive=True)
+                Space_A3 = gr.Textbox('', label='回答3', visible=True, interactive=True)
 
-                Function_Q1 = gr.Textbox('',label='有关需求的问题1', visible=True, interactive=True)
-                Function_A1 = gr.Textbox('',label='回答1', visible=True, interactive=True)
-                Function_Q2 = gr.Textbox('',label='有关需求的问题2', visible=True, interactive=True)
-                Function_A2 = gr.Textbox('',label='回答2', visible=True, interactive=True)
-                Function_Q3 = gr.Textbox('',label='有关需求的问题3', visible=True, interactive=True)
-                Function_A3 = gr.Textbox('',label='回答3', visible=True, interactive=True)
+                Function_Q1 = gr.Textbox('', label='有关需求的问题1', visible=True, interactive=True)
+                Function_A1 = gr.Textbox('', label='回答1', visible=True, interactive=True)
+                Function_Q2 = gr.Textbox('', label='有关需求的问题2', visible=True, interactive=True)
+                Function_A2 = gr.Textbox('', label='回答2', visible=True, interactive=True)
+                Function_Q3 = gr.Textbox('', label='有关需求的问题3', visible=True, interactive=True)
+                Function_A3 = gr.Textbox('', label='回答3', visible=True, interactive=True)
 
                 return Space_Q1, Space_A1, Space_Q2, Space_A2, Space_Q3, Space_A3, Function_Q1, Function_A1, Function_Q2, Function_A2, Function_Q3, Function_A3
 
@@ -392,19 +400,19 @@ with gr.Blocks() as demo:
 
 
         else:
-            Space_Q1 = gr.Textbox('',label='有关探索的问题1', visible=True, interactive=True)
-            Space_A1 = gr.Textbox('',label='回答1', visible=True, interactive=True)
-            Space_Q2 = gr.Textbox('',label='有关探索的问题2', visible=True, interactive=True)
-            Space_A2 = gr.Textbox('',label='回答2', visible=True, interactive=True)
-            Space_Q3 = gr.Textbox('',label='有关探索的问题3', visible=True, interactive=True)
-            Space_A3 = gr.Textbox('',label='回答3', visible=True, interactive=True)
+            Space_Q1 = gr.Textbox('', label='有关探索的问题1', visible=True, interactive=True)
+            Space_A1 = gr.Textbox('', label='回答1', visible=True, interactive=True)
+            Space_Q2 = gr.Textbox('', label='有关探索的问题2', visible=True, interactive=True)
+            Space_A2 = gr.Textbox('', label='回答2', visible=True, interactive=True)
+            Space_Q3 = gr.Textbox('', label='有关探索的问题3', visible=True, interactive=True)
+            Space_A3 = gr.Textbox('', label='回答3', visible=True, interactive=True)
 
-            Function_Q1 = gr.Textbox('',label='有关需求的问题1', visible=True, interactive=True)
-            Function_A1 = gr.Textbox('',label='回答1', visible=True, interactive=True)
-            Function_Q2 = gr.Textbox('',label='有关需求的问题2', visible=True, interactive=True)
-            Function_A2 = gr.Textbox('',label='回答2', visible=True, interactive=True)
-            Function_Q3 = gr.Textbox('',label='有关需求的问题3', visible=True, interactive=True)
-            Function_A3 = gr.Textbox('',label='回答3', visible=True, interactive=True)
+            Function_Q1 = gr.Textbox('', label='有关需求的问题1', visible=True, interactive=True)
+            Function_A1 = gr.Textbox('', label='回答1', visible=True, interactive=True)
+            Function_Q2 = gr.Textbox('', label='有关需求的问题2', visible=True, interactive=True)
+            Function_A2 = gr.Textbox('', label='回答2', visible=True, interactive=True)
+            Function_Q3 = gr.Textbox('', label='有关需求的问题3', visible=True, interactive=True)
+            Function_A3 = gr.Textbox('', label='回答3', visible=True, interactive=True)
 
             return Space_Q1, Space_A1, Space_Q2, Space_A2, Space_Q3, Space_A3, Function_Q1, Function_A1, Function_Q2, Function_A2, Function_Q3, Function_A3
 
@@ -722,6 +730,7 @@ with gr.Blocks() as demo:
     def _is_fail(t):
         return t == None or t == '' or t == 'Fail'
 
+
     def _save(region_info, user_name, scene_id, region_id):
         save_path = f'data/{scene_id}/{region_view_dir_name}/{region_id}/struction_trans_{user_name}.npy'
         np.save(save_path, region_info)
@@ -743,6 +752,7 @@ with gr.Blocks() as demo:
         logging.warning(f'标注已经保存到{save_path}.')
         # gr.Info(f'标注已经保存到{save_path2}!')
         return scene_id, region_id
+
 
     def annotation_save(scene_id, region_id, region_info, user_name, loc_relation_info, object_function_info,
                         large_class_info, region_feature_info, Q_and_A_info, Initial_region_info):
@@ -772,8 +782,9 @@ with gr.Blocks() as demo:
         _save(region_info, user_name, scene_id, region_id)
         return scene_id, region_id
 
+
     def annotation_save_final(scene_id, region_id, region_info, user_name, loc_relation_info, object_function_info,
-                        large_class_info, region_feature_info, Q_and_A_info):
+                              large_class_info, region_feature_info, Q_and_A_info):
 
         texts = [loc_relation_info, object_function_info, large_class_info, region_feature_info, Q_and_A_info]
         fails = [_is_fail(t) for t in texts]
@@ -783,6 +794,7 @@ with gr.Blocks() as demo:
             return scene_id, region_id
         else:
             return _save(region_info, user_name, scene_id, region_id)
+
 
     ###############################################################################################3
     ## UI definition here
@@ -803,6 +815,7 @@ with gr.Blocks() as demo:
     with gr.Row():
         scene_choice = gr.Dropdown(SCENE_LIST, label="需要修改的场景")
         region_choice = gr.Dropdown(['测试区域'], label="需要修改的区域", allow_custom_value=True)
+        force_refresh_region_btn = gr.Button(value="强制刷新区域信息", label="强制刷新")
 
     render_img = gr.Image(label='区域俯视图')
     region_info_text = gr.Textbox(label="区域信息", value="请选择区域")
@@ -876,7 +889,6 @@ with gr.Blocks() as demo:
         temp_save_button_4 = gr.Button("暂存当前标注")
     object_text2 = gr.Textbox(visible=False)
 
-
     # 空间QA
     with gr.Row():
         with gr.Column():
@@ -908,18 +920,18 @@ with gr.Blocks() as demo:
                                 outputs=[user_name, user_name_locked])
     scene_choice.select(fn=get_region_options, inputs=[scene_choice], outputs=[region_choice])
     scene_choice.change(fn=get_region_options, inputs=[scene_choice], outputs=[region_choice])
-    region_choice.select(fn=data_process, inputs=[scene_choice, region_choice, user_name],
+    force_refresh_region_btn.click(fn=data_process, inputs=[scene_choice, region_choice, user_name],
                          outputs=[show_image_path, loc_relation_frame, logic_relation_frame, large_class_frame,
                                   check_id_choice, wall_text, floor_text, check_id_image,
                                   show_image, show_image_copy1, show_image_copy2, show_image_copy3, region_info,
                                   Initial_region_info, region_info_text,
                                   loc_relation_info, object_function_info, large_class_info, region_feature_info,
-                                  Q_and_A_info, object_text1, object_text2,render_img,object_text3,object_text4])
-    region_choice.select(fn=object_function_process, inputs=[scene_choice, region_choice, user_name],
+                                  Q_and_A_info, object_text1, object_text2, render_img, object_text3, object_text4])
+    force_refresh_region_btn.click(fn=object_function_process, inputs=[scene_choice, region_choice, user_name],
                          outputs=object_function_text)
-    region_choice.select(fn=region_feature_process, inputs=[scene_choice, region_choice, user_name],
+    force_refresh_region_btn.click(fn=region_feature_process, inputs=[scene_choice, region_choice, user_name],
                          outputs=region_feature_text)
-    region_choice.select(fn=Q_A_process, inputs=[scene_choice, region_choice, user_name],
+    force_refresh_region_btn.click(fn=Q_A_process, inputs=[scene_choice, region_choice, user_name],
                          outputs=[Space_Q1, Space_A1, Space_Q2, Space_A2, Space_Q3, Space_A3,
                                   Function_Q1, Function_A1, Function_Q2, Function_A2, Function_Q3, Function_A3])
 
@@ -929,7 +941,7 @@ with gr.Blocks() as demo:
                                   show_image, show_image_copy1, show_image_copy2, show_image_copy3, region_info,
                                   Initial_region_info, region_info_text,
                                   loc_relation_info, object_function_info, large_class_info, region_feature_info,
-                                  Q_and_A_info, object_text1, object_text2, render_img,object_text3,object_text4])
+                                  Q_and_A_info, object_text1, object_text2, render_img, object_text3, object_text4])
     region_choice.change(fn=object_function_process, inputs=[scene_choice, region_choice, user_name],
                          outputs=object_function_text)
     region_choice.change(fn=region_feature_process, inputs=[scene_choice, region_choice, user_name],
@@ -1019,21 +1031,25 @@ with gr.Blocks() as demo:
     delete_button2.click(fn=AB_delete2, inputs=[logic_relation_frame, store_swap_index], outputs=[logic_relation_frame])
 
     temp_save_button_1.click(fn=annotation_save,
-                          inputs=[scene_choice, region_choice, region_info, user_name, loc_relation_info,
-                              object_function_info, large_class_info, region_feature_info, Q_and_A_info,Initial_region_info],
-                      outputs=[scene_choice, region_choice])
+                             inputs=[scene_choice, region_choice, region_info, user_name, loc_relation_info,
+                                     object_function_info, large_class_info, region_feature_info, Q_and_A_info,
+                                     Initial_region_info],
+                             outputs=[scene_choice, region_choice])
     temp_save_button_2.click(fn=annotation_save,
-                          inputs=[scene_choice, region_choice, region_info, user_name, loc_relation_info,
-                              object_function_info, large_class_info, region_feature_info, Q_and_A_info,Initial_region_info],
-                      outputs=[scene_choice, region_choice])
+                             inputs=[scene_choice, region_choice, region_info, user_name, loc_relation_info,
+                                     object_function_info, large_class_info, region_feature_info, Q_and_A_info,
+                                     Initial_region_info],
+                             outputs=[scene_choice, region_choice])
     temp_save_button_3.click(fn=annotation_save,
-                          inputs=[scene_choice, region_choice, region_info, user_name, loc_relation_info,
-                              object_function_info, large_class_info, region_feature_info, Q_and_A_info,Initial_region_info],
-                      outputs=[scene_choice, region_choice])
+                             inputs=[scene_choice, region_choice, region_info, user_name, loc_relation_info,
+                                     object_function_info, large_class_info, region_feature_info, Q_and_A_info,
+                                     Initial_region_info],
+                             outputs=[scene_choice, region_choice])
     temp_save_button_4.click(fn=annotation_save,
-                          inputs=[scene_choice, region_choice, region_info, user_name, loc_relation_info,
-                              object_function_info, large_class_info, region_feature_info, Q_and_A_info,Initial_region_info],
-                      outputs=[scene_choice, region_choice])
+                             inputs=[scene_choice, region_choice, region_info, user_name, loc_relation_info,
+                                     object_function_info, large_class_info, region_feature_info, Q_and_A_info,
+                                     Initial_region_info],
+                             outputs=[scene_choice, region_choice])
 
     Save_button.click(fn=annotation_save_final,
                       inputs=[scene_choice, region_choice, region_info, user_name, loc_relation_info,
