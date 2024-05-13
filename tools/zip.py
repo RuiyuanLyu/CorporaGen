@@ -36,3 +36,14 @@ for i in range(num_batches):
             tar.add(folder, arcname=os.path.basename(folder))
     print(f'Batch {i+1} of {num_batches} completed.')   
 
+def tar_folders(folders_to_tar, tar_name):
+    with tarfile.open(tar_name, 'w:gz') as tarf:  
+        for folder_path in folders_to_tar:
+            if os.path.isdir(folder_path):
+                tarf.add(folder_path, arcname=os.path.basename(folder_path))
+
+src_dir = "/mnt/petrelfs/share_data/lvruiyuan/pcd_data"
+for dataset in ["scannet", "matterport3d", "3rscan"]:
+    tar_name = os.path.join(output_dir, f"{dataset}.tar.gz")
+    folders_to_tar = [os.path.join(src_dir, dataset, d) for d in os.listdir(os.path.join(src_dir, dataset)) if os.path.isdir(os.path.join(src_dir, dataset, d))][:20]
+    tar_folders(folders_to_tar, tar_name)
