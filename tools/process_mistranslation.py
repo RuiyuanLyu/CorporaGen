@@ -24,7 +24,8 @@ def process_string(string:str, objects_with_ids:list[str]) -> str:
     """
     for obj in objects_with_ids:
         # obj must be in the format of "<typeEN_id>""
-        assert check_object_with_ids(obj)
+        if not check_object_with_ids(obj):
+            continue
         obj_type_en, obj_id = obj.strip("<>").split("_")
         obj_type_cn = OBJ_EN2CN[obj_type_en]
         pattern = rf'<[^<>]+_{obj_id}>'
