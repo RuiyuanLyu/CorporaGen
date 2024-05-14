@@ -242,7 +242,10 @@ def annotate_region(scene_id, region_name, max_additional_tries=4):
     region_dir = os.path.join('data', scene_id, REGION_VIEW_DIR_NAME, region_name)
     if os.path.exists(os.path.join(region_dir, 'struction.npy')):
         # already annotated
-        return
+        # return None
+        data = np.load(os.path.join(region_dir,'struction.npy'), allow_pickle=True)
+        if data.any():
+            return None
 
     image_paths = [os.path.join(region_dir, img_name) for img_name in os.listdir(region_dir) if
                    img_name[-4:] == '.jpg']
@@ -293,7 +296,8 @@ if __name__ == "__main__":
                                                "3rscan_infos_test_MDJH_aligned_full_10_visible.pkl",
                                                "matterport3d_infos_test_full_10_visible.pkl"])
     scene_ids = os.listdir(DATA_ROOT)
-    scene_ids = [scene_id for scene_id in scene_ids if scene_id.startswith('scene') or scene_id.startswith('1mp3d')]
+    # scene_ids = [scene_id for scene_id in scene_ids if scene_id.startswith('scene') or scene_id.startswith('1mp3d')]
+    scene_ids = [scene_id for scene_id in scene_ids if scene_id.startswith('3rscan')]
     scene_ids = sorted(scene_ids)
     # scene_ids = scene_ids[:2]
     tasks = []
