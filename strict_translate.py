@@ -17,7 +17,14 @@ def is_english(text):
         return True
     else:
         return False
-def is_lang(text, lang):
+def is_empty(text):
+    if not text:
+        return True
+    return not text.strip('"').strip("'").strip()
+
+def is_lang(text:str, lang:str, allow_empty=True):
+    if is_empty(text):
+        return allow_empty
     if lang.lower()=="english":
         return is_english(text)
     elif lang.lower()=="chinese":
@@ -104,10 +111,10 @@ def strict_list_translate_part(texts,src_lang="English", tgt_lang="Chinese",max_
 
         if len(texts_out)!=len(texts):
             success = False
-        if tgt_lang =="Chinese":
-            all_chinese = all([is_chinese(text) for text in texts_out])
-            if not all_chinese:
-                success = False
+        all_in_tgt_lang = all([is_lang(text, tgt_lang) for text in texts_out])
+        if not all_in_tgt_lang:
+            print(texts_out)
+            success = False
     if success:
         return texts_out,_try
     else:
