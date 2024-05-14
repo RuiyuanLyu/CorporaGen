@@ -23,7 +23,7 @@ QUESTIONS = {
 }
 KEYS = ["category", "appearance", "material", "size", "state", "position", "placement", "special_function", "other_features"] # Manually sorted and removed "meta"
 DATA_ROOT = "data"
-SUPER_USERNAMES = ["openrobotlab", "lvruiyuan", "test"]
+SUPER_USERNAMES = ["openrobotlab", "lvruiyuan", "test", "yanshou"]
 
 VALID_MODEL_CORPORAS = ["corpora_object_cogvlm_crop", "corpora_object_gpt4v_crop", "corpora_object_gpt4v_paint_highdetail", "corpora_object_XComposer2_crop", "corpora_object_InternVL-Chat-V1-2-Plus_crop"]
 DEFAULT_SAVE_STR = "corpora_object"
@@ -97,6 +97,7 @@ with gr.Blocks() as demo:
             for i in range(max_textboxes):
                 t = gr.Textbox(f"拆分后的描述 {i}", visible=False)
                 textboxes.append(t)
+            update_btn = gr.Button(value="确认物体标注", visible=True)
             save_btn = gr.Button(value="保存物体标注", visible=False)
             next_btn = gr.Button(value="下一个物体", visible=True)
 
@@ -384,7 +385,8 @@ with gr.Blocks() as demo:
         return gr.Textbox(label="Preview Annotation", value=value, visible=False, interactive=False)
     for t in textboxes:
         t.change(fn=update_preview_description, inputs=[*textboxes], outputs=preview_description)
-    save_btn.click(fn=update_preview_description, inputs=[*textboxes], outputs=preview_description)
+    update_btn.click(fn=update_preview_description, inputs=[*textboxes], outputs=preview_description)
+    # save_btn.click(fn=update_preview_description, inputs=[*textboxes], outputs=preview_description)
 
     def save_annotations(directory, supp_corpora, supp_activated, do_record_corpora_source_in_dir_name, user_name,  previous_user, object_name, core_question, core_question2, preview_description, *questions_radio):
         """
