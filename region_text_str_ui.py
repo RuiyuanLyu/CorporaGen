@@ -6,7 +6,7 @@ import numpy as np
 import json
 import logging
 from copy import deepcopy
-
+from tools.process_mistranslation import process_mistranslation
 # 最大可能包含的物品数
 MAX_OBJECT_NUM = 100
 
@@ -155,6 +155,7 @@ with gr.Blocks() as demo:
                     else:
                         new_dict_i[key]=dict_i[key]
                 region_info[i] = new_dict_i
+        region_info = process_mistranslation(region_info)
         return region_info
 
 
