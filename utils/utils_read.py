@@ -200,6 +200,34 @@ def get_scene_prefix(path):
     else:
         return ""
 
+def read_type2int(path):
+    with open(path, "rb") as f:
+        data = np.load(f, allow_pickle=True)
+    metainfo = data["metainfo"]
+    object_type_to_int = metainfo["categories"]
+    return object_type_to_int
+
+def read_scene_id_mapping(mode):
+    assert mode in ["mp3d", "3rscan"]  # scannet do not need this mapping
+    fname = f"/mnt/petrelfs/lvruiyuan/embodiedscan_infos/{mode}_mapping.json"
+    with open(fname, "r") as f:
+        mapping = json.load(f)
+    return mapping
+
+def apply_mapping_to_keys(d, mappings):
+    """
+    Args:
+        d: a dictionary
+        mappings: dictionary(s) of mappings, e.g. {"old_key1": "new_key1", "old_key2": "new_key2"}
+    Returns:
+        a new dictionary with keys changed according to mappings
+    """
+    if not isinstance(mappings, list):
+        mappings = [mappings]
+    for mapping in mappings:
+       d = {mapping.get(k, k): v for k, v in d.items()}
+    return d         
+
 def read_annotation_pickle(path, show_progress=True):
     """
     Returns: A dictionary. Format. scene_id : (bboxes, object_ids, object_types, visible_view_object_dict, extrinsics_c2w, axis_align_matrix, intrinsics, image_paths)
