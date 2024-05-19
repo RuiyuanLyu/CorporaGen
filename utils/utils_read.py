@@ -210,6 +210,8 @@ def read_type2int(path):
 def read_scene_id_mapping(mode):
     assert mode in ["mp3d", "3rscan"]  # scannet do not need this mapping
     fname = f"/mnt/petrelfs/lvruiyuan/embodiedscan_infos/{mode}_mapping.json"
+    if not os.path.exists(fname):
+        fname = f"D:/Projects/corpora_local/scene_mappings/{mode}_mapping.json"
     with open(fname, "r") as f:
         mapping = json.load(f)
     return mapping
@@ -337,8 +339,96 @@ def read_annotation_pickles(paths):
         output_data.update(data)
     output_data = dict(sorted(output_data.items()))
     return output_data
-        
+
+RAW2NUM_3RSCAN = read_scene_id_mapping("3rscan")
+NUM2RAW_3RSCAN = {v: k for k, v in RAW2NUM_3RSCAN.items()}
+RAW2NUM_MP3D = read_scene_id_mapping("mp3d")
+NUM2RAW_MP3D = {v: k for k, v in RAW2NUM_MP3D.items()}
+
+
+def sample_idx_to_scene_id(sample_idx):
+    """
+        sample index follows the "raw" rule, directly downloaded from the internet.
+        scene_id follows the "num"bered rule, used in the dataset.
+    """
+    is_scannet = "scannet" in sample_idx
+    is_3rscan = "3rscan" in sample_idx
+    is_mp3d = "mp3d" in sample_idx or "matterport" in sample_idx
+    assert is_scannet + is_3rscan + is_mp3d == 1, f"Invalid sample_idx {sample_idx}"
+    if is_scannet:
+        scene_id = sample_idx.split("/")[-1]
+    elif is_3rscan:
+        raw_id = sample_idx.split("/")[-1]
+        scene_id = RAW2NUM_3RSCAN[raw_id]
+    elif is_mp3d:
+        _, raw_id, region_id = sample_idx.split("/")
+        scene_id = RAW2NUM_MP3D[raw_id]
+        scene_id = f"{scene_id}_{region_id}"
+    return scene_id
+
+def scene_id_to_sample_idx(scene_id):
+    is_scannet = "scannet" in scene_id
+    is_3rscan = "3rscan" in scene_id
+    is_mp3d = "mp3d" in scene_id
+    assert is_scannet + is_3rscan + is_mp3d == 1, f"Invalid scene_id {scene_id}"
+    if is_scannet:
+        sample_idx = f"scannet/{scene_id}"
+    elif is_3rscan:
+        raw_id = NUM2RAW_3RSCAN[scene_id]
+        sample_idx = f"3rscan/{raw_id}"
+    elif is_mp3d:
+        scene_id, region_id = scene_id.split("_")
+        raw_id = NUM2RAW_MP3D[scene_id]
+        sample_idx = f"mp3d/{raw_id}/{region_id}"
+    return sample_idx
+
+def read_es_info(path, show_progress=True, count_type_from_zero=False):
+    data = np.load(path, allow_pickle=True)
+    data_list = data["data_list"]
+    object_type_to_int = data["metainfo"]["categories"]
+    object_int_to_type = {v: k for k, v in object_type_to_int.items()}
+    output_data = {}
+    pbar = tqdm(data_list) if show_progress else data_list
+    for data in pbar:
+        if "sample_idx" in data:
+            sample_idx = data["sample_idx"]
+            scene_id = sample_idx_to_scene_id(sample_idx)
+        elif "scene_id" in data:
+            scene_id = data["scene_id"]
+            sample_idx = scene_id_to_sample_idx(scene_id)
+        else:
+            raise ValueError(f"Invalid data file {path}")
+        bboxes, object_ids, object_types_int, object_types = [], [], [], []
+        for inst in data["instances"]:
+            bbox_label_3d = inst["bbox_label_3d"]
+            object_type = object_int_to_type[bbox_label_3d]
+            bbox_label_3d -= 1 if count_type_from_zero else 0
+
+            bboxes.append(inst["bbox_3d"])
+            object_ids.append(inst["bbox_id"])
+            object_types_int.append(bbox_label_3d)
+            object_types.append(object_type)
+
+        output_data[scene_id] = {
+            "scene_id": scene_id,
+            "sample_idx": sample_idx,
+            "bboxes": bboxes,
+            "object_ids": object_ids,
+            "object_types": object_types,
+            "object_types_int": object_types_int,
+        }
+    return output_data
+
+def read_es_infos(paths, show_progress=True, count_type_from_zero=False):
+    output_data = {}
+    if isinstance(paths, str):
+        paths = [paths]
+    for path in paths:
+        data = read_es_info(path, show_progress, count_type_from_zero)
+        output_data.update(data)
+    return output_data
 
 if __name__ == "__main__":
-    pickle_file = "./example_data/embodiedscan_infos_val_full.pkl"
-    read_annotation_pickle(pickle_file)
+    pickle_file = "D:\Projects\shared_data\embodiedscan_infos\competition_ver\embodiedscan_infos_val.pkl"
+    read_es_infos(pickle_file)
+    # read_annotation_pickle(pickle_file)
