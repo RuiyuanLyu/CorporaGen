@@ -202,3 +202,48 @@ def is_inside_box(points, center, size, rotation_mat):
     pcd_local = pcd_local / size * 2.0  # scale to [-1, 1] # n, 3
     pcd_local = abs(pcd_local)
     return (pcd_local[:, 0] <= 1) & (pcd_local[:, 1] <= 1) & (pcd_local[:, 2] <= 1)
+
+import open3d as o3d
+
+def is_inside_box_open3d(points, center, size, rotation_mat):
+    """
+        We have verified that the two functions are equivalent.
+        but the first one is faster.
+    """
+    obb = o3d.geometry.OrientedBoundingBox()
+    obb.center = center
+    obb.extent = size
+    obb.R = rotation_mat
+    points_o3d = o3d.utility.Vector3dVector(points)
+    point_indices_within_box = obb.get_point_indices_within_bounding_box(points_o3d)
+    ret = np.zeros(points.shape[0], dtype=bool)
+    ret[point_indices_within_box] = True
+    return ret
+
+def compute_bbox_from_points(points):
+    points = np.array(points).astype(np.float32)
+    assert points.shape[1] == 3, f"points should be of shape (n, 3), but got {points.shape}"
+    o3dpoints = o3d.utility.Vector3dVector(points)
+    obb = o3d.geometry.OrientedBoundingBox.create_from_points(o3dpoints)
+
+    center = obb.center
+    size = obb.extent
+    rotation = obb.R
+
+    points_to_check = center + (points - center)*(1.0-1e-6) # add a small epsilon to avoid numerical issues
+    mask = is_inside_box(points_to_check, center, size, rotation)
+    # mask2 = is_inside_box_open3d(points, center, size, rotation)
+    # assert (mask == mask2).all(), "mask is different from mask2"
+    # assert mask2.all(), (center, size, rotation)
+    assert mask.all(), (center, size, rotation)
+
+    return center, size, rotation
+
+if __name__ == '__main__':
+    from tqdm import tqdm
+    for i in tqdm(range(100)):
+        points = np.random.rand(10, 3) * 10 - 5
+        center, size, rotation = compute_bbox_from_points(points)
+        # print(f"center: {center}")
+        # print(f"size: {size}")
+        # print(f"rotation: {rotation}")
