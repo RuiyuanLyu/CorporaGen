@@ -370,7 +370,7 @@ def sample_idx_to_scene_id(sample_idx):
     return scene_id
 
 def scene_id_to_sample_idx(scene_id):
-    is_scannet = "scannet" in scene_id
+    is_scannet = "scene" in scene_id
     is_3rscan = "3rscan" in scene_id
     is_mp3d = "mp3d" in scene_id
     assert is_scannet + is_3rscan + is_mp3d == 1, f"Invalid scene_id {scene_id}"
@@ -380,9 +380,9 @@ def scene_id_to_sample_idx(scene_id):
         raw_id = NUM2RAW_3RSCAN[scene_id]
         sample_idx = f"3rscan/{raw_id}"
     elif is_mp3d:
-        scene_id, region_id = scene_id.split("_")
+        scene_id, region_id = scene_id.split("_region")
         raw_id = NUM2RAW_MP3D[scene_id]
-        sample_idx = f"mp3d/{raw_id}/{region_id}"
+        sample_idx = f"mp3d/{raw_id}/region{region_id}"
     return sample_idx
 
 def read_es_info(path, show_progress=True, count_type_from_zero=False):
@@ -396,11 +396,9 @@ def read_es_info(path, show_progress=True, count_type_from_zero=False):
         if "sample_idx" in data:
             sample_idx = data["sample_idx"]
             scene_id = sample_idx_to_scene_id(sample_idx)
-        elif "scene_id" in data:
-            scene_id = data["scene_id"]
-            sample_idx = scene_id_to_sample_idx(scene_id)
         else:
-            raise ValueError(f"Invalid data file {path}")
+            scene_id = data["images"][0]["img_path"].split("/")[-2]  # str
+            sample_idx = scene_id_to_sample_idx(scene_id)
         bboxes, object_ids, object_types_int, object_types = [], [], [], []
         for inst in data["instances"]:
             bbox_label_3d = inst["bbox_label_3d"]
@@ -432,6 +430,7 @@ def read_es_infos(paths, show_progress=True, count_type_from_zero=False):
     return output_data
 
 if __name__ == "__main__":
-    pickle_file = "D:\Projects\shared_data\embodiedscan_infos\competition_ver\embodiedscan_infos_val.pkl"
+    # pickle_file = "D:\Projects\shared_data\embodiedscan_infos\competition_ver\embodiedscan_infos_val.pkl"
+    pickle_file = "D:\Projects\shared_data\embodiedscan_infos\embodiedscan_infos_val_full.pkl"
     read_es_infos(pickle_file)
     # read_annotation_pickle(pickle_file)
