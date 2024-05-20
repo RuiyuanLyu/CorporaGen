@@ -284,6 +284,7 @@ def read_annotation_pickle(path, show_progress=True):
             object_ids.append(bbox_id)
         bboxes = np.array(bboxes)
         object_ids = np.array(object_ids)
+        object_type_ints = np.array(object_type_ints)
 
         visible_view_object_dict = {}
         extrinsics_c2w = []
@@ -408,6 +409,10 @@ def read_es_info(path, show_progress=True, count_type_from_zero=False):
             object_ids.append(inst["bbox_id"])
             object_types_int.append(bbox_label_3d)
             object_types.append(object_type)
+
+        bboxes = np.array(bboxes)
+        object_ids = np.array(object_ids)
+        object_types_int = np.array(object_types_int)
 
         output_data[scene_id] = {
             "scene_id": scene_id,
