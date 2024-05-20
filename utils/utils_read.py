@@ -270,6 +270,7 @@ def read_annotation_pickle(path, show_progress=True):
         bboxes = []
         object_ids = []
         object_types = []
+        object_type_ints = []
         for object_idx in range(len(instances)):
             bbox_3d = instances[object_idx]["bbox_3d"]  # list of 9 values
             bbox_label_3d = instances[object_idx]["bbox_label_3d"]  # int
@@ -277,6 +278,7 @@ def read_annotation_pickle(path, show_progress=True):
             object_type = object_int_to_type[bbox_label_3d]
             # if object_type in EXCLUDED_OBJECTS:
             #     continue
+            object_type_ints.append(bbox_label_3d)
             object_types.append(object_type)
             bboxes.append(bbox_3d)
             object_ids.append(bbox_id)
@@ -315,6 +317,7 @@ def read_annotation_pickle(path, show_progress=True):
             "bboxes": bboxes,
             "object_ids": object_ids,
             "object_types": object_types,
+            "object_type_ints": object_type_ints,
             "visible_view_object_dict": visible_view_object_dict,
             "extrinsics_c2w": extrinsics_c2w,
             "axis_align_matrix": axis_align_matrix,
