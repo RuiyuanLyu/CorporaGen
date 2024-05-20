@@ -404,7 +404,6 @@ def read_es_info(path, show_progress=True, count_type_from_zero=False):
             bbox_label_3d = inst["bbox_label_3d"]
             object_type = object_int_to_type[bbox_label_3d]
             bbox_label_3d -= 1 if count_type_from_zero else 0
-
             bboxes.append(inst["bbox_3d"])
             object_ids.append(inst["bbox_id"])
             object_types_int.append(bbox_label_3d)
@@ -416,7 +415,7 @@ def read_es_info(path, show_progress=True, count_type_from_zero=False):
             "bboxes": bboxes,
             "object_ids": object_ids,
             "object_types": object_types,
-            "object_types_int": object_types_int,
+            "object_type_ints": object_types_int,
         }
     return output_data
 
