@@ -350,6 +350,22 @@ RAW2NUM_MP3D = read_scene_id_mapping("mp3d")
 NUM2RAW_MP3D = {v: k for k, v in RAW2NUM_MP3D.items()}
 
 
+def is_sample_idx(name):
+    is_scannet = "scene" in name
+    is_3rscan = "3rscan" in name
+    is_mp3d = "mp3d" in name
+    assert is_scannet + is_3rscan + is_mp3d == 1, f"Invalid name {name}"
+    length = len(name.split("/"))
+    return length >= 2
+
+def is_scene_id(name):
+    is_scannet = "scene" in name
+    is_3rscan = "3rscan" in name
+    is_mp3d = "mp3d" in name
+    assert is_scannet + is_3rscan + is_mp3d == 1, f"Invalid name {name}"
+    length = len(name.split("/"))
+    return length == 1
+
 def sample_idx_to_scene_id(sample_idx):
     """
         sample index follows the "raw" rule, directly downloaded from the internet.
@@ -385,6 +401,18 @@ def scene_id_to_sample_idx(scene_id):
         raw_id = NUM2RAW_MP3D[scene_id]
         sample_idx = f"mp3d/{raw_id}/region{region_id}"
     return sample_idx
+
+def to_scene_id(name):
+    if is_scene_id(name):
+        return name
+    else:
+        return sample_idx_to_scene_id(name)
+    
+def to_sample_idx(name):
+    if is_sample_idx(name):
+        return name
+    else:
+        return scene_id_to_sample_idx(name)
 
 def read_es_info(path, show_progress=True, count_type_from_zero=False):
     data = np.load(path, allow_pickle=True)
