@@ -350,19 +350,24 @@ RAW2NUM_MP3D = read_scene_id_mapping("mp3d")
 NUM2RAW_MP3D = {v: k for k, v in RAW2NUM_MP3D.items()}
 
 
-def is_sample_idx(name):
-    is_scannet = "scene" in name
+def is_valid_name(name):
+    is_scannet = "scene" in name or "scannet" in name
     is_3rscan = "3rscan" in name
-    is_mp3d = "mp3d" in name
-    assert is_scannet + is_3rscan + is_mp3d == 1, f"Invalid name {name}"
+    is_mp3d = "mp3d" in name or "matterport" in name
+    is_valid = is_scannet + is_3rscan + is_mp3d == 1
+    if not is_valid:
+        print(f"Invalid name {name}")
+    return is_valid
+
+def is_sample_idx(name):
+    if not is_valid_name(name):
+        return False
     length = len(name.split("/"))
     return length >= 2
 
 def is_scene_id(name):
-    is_scannet = "scene" in name
-    is_3rscan = "3rscan" in name
-    is_mp3d = "mp3d" in name
-    assert is_scannet + is_3rscan + is_mp3d == 1, f"Invalid name {name}"
+    if not is_valid_name(name):
+        return False
     length = len(name.split("/"))
     return length == 1
 
@@ -403,16 +408,10 @@ def scene_id_to_sample_idx(scene_id):
     return sample_idx
 
 def to_scene_id(name):
-    if is_scene_id(name):
-        return name
-    else:
-        return sample_idx_to_scene_id(name)
+    return name if is_scene_id(name) else sample_idx_to_scene_id(name)
     
 def to_sample_idx(name):
-    if is_sample_idx(name):
-        return name
-    else:
-        return scene_id_to_sample_idx(name)
+    return name if is_sample_idx(name) else scene_id_to_sample_idx(name)
 
 def read_es_info(path, show_progress=True, count_type_from_zero=False):
     data = np.load(path, allow_pickle=True)
