@@ -203,6 +203,31 @@ def is_inside_box(points, center, size, rotation_mat):
     pcd_local = abs(pcd_local)
     return (pcd_local[:, 0] <= 1) & (pcd_local[:, 1] <= 1) & (pcd_local[:, 2] <= 1)
 
+box_corner_vertices = [
+        [0, 0, 0],
+        [1, 0, 0],
+        [1, 1, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [1, 0, 1],
+        [1, 1, 1],
+        [0, 1, 1],
+    ]
+
+
+def cal_corners(center, size, rotmat):
+    center = np.array(center).reshape(3)
+    size = np.array(size).reshape(3)
+    rotmat = np.array(rotmat).reshape(3, 3)
+
+    relative_corners = np.array(box_corner_vertices)
+    relative_corners = 2 * relative_corners - 1
+    corners = relative_corners * size.reshape(1, 3) / 2.0
+    corners = np.dot(corners, rotmat.T)
+    corners += center
+    return corners
+
+
 import open3d as o3d
 
 def is_inside_box_open3d(points, center, size, rotation_mat):
@@ -239,11 +264,33 @@ def compute_bbox_from_points(points):
 
     return center, size, rotation
 
+def check_pcd_similarity(pcd1, pcd2):
+    """
+    check whether two point clouds are close enough.
+    There might be a permulatation issue, so we use a threshold to check.
+    Args:
+        pcd1: np.array of shape (n, 3)
+        pcd2: np.array of shape (n, 3)
+    """
+    assert pcd1.shape == pcd2.shape, f"pcd1 and pcd2 should have the same shape, but got {pcd1.shape} and {pcd2.shape}"
+    pcd1 = pcd1.astype(np.float64)
+    pcd2 = pcd2.astype(np.float64)
+    distances_mat = np.sqrt(np.sum((pcd1.reshape(1, -1, 3) - pcd2.reshape(-1, 1, 3))**2, axis=-1))
+    distances_rowwise = np.min(distances_mat, axis=1)
+    distances_colwise = np.min(distances_mat, axis=0)
+    threshold = 1e-3
+    return (distances_rowwise < threshold).all() and (distances_colwise < threshold).all()
+
 if __name__ == '__main__':
     from tqdm import tqdm
-    for i in tqdm(range(100)):
-        points = np.random.rand(10, 3) * 10 - 5
-        center, size, rotation = compute_bbox_from_points(points)
-        # print(f"center: {center}")
-        # print(f"size: {size}")
-        # print(f"rotation: {rotation}")
+    for i in tqdm(range(10000)):
+        center = np.random.rand(3) * 10 - 5
+        size = np.random.rand(3) * 10 + 1
+        angle_range = np.pi 
+        roll, pitch, yaw = np.random.rand(3) * angle_range * 2 - angle_range
+        rotation = euler_angles_to_matrix(np.array([yaw, pitch, roll]), "ZYX")
+        points = cal_corners(center, size, rotation)
+        # print(points)
+        center2, size2, rotation2 = compute_bbox_from_points(points)
+        corners2 = cal_corners(center2, size2, rotation2)
+        assert check_pcd_similarity(points, corners2), (points, corners2)
