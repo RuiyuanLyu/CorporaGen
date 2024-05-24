@@ -216,9 +216,9 @@ box_corner_vertices = [
 
 
 def cal_corners(center, size, rotmat):
-    center = np.array(center).reshape(3)
-    size = np.array(size).reshape(3)
-    rotmat = np.array(rotmat).reshape(3, 3)
+    center = np.array(center).reshape(-1, 3)
+    size = np.array(size).reshape(-1, 3)
+    rotmat = np.array(rotmat).reshape(-1, 3, 3)
 
     relative_corners = np.array(box_corner_vertices)
     relative_corners = 2 * relative_corners - 1

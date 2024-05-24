@@ -207,15 +207,6 @@ def read_type2int(path):
     object_type_to_int = metainfo["categories"]
     return object_type_to_int
 
-def read_scene_id_mapping(mode):
-    assert mode in ["mp3d", "3rscan"]  # scannet do not need this mapping
-    fname = f"/mnt/petrelfs/lvruiyuan/embodiedscan_infos/{mode}_mapping.json"
-    if not os.path.exists(fname):
-        fname = f"D:/Projects/corpora_local/scene_mappings/{mode}_mapping.json"
-    with open(fname, "r") as f:
-        mapping = json.load(f)
-    return mapping
-
 def apply_mapping_to_keys(d, mappings):
     """
     Args:
@@ -343,6 +334,15 @@ def read_annotation_pickles(paths):
         output_data.update(data)
     output_data = dict(sorted(output_data.items()))
     return output_data
+
+def read_scene_id_mapping(mode):
+    assert mode in ["mp3d", "3rscan"]  # scannet do not need this mapping
+    fname = f"/mnt/petrelfs/lvruiyuan/embodiedscan_infos/{mode}_mapping.json"
+    if not os.path.exists(fname):
+        fname = f"D:/Projects/corpora_local/scene_mappings/{mode}_mapping.json"
+    with open(fname, "r") as f:
+        mapping = json.load(f)
+    return mapping
 
 RAW2NUM_3RSCAN = read_scene_id_mapping("3rscan")
 NUM2RAW_3RSCAN = {v: k for k, v in RAW2NUM_3RSCAN.items()}
