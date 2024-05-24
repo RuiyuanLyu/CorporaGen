@@ -318,20 +318,27 @@ def extract_attribute_from_json(json_path):
         json.dump(json_data, f, indent=4, ensure_ascii=False)
 
 
-
+import mmengine
 if __name__ == '__main__':
-    scene_id = "1mp3d_0000_region10"
-    scene_dir = os.path.join(DATA_ROOT, scene_id)
-    object_text_annos_dir = os.path.join(scene_dir, "corpora_object", "user_shujutang_czc")
-    object_text_anno_paths = os.listdir(object_text_annos_dir)
-    object_text_anno_paths = [os.path.join(object_text_annos_dir, p) for p in object_text_anno_paths if p.endswith(".json")]
-    from tqdm import tqdm
-
-
-    for json_path in tqdm(object_text_anno_paths):
-        back_translate_text_anno_json(json_path)
-        extract_attribute_from_json(json_path)
-        new_extract_bracket_from_json(json_path)
+    # scene_id = "1mp3d_0000_region10"
+    scene_ids = os.listdir(DATA_ROOT)
+    scene_ids = [s for s in scene_ids if s.startswith("1mp3d") or s.startswith("scene") or s.startswith("3rscan")]
+    tasks = []
+    for scene_id in scene_ids:
+        scene_dir = os.path.join(DATA_ROOT, scene_id)
+        object_text_annos_dir = os.path.join(scene_dir, "corpora_object", "user_shujutang_czc")
+        if not os.path.exists(object_text_annos_dir):
+            continue
+        object_text_anno_paths = os.listdir(object_text_annos_dir)
+        object_text_anno_paths = [os.path.join(object_text_annos_dir, p) for p in object_text_anno_paths if p.endswith(".json")]
+        tasks.extend(object_text_anno_paths)
+    mmengine.track_parallel_progress(back_translate_text_anno_json, tasks, nproc=16)
+    mmengine.track_parallel_progress(extract_attribute_from_json, tasks, nproc=16)
+    mmengine.track_parallel_progress(extract_bracket_from_json, tasks, nproc=16)
+    # for json_path in tqdm(object_text_anno_paths):
+    #     back_translate_text_anno_json(json_path)
+        # extract_attribute_from_json(json_path)
+        # new_extract_bracket_from_json(json_path)
 
 
 
