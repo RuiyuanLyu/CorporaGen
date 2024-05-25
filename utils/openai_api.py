@@ -218,6 +218,8 @@ def get_content_groups_from_source_groups(source_groups, high_detail=False):
     """ 
     content_groups = []
     for source_group in source_groups:
+        if isinstance(source_group, str):
+            source_group = [source_group]
         content_group = []
         images = [source for source in source_group if check_img_path_exists(source)]
         merge_mode = False

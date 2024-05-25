@@ -256,9 +256,7 @@ def extract_bracket_from_json(json_path):
     with open(json_path, "r", encoding="utf-8") as f:
         json_data = json.load(f)
     if not json_data.get("modified_description_en", ""):
-
         return
-
 
     if json_data.get("common_attribute", ""):
 
@@ -268,16 +266,12 @@ def extract_bracket_from_json(json_path):
     for key_ in Common_Descripition.keys():
         t+=f'{key_}, '
 
-
     system_prompt = f"You are given a text description of an object. Your task is to identify the attributes of the object. The {len(Common_Descripition)} attributes are: {t[:-2]}.Give me the result as a dict(a JSON file). The keys of the dict are: {t[:-2]}.The values of them must be selected in a specified category,don't directly use the word in the text! "
     for key_ in Common_Descripition.keys():
         system_prompt += f"The value of the key '{key_}' must be chosen from {Common_Descripition[key_]} if the attribute ‘{key_}’ is not missing in the text."
     system_prompt = system_prompt[:-2]+".If one attribute is missing, Just leave its value a blank .This is an JSON file example:{'color':'Brown','material':'Wood','shape':'Rectangular','weight':'Heavy','size':'Large'}."
 
-
-
-
-    content_groups = get_content_groups_from_source_groups([text])
+    content_groups = get_content_groups_from_source_groups([[text]])
 
     messages, token_usage = mimic_chat_budget(content_groups, system_prompt, num_turns_expensive=0, report_token_usage=True, json_mode=True)
     response = messages[-1]
@@ -289,7 +283,7 @@ def extract_bracket_from_json(json_path):
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(json_data, f, indent=4, ensure_ascii=False)
 
-
+import random
 def extract_attribute_from_json(json_path):
     """
         Extract attributes from a json file and store them in the json file.
@@ -303,10 +297,10 @@ def extract_attribute_from_json(json_path):
     if not json_data.get("attributes", ""):
         response_dict = extract_attribute_from_text(text)
     else:
-        response_dict = json_data.get("attributes", "")
-    response_dict = extract_attribute_from_text(text)
-
-
+        response_dict = json_data["attributes"]
+    # print json path with prob 1%
+    if random.random() < 0.01:
+        print(json_path)
     # 加入物体类型
 
     object_type = json_path.split("user_shujutang_czc")[-1].split('_')[1]
@@ -332,7 +326,7 @@ if __name__ == '__main__':
         object_text_anno_paths = os.listdir(object_text_annos_dir)
         object_text_anno_paths = [os.path.join(object_text_annos_dir, p) for p in object_text_anno_paths if p.endswith(".json")]
         tasks.extend(object_text_anno_paths)
-    mmengine.track_parallel_progress(back_translate_text_anno_json, tasks, nproc=16)
+    # mmengine.track_parallel_progress(back_translate_text_anno_json, tasks, nproc=16)
     mmengine.track_parallel_progress(extract_attribute_from_json, tasks, nproc=16)
     mmengine.track_parallel_progress(extract_bracket_from_json, tasks, nproc=16)
     # for json_path in tqdm(object_text_anno_paths):
