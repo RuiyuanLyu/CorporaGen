@@ -84,8 +84,10 @@ class GroundingMetricEvaluator(object):
             bboxes = det_anno['bboxes_3d'] # (num_query, 9)
             gt_bboxes = gt_anno['gt_bboxes_3d'] # (num_query, 9) ?
 
-            view_dep = gt_anno['is_view_dep'] # some target words in the prompt
             hard = gt_anno['is_hard'] # num distractors > 3
+            space = gt_anno['space'] # require spacial inference # otherwise, attribute inference
+            direct = gt_anno['direct'] # require direct reference
+
 
             box_index = target_scores.argsort(dim=-1, descending=True)[:10]
             top_bbox = bboxes[box_index]
@@ -96,12 +98,18 @@ class GroundingMetricEvaluator(object):
                 threshold = iou > t
                 num_gts = gt_bboxes.shape[0]
                 found = threshold.any(dim=0).sum().item()
-                if view_dep:
-                    gt['View-Dep@' + str(t)] += num_gts
-                    pred['View-Dep@' + str(t)] += found
+                if space:
+                    gt['Spacial@' + str(t)] += num_gts
+                    pred['Spacial@' + str(t)] += found
                 else:
-                    gt['View-Indep@' + str(t)] += num_gts
-                    pred['View-Indep@' + str(t)] += found
+                    gt['Attribute@' + str(t)] += num_gts
+                    pred['Attribute@' + str(t)] += found
+                if direct:
+                    gt['Direct@' + str(t)] += num_gts
+                    pred['Direct@' + str(t)] += found
+                else:
+                    gt['Indirect@' + str(t)] += num_gts
+                    pred['Indirect@' + str(t)] += found
                 if hard:
                     gt['Hard@' + str(t)] += num_gts
                     pred['Hard@' + str(t)] += found
@@ -109,8 +117,8 @@ class GroundingMetricEvaluator(object):
                     gt['Easy@' + str(t)] += num_gts
                     pred['Easy@' + str(t)] += found
                 if num_gts <= 1:
-                    gt['Unique@' + str(t)] += num_gts
-                    pred['Unique@' + str(t)] += found
+                    gt['Single@' + str(t)] += num_gts
+                    pred['Single@' + str(t)] += found
                 else:
                     gt['Multi@' + str(t)] += num_gts
                     pred['Multi@' + str(t)] += found
