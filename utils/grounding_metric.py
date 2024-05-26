@@ -75,19 +75,21 @@ class GroundingMetricEvaluator(object):
             for object_type in object_types:
                 pred.update({object_type + '@' + str(t): 0})
                 gt.update({object_type + '@' + str(t): 1e-14})
-
+        need_warn = False
         for sample_id in range(len(det_annos)):
             det_anno = det_annos[sample_id]
             gt_anno = gt_annos[sample_id]
             target_scores = det_anno['target_scores_3d']  # (num_query, )
 
             bboxes = det_anno['bboxes_3d'] # (num_query, 9)
-            gt_bboxes = gt_anno['gt_bboxes_3d'] # (num_query, 9) ?
+            gt_bboxes = gt_anno['gt_bboxes_3d'] # (num_gt, 9) 
 
-            hard = gt_anno['is_hard'] # num distractors > 3
-            space = gt_anno['space'] # require spacial inference # otherwise, attribute inference
-            direct = gt_anno['direct'] # require direct reference
-
+            hard = gt_anno.get('is_hard', None)
+            space = gt_anno.get('space', None)
+            direct = gt_anno.get('direct', None)
+            if hard is None or space is None or direct is None:
+                need_warn = True
+            multi = gt_bboxes.shape[0] > 1 # require multiple objects
 
             box_index = target_scores.argsort(dim=-1, descending=True)[:10]
             top_bbox = bboxes[box_index]
@@ -125,7 +127,8 @@ class GroundingMetricEvaluator(object):
 
                 gt['Overall@' + str(t)] += num_gts
                 pred['Overall@' + str(t)] += found
-
+        if need_warn:
+            logging.warning('Some annotations are missing "is_hard", "space", or "direct" information.')
         header = ['Type']
         header.extend(object_types)
         ret_dict = {}
