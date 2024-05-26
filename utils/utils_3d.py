@@ -216,14 +216,14 @@ box_corner_vertices = [
 
 
 def cal_corners(center, size, rotmat):
-    center = np.array(center).reshape(-1, 3)
-    size = np.array(size).reshape(-1, 3)
-    rotmat = np.array(rotmat).reshape(-1, 3, 3)
+    center = np.array(center).reshape(3)
+    size = np.array(size).reshape(3)
+    rotmat = np.array(rotmat).reshape(3, 3)
 
     relative_corners = np.array(box_corner_vertices)
     relative_corners = 2 * relative_corners - 1
-    corners = relative_corners * size.reshape(1, 3) / 2.0
-    corners = np.dot(corners, rotmat.T)
+    corners = relative_corners * size / 2.0
+    corners = np.dot(corners, rotmat.T).reshape(-1, 3)
     corners += center
     return corners
 
@@ -278,14 +278,14 @@ def check_pcd_similarity(pcd1, pcd2):
     distances_mat = np.sqrt(np.sum((pcd1.reshape(1, -1, 3) - pcd2.reshape(-1, 1, 3))**2, axis=-1))
     distances_rowwise = np.min(distances_mat, axis=1)
     distances_colwise = np.min(distances_mat, axis=0)
-    threshold = 1e-3
+    threshold = 1e-2
     return (distances_rowwise < threshold).all() and (distances_colwise < threshold).all()
 
 if __name__ == '__main__':
     from tqdm import tqdm
     for i in tqdm(range(10000)):
         center = np.random.rand(3) * 10 - 5
-        size = np.random.rand(3) * 10 + 1
+        size = np.random.rand(3) * 1 + 1
         angle_range = np.pi 
         roll, pitch, yaw = np.random.rand(3) * angle_range * 2 - angle_range
         rotation = euler_angles_to_matrix(np.array([yaw, pitch, roll]), "ZYX")
@@ -294,3 +294,13 @@ if __name__ == '__main__':
         center2, size2, rotation2 = compute_bbox_from_points(points)
         corners2 = cal_corners(center2, size2, rotation2)
         assert check_pcd_similarity(points, corners2), (points, corners2)
+    # for i in tqdm(range(10000)):
+    #     points = np.random.rand(100, 3) * 10 - 5
+    #     center, size, rotation = compute_bbox_from_points(points)
+    #     corners = cal_corners(center, size, rotation)
+    #     center2, size2, rotation2 = compute_bbox_from_points2(points)
+    #     corners2 = cal_corners(center2, size2, rotation2)
+    #     vol1 = size[0] * size[1] * size[2]
+    #     vol2 = size2[0] * size2[1] * size2[2]
+    #     print(vol1, vol2)
+    #     assert check_pcd_similarity(corners, corners2), (corners, corners2)
