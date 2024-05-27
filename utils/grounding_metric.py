@@ -4,8 +4,20 @@ from typing import Dict, List, Optional, Sequence, Union, Any
 from terminaltables import AsciiTable
 import logging
 import numpy as np
+import torch
 from utils_3d import *
 
+def to_cpu(x):
+    if isinstance(x, (list, tuple)):
+        return [to_cpu(y) for y in x]
+    elif isinstance(x, dict):
+        return {k: to_cpu(v) for k, v in x.items()}
+    elif isinstance(x, np.ndarray):
+        return x.copy()
+    elif isinstance(x, torch.Tensor):
+        return x.detach().cpu().numpy()
+    else:
+        return x
 
 def ground_eval(self, gt_anno_list, det_anno_list, logger=None):
     """
@@ -19,6 +31,8 @@ def ground_eval(self, gt_anno_list, det_anno_list, logger=None):
             'space': bool
     """
     assert len(det_anno_list) == len(gt_anno_list)
+    det_anno_list = to_cpu(det_anno_list)
+    gt_anno_list = to_cpu(gt_anno_list)
     pred = {}
     gt = {}
     iou_thr = [0.25, 0.5]
@@ -171,6 +185,7 @@ def matcher(preds, gts, cost_fns):
 def iou_cost_fn(pred_boxes, gt_boxes):
     ious = compute_ious(pred_boxes, gt_boxes)
     return 1.0 - ious
+
 
 if __name__ == '__main__':
     
