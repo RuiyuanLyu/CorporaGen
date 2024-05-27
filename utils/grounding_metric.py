@@ -22,10 +22,10 @@ def to_cpu(x):
 def ground_eval(gt_anno_list, det_anno_list, logger=None):
     """
         det_anno_list: list of dictionaries with keys:
-            'bboxes_3d': (N, 9) or a tuple (center, size, rotmat): (N, 3), (N, 3), (N, 3, 3)
+            'bboxes_3d': (N, 9) or a (list, tuple) (center, size, rotmat): (N, 3), (N, 3), (N, 3, 3)
             'target_scores_3d': (N, )
         gt_anno_list: list of dictionaries with keys:
-            'gt_bboxes_3d': (M, 9) or a tuple (center, size, rotmat): (M, 3), (M, 3), (M, 3, 3)
+            'gt_bboxes_3d': (M, 9) or a (list, tuple) (center, size, rotmat): (M, 3), (M, 3), (M, 3, 3)
             'is_hard': bool
             'direct': bool
             'space': bool
@@ -52,7 +52,7 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
         target_scores = det_anno['target_scores_3d']  # (num_query, )
 
         bboxes = det_anno['bboxes_3d'] # (num_query, 9)
-        # or a tuple (center, size, rotmat): (num_query, 3), (num_query, 3), (num_query, 3, 3)
+        # or a (list, tuple) (center, size, rotmat): (num_query, 3), (num_query, 3), (num_query, 3, 3)
         gt_bboxes = gt_anno['gt_bboxes_3d'] # (num_gt, 9) 
 
         hard = gt_anno.get('is_hard', None)
@@ -66,7 +66,7 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
 
         for t in iou_thr:
             threshold = iou > t
-            if isinstance(gt_bboxes, tuple):
+            if isinstance(gt_bboxes, (list, tuple)):
                 num_gts = gt_bboxes[0].shape[0]
             else:
                 num_gts = gt_bboxes.shape[0]
@@ -124,8 +124,8 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
 
 
 def get_corners(box):
-    # box should be (n, 9) or a tuple (center, size, rotmat)
-    if isinstance(box, tuple):
+    # box should be (n, 9) or a (list, tuple) (center, size, rotmat)
+    if isinstance(box, (list, tuple)):
         center, size, rotmat = box
     else:
         if len(box.shape) == 1:
@@ -139,8 +139,8 @@ def get_corners(box):
 
 def compute_ious(boxes1, boxes2):
     """Compute the intersection over union one by one between two 3D bounding boxes.
-    Boxes1: (N, 9) or a tuple (center, size, rotmat)
-    Boxes2: (M, 9) or a tuple (center, size, rotmat)
+    Boxes1: (N, 9) or a (list, tuple) (center, size, rotmat)
+    Boxes2: (M, 9) or a (list, tuple) (center, size, rotmat)
     Return: (N, M)
     """
     from pytorch3d.ops import box3d_overlap
@@ -170,8 +170,8 @@ def matcher(preds, gts, cost_fns):
     - costs: cost of each matched pair
     """
     # Compute the cost matrix
-    num_preds = len(preds) if not isinstance(preds, tuple) else len(preds[0])
-    num_gts = len(gts) if not isinstance(gts, tuple) else len(gts[0])
+    num_preds = len(preds) if not isinstance(preds, (list, tuple)) else len(preds[0])
+    num_gts = len(gts) if not isinstance(gts, (list, tuple)) else len(gts[0])
     cost_matrix = np.zeros((num_preds, num_gts))
     for cost_fn in cost_fns:
         cost_matrix += cost_fn(preds, gts) #shape (num_preds, num_gts)
