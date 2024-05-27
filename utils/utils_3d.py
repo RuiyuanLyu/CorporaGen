@@ -1,4 +1,6 @@
 import numpy as np
+from scipy.spatial import ConvexHull
+from scipy.linalg import eigh
 
 
 def interpolate_bbox_points(bbox, granularity=0.2, return_size=False):
@@ -181,6 +183,30 @@ def euler_angles_to_matrix(euler_angles: np.ndarray, convention: str) -> np.ndar
     ]
     return np.matmul(np.matmul(matrices[0], matrices[1]), matrices[2])
 
+box_corner_vertices = [
+        [0, 0, 0],
+        [1, 0, 0],
+        [1, 1, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [1, 0, 1],
+        [1, 1, 1],
+        [0, 1, 1],
+    ]
+
+def cal_corners(center, size, rotmat):
+    center = np.array(center).reshape(3)
+    size = np.array(size).reshape(3)
+    rotmat = np.array(rotmat).reshape(3, 3)
+
+    relative_corners = np.array(box_corner_vertices)
+    relative_corners = 2 * relative_corners - 1
+    corners = relative_corners * size / 2.0
+    corners = np.dot(corners, rotmat.T).reshape(-1, 3)
+    corners += center
+    return corners
+
+
 def is_inside_box(points, center, size, rotation_mat):
     """
         Check if points are inside a 3D bounding box.
@@ -203,34 +229,10 @@ def is_inside_box(points, center, size, rotation_mat):
     pcd_local = abs(pcd_local)
     return (pcd_local[:, 0] <= 1) & (pcd_local[:, 1] <= 1) & (pcd_local[:, 2] <= 1)
 
-box_corner_vertices = [
-        [0, 0, 0],
-        [1, 0, 0],
-        [1, 1, 0],
-        [0, 1, 0],
-        [0, 0, 1],
-        [1, 0, 1],
-        [1, 1, 1],
-        [0, 1, 1],
-    ]
 
-
-def cal_corners(center, size, rotmat):
-    center = np.array(center).reshape(3)
-    size = np.array(size).reshape(3)
-    rotmat = np.array(rotmat).reshape(3, 3)
-
-    relative_corners = np.array(box_corner_vertices)
-    relative_corners = 2 * relative_corners - 1
-    corners = relative_corners * size / 2.0
-    corners = np.dot(corners, rotmat.T).reshape(-1, 3)
-    corners += center
-    return corners
-
-
-import open3d as o3d
 
 def is_inside_box_open3d(points, center, size, rotation_mat):
+    import open3d as o3d
     """
         We have verified that the two functions are equivalent.
         but the first one is faster.
@@ -245,7 +247,10 @@ def is_inside_box_open3d(points, center, size, rotation_mat):
     ret[point_indices_within_box] = True
     return ret
 
-def compute_bbox_from_points(points):
+def compute_bbox_from_points_open3d(points):
+    import open3d as o3d
+    # 2e-4 seconds for 100 points
+    # 1e-3 seconds for 1000 points
     points = np.array(points).astype(np.float32)
     assert points.shape[1] == 3, f"points should be of shape (n, 3), but got {points.shape}"
     o3dpoints = o3d.utility.Vector3dVector(points)
@@ -261,6 +266,28 @@ def compute_bbox_from_points(points):
     # assert (mask == mask2).all(), "mask is different from mask2"
     # assert mask2.all(), (center, size, rotation)
     assert mask.all(), (center, size, rotation)
+
+    return center, size, rotation
+
+
+def compute_bbox_from_points(points):
+    # 7.5e-4 seconds for 100 points
+    # 1e-3 seconds for 1000 points
+    hull = ConvexHull(points)
+    points_on_hull = points[hull.vertices]
+    center = points_on_hull.mean(axis=0)
+
+    points_centered = points_on_hull - center
+    cov_matrix = np.cov(points_centered, rowvar=False)
+    eigvals, eigvecs = eigh(cov_matrix)
+    rotation = eigvecs
+    # donot use eigvals to compute size, but use the min max projections
+    proj = points_centered @ eigvecs
+    min_proj = np.min(proj, axis=0)
+    max_proj = np.max(proj, axis=0)
+    size = max_proj - min_proj
+    shift = (max_proj + min_proj) / 2.0
+    center = center + shift @ rotation.T
 
     return center, size, rotation
 
@@ -288,19 +315,44 @@ if __name__ == '__main__':
         size = np.random.rand(3) * 1 + 1
         angle_range = np.pi 
         roll, pitch, yaw = np.random.rand(3) * angle_range * 2 - angle_range
+        # center = np.array([0, 0, 0])
+        # size = np.array([1, 1, 1])
+        # roll, pitch, yaw = 0, 0, 1
         rotation = euler_angles_to_matrix(np.array([yaw, pitch, roll]), "ZYX")
-        points = cal_corners(center, size, rotation)
+        corners = cal_corners(center, size, rotation)
         # print(points)
+        center2, size2, rotation2 = compute_bbox_from_points_open3d(corners)
+        corners2 = cal_corners(center2, size2, rotation2)
+        compare_dict = {"center": (center, center2),
+                        "size": (size, size2),
+                        "rotation": (rotation, rotation2),
+                        "corners": (corners, corners2)}
+        if not check_pcd_similarity(corners, corners2):
+            print(compare_dict)
+            exit()
+        center3, size3, rotation3 = compute_bbox_from_points(corners)
+        corners3 = cal_corners(center3, size3, rotation3)
+        compare_dict = {"center": (center, center3),
+                        "size": (size, size3),
+                        "rotation": (rotation, rotation3),
+                        "corners": (corners, corners3)}
+        if not check_pcd_similarity(corners, corners3):
+            for k,v in compare_dict.items():
+                print(k, v)
+            exit()
+    for i in tqdm(range(1000)):
+        points = np.random.rand(100, 3) * 10 - 5
+        center, size, rotation = compute_bbox_from_points_open3d(points)
+        corners = cal_corners(center, size, rotation)
         center2, size2, rotation2 = compute_bbox_from_points(points)
         corners2 = cal_corners(center2, size2, rotation2)
-        assert check_pcd_similarity(points, corners2), (points, corners2)
-    # for i in tqdm(range(10000)):
-    #     points = np.random.rand(100, 3) * 10 - 5
-    #     center, size, rotation = compute_bbox_from_points(points)
-    #     corners = cal_corners(center, size, rotation)
-    #     center2, size2, rotation2 = compute_bbox_from_points2(points)
-    #     corners2 = cal_corners(center2, size2, rotation2)
-    #     vol1 = size[0] * size[1] * size[2]
-    #     vol2 = size2[0] * size2[1] * size2[2]
-    #     print(vol1, vol2)
-    #     assert check_pcd_similarity(corners, corners2), (corners, corners2)
+        vol1 = size[0] * size[1] * size[2]
+        vol2 = size2[0] * size2[1] * size2[2]
+        if not check_pcd_similarity(corners, corners2):
+            print(vol1, vol2)
+            print(f"vol1: {vol1}, vol2: {vol2}")
+            print(f"center: {center}, center2: {center2}")
+            print(f"size: {size}, size2: {size2}")
+            print(f"rotation: {rotation}, rotation2: {rotation2}")
+            print(f"corners: {corners}, corners2: {corners2}")
+            exit()
