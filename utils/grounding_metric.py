@@ -1,11 +1,10 @@
 # Copyright (c) OpenRobotLab. All rights reserved.
 from typing import Dict, List, Optional, Sequence, Union, Any
 # 这份代码并不设计在这个项目中运行。
-from pytorch3d.ops import box3d_overlap
 from terminaltables import AsciiTable
 import logging
 import numpy as np
-from utils_3d import compute_bbox_from_points, cal_corners, euler_angles_to_matrix
+from utils_3d import compute_bbox_from_points_open3d, cal_corners, euler_angles_to_matrix
 
 
 # TODO: 其它项目的dataloader需要修改.增加一些is view dep和is hard的标注
@@ -181,15 +180,9 @@ def compute_ious(boxes1, boxes2):
     Boxes2: (M, 9)
     Return: (N, M)
     """
+    from pytorch3d.ops import box3d_overlap
     assert boxes1.shape == boxes2.shape
     corners1 = corner_from_9dof(boxes1)
     corners2 = corner_from_9dof(boxes2)
     ious = box3d_overlap(corners1, corners2)
     return ious
-
-def compute_single_iou(box1, box2):
-    """Compute the intersection over union between two 3D bounding boxes.
-    Box1: (1, 8, 3)
-    Box2: (1, 8, 3)
-    """
-    return box3d_overlap(box1, box2)
