@@ -119,7 +119,8 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
         table.inner_footing_row_border = True
         # print('\n' + table.table)
         logging.info('\n' + table.table)
-
+    ret_dict['gt'] = gt
+    ret_dict['pred'] = pred
     return ret_dict
 
 
