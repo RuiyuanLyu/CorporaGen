@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Sequence, Union, Any
 from terminaltables import AsciiTable
 import logging
 import numpy as np
-from utils_3d import compute_bbox_from_points_open3d, cal_corners, euler_angles_to_matrix
+from utils_3d import compute_bbox_from_points, cal_corners, euler_angles_to_matrix
 
 
 # TODO: 其它项目的dataloader需要修改.增加一些is view dep和is hard的标注
@@ -81,6 +81,7 @@ class GroundingMetricEvaluator(object):
             target_scores = det_anno['target_scores_3d']  # (num_query, )
 
             bboxes = det_anno['bboxes_3d'] # (num_query, 9)
+            # or a tuple (center, size, rotmat): (num_query, 3), (num_query, 3), (num_query, 3, 3)
             gt_bboxes = gt_anno['gt_bboxes_3d'] # (num_gt, 9) 
 
             hard = gt_anno.get('is_hard', None)
@@ -166,23 +167,28 @@ class GroundingMetricEvaluator(object):
 
         return ret_dict
 
-def corner_from_9dof(box):
-    center = box[:3]
-    size = box[3:6]
-    euler = box[6:9]
-    rotmat = euler_angles_to_matrix(euler, convention="ZXY")
+def get_corners(box):
+    # box should be (n, 9) or a tuple (center, size, rotmat)
+    if isinstance(box, tuple):
+        center, size, rotmat = box
+    else:
+        if len(box.shape) == 1:
+            box = box.reshape(1, 9)
+        center = box[:, :3]
+        size = box[:, 3:6]
+        euler = box[:, 6:9]
+        rotmat = euler_angles_to_matrix(euler, convention="ZXY")
     corners = cal_corners(center, size, rotmat)
     return corners
 
 def compute_ious(boxes1, boxes2):
     """Compute the intersection over union one by one between two 3D bounding boxes.
-    Boxes1: (N, 9)
-    Boxes2: (M, 9)
+    Boxes1: (N, 9) or a tuple (center, size, rotmat)
+    Boxes2: (M, 9) or a tuple (center, size, rotmat)
     Return: (N, M)
     """
     from pytorch3d.ops import box3d_overlap
-    assert boxes1.shape == boxes2.shape
-    corners1 = corner_from_9dof(boxes1)
-    corners2 = corner_from_9dof(boxes2)
+    corners1 = get_corners(boxes1)
+    corners2 = get_corners(boxes2)
     ious = box3d_overlap(corners1, corners2)
     return ious

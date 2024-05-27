@@ -194,7 +194,7 @@ box_corner_vertices = [
         [0, 1, 1],
     ]
 
-def cal_corners(center, size, rotmat):
+def cal_corners_single(center, size, rotmat):
     center = np.array(center).reshape(3)
     size = np.array(size).reshape(3)
     rotmat = np.array(rotmat).reshape(3, 3)
@@ -204,6 +204,25 @@ def cal_corners(center, size, rotmat):
     corners = relative_corners * size / 2.0
     corners = np.dot(corners, rotmat.T).reshape(-1, 3)
     corners += center
+    return corners
+
+
+def cal_corners(center, size, rotmat):
+    center = np.array(center).reshape(-1, 3)
+    size = np.array(size).reshape(-1, 3)
+    rotmat = np.array(rotmat).reshape(-1, 3, 3)
+    bsz = center.shape[0]
+
+    relative_corners = np.array(box_corner_vertices)
+    relative_corners = 2 * relative_corners - 1
+    relative_corners = np.expand_dims(relative_corners, 1).repeat(bsz, axis=1)
+    corners = relative_corners * size / 2.0
+    corners = corners.transpose(1, 0, 2)
+    corners = np.matmul(corners, rotmat.transpose(0, 2, 1)).reshape(-1, 8, 3)
+    corners += np.expand_dims(center, 1).repeat(8, axis=1)
+
+    if corners.shape[0] == 1:
+        corners = corners[0]
     return corners
 
 
@@ -310,6 +329,19 @@ def check_pcd_similarity(pcd1, pcd2):
 
 if __name__ == '__main__':
     from tqdm import tqdm
+    centers = np.random.rand(100, 3) * 10 - 5
+    sizes = np.random.rand(100, 3) * 1 + 1
+    angle_range = np.pi 
+    roll, pitch, yaw = np.random.rand(3) * angle_range * 2 - angle_range
+    rotation = euler_angles_to_matrix(np.array([yaw, pitch, roll]), "ZYX")
+    corners = cal_corners(centers, sizes, rotation)
+    for i in range(100):
+        center = centers[i]
+        size = sizes[i]
+        corners_i = corners[i]
+        assert check_pcd_similarity(corners_i, cal_corners_single(center, size, rotation))
+    exit()
+
     for i in tqdm(range(10000)):
         center = np.random.rand(3) * 10 - 5
         size = np.random.rand(3) * 1 + 1
@@ -319,10 +351,10 @@ if __name__ == '__main__':
         # size = np.array([1, 1, 1])
         # roll, pitch, yaw = 0, 0, 1
         rotation = euler_angles_to_matrix(np.array([yaw, pitch, roll]), "ZYX")
-        corners = cal_corners(center, size, rotation)
+        corners = cal_corners_single(center, size, rotation)
         # print(points)
         center2, size2, rotation2 = compute_bbox_from_points_open3d(corners)
-        corners2 = cal_corners(center2, size2, rotation2)
+        corners2 = cal_corners_single(center2, size2, rotation2)
         compare_dict = {"center": (center, center2),
                         "size": (size, size2),
                         "rotation": (rotation, rotation2),
@@ -331,7 +363,7 @@ if __name__ == '__main__':
             print(compare_dict)
             exit()
         center3, size3, rotation3 = compute_bbox_from_points(corners)
-        corners3 = cal_corners(center3, size3, rotation3)
+        corners3 = cal_corners_single(center3, size3, rotation3)
         compare_dict = {"center": (center, center3),
                         "size": (size, size3),
                         "rotation": (rotation, rotation3),
@@ -343,9 +375,9 @@ if __name__ == '__main__':
     for i in tqdm(range(1000)):
         points = np.random.rand(100, 3) * 10 - 5
         center, size, rotation = compute_bbox_from_points_open3d(points)
-        corners = cal_corners(center, size, rotation)
+        corners = cal_corners_single(center, size, rotation)
         center2, size2, rotation2 = compute_bbox_from_points(points)
-        corners2 = cal_corners(center2, size2, rotation2)
+        corners2 = cal_corners_single(center2, size2, rotation2)
         vol1 = size[0] * size[1] * size[2]
         vol2 = size2[0] * size2[1] * size2[2]
         if not check_pcd_similarity(corners, corners2):
