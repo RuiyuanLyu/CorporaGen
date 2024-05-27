@@ -19,7 +19,7 @@ def to_cpu(x):
     else:
         return x
 
-def ground_eval(self, gt_anno_list, det_anno_list, logger=None):
+def ground_eval(gt_anno_list, det_anno_list, logger=None):
     """
         det_anno_list: list of dictionaries with keys:
             'bboxes_3d': (N, 9) or a tuple (center, size, rotmat): (N, 3), (N, 3), (N, 3, 3)
@@ -104,7 +104,7 @@ def ground_eval(self, gt_anno_list, det_anno_list, logger=None):
     header.extend(object_types)
     ret_dict = {}
 
-    for t in self.iou_thr:
+    for t in iou_thr:
         table_columns = [['results']]
         for object_type in object_types:
             metric = object_type + '@' + str(t)
