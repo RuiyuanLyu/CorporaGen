@@ -184,6 +184,7 @@ def matcher(preds, gts, cost_fns):
 # Example cost function that calculates the IoU between bounding boxes
 def iou_cost_fn(pred_boxes, gt_boxes):
     ious = compute_ious(pred_boxes, gt_boxes)
+    ious = np.nan_to_num(ious, nan=0.0, posinf=1.0, neginf=0.0, copy=False)
     return 1.0 - ious
 
 
