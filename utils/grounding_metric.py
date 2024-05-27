@@ -179,7 +179,7 @@ def matcher(preds, gts, cost_fns):
     # Perform linear sum assignment to minimize the total cost
     matched_pred_inds, matched_gt_inds = linear_sum_assignment(cost_matrix)
     costs = cost_matrix[matched_row_inds, matched_col_inds]
-    return matched_row_inds, matched_col_inds, costs
+    return matched_pred_inds, matched_gt_inds, costs
 
 # Example cost function that calculates the IoU between bounding boxes
 def iou_cost_fn(pred_boxes, gt_boxes):
