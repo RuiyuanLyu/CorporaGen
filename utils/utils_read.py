@@ -460,6 +460,89 @@ def read_es_infos(paths, show_progress=True, count_type_from_zero=False):
         output_data.update(data)
     return output_data
 
+def to_list_of_int(x):
+    # x may be a single int, or a list of str(int), or a list of int
+    if isinstance(x, int):
+        return [x]
+    elif isinstance(x, str):
+        return [int(x)]
+    elif isinstance(x, list):
+        return [int(i) for i in x]
+    else:
+        raise ValueError(f"Invalid input {x} of type {type(x)}")
+
+def to_list_of_str(x):
+    # x may be a single str, or a list of str, or a list of int
+    if isinstance(x, str):
+        return [x]
+    elif isinstance(x, int):
+        return [str(x)]
+    elif isinstance(x, list):
+        return [str(i) for i in x]
+    else:
+        raise ValueError(f"Invalid input {x} of type {type(x)}")
+
+def load_vg_data(path, all_es_info):
+    if isinstance(all_es_info, str):
+        all_es_info = read_es_info(all_es_info)
+    raw_vg_data = json.load(open(path, "r"))
+    # vg txt的一个dict的例子：{"sub_class": "VG_Direct_Attribute_O_Common", "scan_id": "1mp3d_0000_region7", "target_id": [5, 3, 16, 4, 27, 9, 34, 38, 44, 17, 20, 29, 35], "distractor_ids": [], "text": "Find all the items with furniture coarse grained category in the room.", "target": ["rail", "stairs", "ladder", "shelf", "desk", "window", "object", "object", "object", "chair", "bench", "chair", "object"], "anchors": [], "anchor_ids": [], "tokens_positive": {"3": [[13, 57]], "4": [[13, 57]], "5": [[13, 57]], "9": [[13, 57]], "16": [[13, 57]], "17": [[13, 57]], "20": [[13, 57]], "27": [[13, 57]], "29": [[13, 57]], "34": [[13, 57]], "35": [[13, 57]], "38": [[13, 57]], "44": [[13, 57]]}, "ID": "VG_Direct_Attribute_O_Common_0"}
+    vg_data = []
+    for i, raw_vg in enumerate(raw_vg_data):
+        scan_id = raw_vg["scan_id"]
+        if scan_id not in all_es_info:
+            continue
+        es_info = all_es_info[scan_id]
+        bboxes = es_info["bboxes"]
+        object_ids = list(es_info["object_ids"])
+        object_types = es_info["object_types"]
+
+        item_id = raw_vg["ID"]
+        sub_class = raw_vg["sub_class"].lower()
+        space = "space" in sub_class
+        attribute = "attribute" in sub_class
+        assert space + attribute == 1, f"Invalid sub_class {sub_class}, should be space or attribute"
+        indirect = "indirect" in sub_class
+        direct = not indirect
+        assert "direct" in sub_class, f"Invalid sub_class {sub_class}, should contain the word direct"
+        target_ids = to_list_of_int(raw_vg["target_id"])
+        target_idxs = [object_ids.index(i) for i in target_ids]
+        bboxes = bboxes[target_idxs]
+        multi = len(target_ids) > 1
+        distractor_ids = to_list_of_int(raw_vg["distractor_ids"])
+        distractor_idxs = [object_ids.index(i) for i in distractor_ids]
+        hard = len(distractor_ids) >= 3
+        text = raw_vg["text"]
+        targets = to_list_of_str(raw_vg["target"])
+        anchors = to_list_of_str(raw_vg["anchors"])
+        anchor_ids = to_list_of_int(raw_vg["anchor_ids"])
+        anchor_idxs = [object_ids.index(i) for i in anchor_ids]
+        tokens_positive = raw_vg["tokens_positive"]
+        tokens_positive = {int(k): v for k, v in tokens_positive.items()}
+
+        data_dict = {
+            "scan_id": scan_id,
+            "item_id": item_id,
+            "space": space,
+            "direct": direct,
+            "multi": multi,
+            "hard": hard,
+            "target_ids": target_ids,
+            "target_idxs": target_idxs,
+            "bboxes": bboxes,
+            "distractor_ids": distractor_ids,
+            "distractor_idxs": distractor_idxs,
+            "text": text,
+            "targets": targets,
+            "anchors": anchors,
+            "anchor_ids": anchor_ids,
+            "anchor_idxs": anchor_idxs,
+            "tokens_positive": tokens_positive,
+        }
+        vg_data.append(data_dict)
+    del raw_vg_data
+    return vg_data
+
 if __name__ == "__main__":
     # pickle_file = "D:\Projects\shared_data\embodiedscan_infos\competition_ver\embodiedscan_infos_val.pkl"
     pickle_file = "D:\Projects\shared_data\embodiedscan_infos\embodiedscan_infos_val_full.pkl"
