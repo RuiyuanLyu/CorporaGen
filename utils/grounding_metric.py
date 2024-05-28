@@ -6,6 +6,7 @@ import logging
 import numpy as np
 import torch
 from utils_3d import *
+from scipy.optimize import linear_sum_assignment
 
 def to_cpu(x):
     if isinstance(x, (list, tuple)):
@@ -38,13 +39,15 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
     iou_thr = [0.25, 0.5]
     object_types = [
         'Spacial', 'Attribute', 'Direct', 'Indirect', 'Hard', 'Easy',
-        'Single', 'Multi', 'Overall'
+        'Single', 'Multi', 'Overall', 'Direct_Attribute_O_Individual', 'Direct_Attribute_O_Common', 'Direct_EQ',
+        'InDirect_OR', 'InDirect_Space_OO', 'InDirect_Attribute_OO'
     ]
 
     for t in iou_thr:
         for object_type in object_types:
             pred.update({object_type + '@' + str(t): 0})
             gt.update({object_type + '@' + str(t): 1e-14})
+
     need_warn = False
     for sample_id in range(len(det_anno_list)):
         det_anno = det_anno_list[sample_id]
@@ -55,10 +58,13 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
         # or a (list, tuple) (center, size, rotmat): (num_query, 3), (num_query, 3), (num_query, 3, 3)
         gt_bboxes = gt_anno['gt_bboxes_3d'] # (num_gt, 9) 
 
+        sub_class = gt_anno.get('sub_class', None)
+        if sub_class is not None:
+            sub_class = sub_class.strip("VG_") # remove VG_ prefix
         hard = gt_anno.get('is_hard', None)
         space = gt_anno.get('space', None)
         direct = gt_anno.get('direct', None)
-        if hard is None or space is None or direct is None:
+        if (hard is None or space is None or direct is None) and sub_class is None:
             need_warn = True
 
         pred_idices, gt_idices, costs = matcher(bboxes, gt_bboxes, [iou_cost_fn])
@@ -89,6 +95,9 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
             else:
                 gt['Easy@' + str(t)] += num_gts
                 pred['Easy@' + str(t)] += found
+            if sub_class is not None:
+                gt[f'{sub_class}@' + str(t)] += num_gts
+                pred[f'{sub_class}@' + str(t)] += found
             if num_gts <= 1:
                 gt['Single@' + str(t)] += num_gts
                 pred['Single@' + str(t)] += found
@@ -152,8 +161,6 @@ def compute_ious(boxes1, boxes2):
     ious = ious.numpy()
     return ious
 
-import numpy as np
-from scipy.optimize import linear_sum_assignment
 
 def matcher(preds, gts, cost_fns):
     """
