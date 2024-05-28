@@ -137,7 +137,10 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
         table = AsciiTable(table_data)
         table.inner_footing_row_border = True
         # print('\n' + table.table)
-        logging.info('\n' + table.table)
+        if logger is not None:
+            logger.info('\n' + table.table)
+        else:
+            print('\n' + table.table)
     ret_dict['gt'] = gt
     ret_dict['pred'] = pred
     ret_dict['table'] = table
