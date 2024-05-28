@@ -30,6 +30,7 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
             'is_hard': bool
             'direct': bool
             'space': bool
+            'sub_class': str
     """
     assert len(det_anno_list) == len(gt_anno_list)
     det_anno_list = to_cpu(det_anno_list)
@@ -53,8 +54,21 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
         det_anno = det_anno_list[sample_id]
         gt_anno = gt_anno_list[sample_id]
         target_scores = det_anno['target_scores_3d']  # (num_query, )
+        if isinstance(gt_bboxes, (list, tuple)):
+            num_gts = gt_bboxes[0].shape[0]
+        else:
+            num_gts = gt_bboxes.shape[0]
+        if num_gts == 0:
+            continue
+        keep_inds = target_scores.argsort(dim=-1, descending=True)[:num_gts]
 
-        bboxes = det_anno['bboxes_3d'] # (num_query, 9)
+        if 'bboxes_3d' in det_anno:
+            bboxes = det_anno['bboxes_3d'] # (num_query, 9)
+            top_pred_bboxes = bboxes[keep_inds]
+        else:
+            pcds = det_anno['pcds'] # (num_query, pcd_size, 3)
+            pcds = pcds[keep_inds]
+            top_pred_bboxes = compute_bbox_from_points_list(pcds) # tuple of (center, size, rotmat)
         # or a (list, tuple) (center, size, rotmat): (num_query, 3), (num_query, 3), (num_query, 3, 3)
         gt_bboxes = gt_anno['gt_bboxes_3d'] # (num_gt, 9) 
 
@@ -67,15 +81,11 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
         if (hard is None or space is None or direct is None) and sub_class is None:
             need_warn = True
 
-        pred_idices, gt_idices, costs = matcher(bboxes, gt_bboxes, [iou_cost_fn])
+        pred_idices, gt_idices, costs = matcher(top_pred_bboxes, gt_bboxes, [iou_cost_fn])
         iou = 1.0 - costs # warning: only applicable when iou_cost_fn is the only cost function used
 
         for t in iou_thr:
             threshold = iou > t
-            if isinstance(gt_bboxes, (list, tuple)):
-                num_gts = gt_bboxes[0].shape[0]
-            else:
-                num_gts = gt_bboxes.shape[0]
             found = np.sum(threshold)
             if space:
                 gt['Spacial@' + str(t)] += num_gts

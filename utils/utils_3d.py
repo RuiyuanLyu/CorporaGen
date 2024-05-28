@@ -310,6 +310,17 @@ def compute_bbox_from_points(points):
 
     return center, size, rotation
 
+def compute_bbox_from_points_list(points_list):
+    centers = []
+    sizes = []
+    rotations = []
+    for points in points_list:
+        center, size, rotation = compute_bbox_from_points(points)
+        centers.append(center)
+        sizes.append(size)
+        rotations.append(rotation)
+    return np.array(centers), np.array(sizes), np.array(rotations)
+
 def check_pcd_similarity(pcd1, pcd2):
     """
     check whether two point clouds are close enough.
