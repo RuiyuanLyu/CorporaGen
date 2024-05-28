@@ -340,6 +340,9 @@ def read_scene_id_mapping(mode):
     fname = f"/mnt/petrelfs/lvruiyuan/embodiedscan_infos/{mode}_mapping.json"
     if not os.path.exists(fname):
         fname = f"D:/Projects/corpora_local/scene_mappings/{mode}_mapping.json"
+    if not os.path.exists(fname):
+        print(f"Warning: cannot find {fname}")
+        return {}
     with open(fname, "r") as f:
         mapping = json.load(f)
     return mapping
@@ -428,7 +431,7 @@ def read_es_info(path, show_progress=True, count_type_from_zero=False):
             scene_id = data["images"][0]["img_path"].split("/")[-2]  # str
             sample_idx = scene_id_to_sample_idx(scene_id)
         bboxes, object_ids, object_types_int, object_types = [], [], [], []
-        for inst in data["instances"]:
+        for inst in data.get("instances", []):
             bbox_label_3d = inst["bbox_label_3d"]
             object_type = object_int_to_type[bbox_label_3d]
             bbox_label_3d -= 1 if count_type_from_zero else 0
@@ -507,7 +510,7 @@ def load_vg_data(path, all_es_info):
         assert "direct" in sub_class, f"Invalid sub_class {sub_class}, should contain the word direct"
         target_ids = to_list_of_int(raw_vg["target_id"])
         target_idxs = [object_ids.index(i) for i in target_ids]
-        bboxes = bboxes[target_idxs]
+        target_bboxes = bboxes[target_idxs]
         multi = len(target_ids) > 1
         distractor_ids = to_list_of_int(raw_vg["distractor_ids"])
         distractor_idxs = [object_ids.index(i) for i in distractor_ids]
@@ -518,7 +521,7 @@ def load_vg_data(path, all_es_info):
         anchor_ids = to_list_of_int(raw_vg["anchor_ids"])
         anchor_idxs = [object_ids.index(i) for i in anchor_ids]
         tokens_positive = raw_vg["tokens_positive"]
-        tokens_positive = {int(k): v for k, v in tokens_positive.items()}
+        # tokens_positive = {int(k): v for k, v in tokens_positive.items()}
 
         data_dict = {
             "scan_id": scan_id,
@@ -527,9 +530,10 @@ def load_vg_data(path, all_es_info):
             "direct": direct,
             "multi": multi,
             "hard": hard,
+            "sub_class": sub_class,
             "target_ids": target_ids,
             "target_idxs": target_idxs,
-            "bboxes": bboxes,
+            "target_bboxes": target_bboxes,
             "distractor_ids": distractor_ids,
             "distractor_idxs": distractor_idxs,
             "text": text,
