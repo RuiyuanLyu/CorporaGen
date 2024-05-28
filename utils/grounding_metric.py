@@ -140,6 +140,7 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
         logging.info('\n' + table.table)
     ret_dict['gt'] = gt
     ret_dict['pred'] = pred
+    ret_dict['table'] = table
     return ret_dict
 
 
