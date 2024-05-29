@@ -58,7 +58,7 @@ def ground_eval_subset(gt_anno_list, det_anno_list, logger=None, prefix=''):
     assert len(det_anno_list) == len(gt_anno_list)
     iou_thr = [0.25, 0.5]
     num_samples = len(gt_anno_list) # each sample contains multiple pred boxes
-    total_pred_boxes = 0
+    total_gt_boxes = 0
     # these lists records for each sample, whether a gt box is matched or not
     gt_matched_records = []
     # these lists records for each pred box, NOT for each sample        
@@ -78,8 +78,8 @@ def ground_eval_subset(gt_anno_list, det_anno_list, logger=None, prefix=''):
         gt_bboxes = gt_anno['gt_bboxes_3d']
 
         num_preds = box_num(pred_bboxes)
-        total_pred_boxes += num_preds
-        num_gts = len(gt_bboxes)
+        num_gts = box_num(gt_bboxes)
+        total_gt_boxes += num_gts
         gt_matched_records.append(np.zeros(num_gts, dtype=np.bool))
 
         iou_mat = compute_ious(pred_boxes, gt_boxes)
@@ -126,9 +126,9 @@ def ground_eval_subset(gt_anno_list, det_anno_list, logger=None, prefix=''):
         metric = prefix + '@' + str(t)
         fp = np.cumsum(fp_thr[metric])
         tp = np.cumsum(tp_thr[metric])
-        recall = tp / float(total_pred_boxes)
+        recall = tp / float(total_gt_boxes)
         precision = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
-        ap = average_precision(precision, recall)
+        ap = average_precision(recall, precision)
         ret[metric] = float(ap)
         best_recall = recall[-1] if len(recall) > 0 else 0
         ret[metric + '_rec'] = float(best_recall)
