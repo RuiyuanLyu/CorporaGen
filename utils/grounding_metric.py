@@ -151,7 +151,7 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
     assert len(det_anno_list) == len(gt_anno_list)
     results = {}
     for ref in reference_options:
-        indices = [i for i, gt_anno in enumerate(gt_anno_list) if gt_anno.get('sub_class', 'other').strip('vg_') == ref]
+        indices = [i for i, gt_anno in enumerate(gt_anno_list) if mapping[gt_anno.get('sub_class', 'other').lower().strip('vg_')] == ref]
         sub_gt_annos = [gt_anno_list[i] for i in indices ]
         sub_det_annos = [det_anno_list[i] for i in indices ]
         ret = ground_eval_subset(sub_gt_annos, sub_det_annos, logger=logger, prefix=ref)
