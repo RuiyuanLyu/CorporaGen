@@ -165,7 +165,6 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
     header = ['Type']
     header.extend(reference_options)
     table_columns = [[] for _ in range(len(header))]
-    ret = {}
     for t in iou_thr:
         table_columns[0].append('AP  '+str(t))
         table_columns[0].append('Rec '+str(t))            
@@ -187,7 +186,7 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
     else:
         print('\n' + table.table)
 
-    return ret
+    return results
 
 
 def average_precision(recalls, precisions, mode='area'):
