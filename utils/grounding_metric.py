@@ -43,7 +43,7 @@ mapping = {
     'overall': 'overall'
 }
 
-def ground_eval(gt_anno_list, det_anno_list, logger=None):
+def ground_eval_subset(gt_anno_list, det_anno_list, logger=None, prefix=''):
     """
         det_anno_list: list of dictionaries with keys:
             'bboxes_3d': (N, 9) or a (list, tuple) (center, size, rotmat): (N, 3), (N, 3), (N, 3, 3)
@@ -56,7 +56,6 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
             'sub_class': str
     """
     assert len(det_anno_list) == len(gt_anno_list)
-    reference_options = [v for k, v in mapping.items()]
     iou_thr = [0.25, 0.5]
     num_samples = len(gt_anno_list) # each sample contains multiple pred boxes
     total_pred_boxes = 0
@@ -64,16 +63,11 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
     gt_matched_records = []
     # these lists records for each pred box, NOT for each sample        
     sample_indices = [] # each pred box belongs to which sample
-    ref_types = [] # each sample has a refercence type, string
     confidences = [] # each pred box has a confidence score
     ious = [] # each pred box has a ious, shape (num_gt) in the corresponding sample
     # record the indices of each reference type
-    ref_type_indices = {ref:[] for ref in reference_options}
-
 
     for sample_idx in range(num_samples):
-        ref_type = gt_anno_list[sample_idx].get('sub_class', 'other').strip('vg_')     
-        ref_type = mapping[ref_type]       
         det_anno = det_anno_list[sample_idx]
         gt_anno = gt_anno_list[sample_idx]
 
@@ -91,13 +85,9 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
         iou_mat = compute_ious(pred_boxes, gt_boxes)
         for i, score in enumerate(target_scores):
             sample_indices.append(sample_idx)
-            ref_types.append(ref_type)
             confidences.append(score)
             ious.append(iou_mat[i])
     
-    for i, ref_type in enumerate(ref_types):
-        ref_type_indices[ref_type].append(i)
-        ref_type_indices['overall'].append(i)
 
     confidences = np.array(confidences)
     sorted_inds = np.argsort(-confidences)
@@ -107,14 +97,12 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
     tp_thr = {}
     fp_thr = {}
     for thr in iou_thr:
-        for ref in reference_options:
-            tp_thr[f'{ref}@{thr}'] = np.zeros(len(ref_type_indices[ref]))
-            fp_thr[f'{ref}@{thr}'] = np.zeros(len(ref_type_indices[ref]))
+        tp_thr[f'{prefix}@{thr}'] = np.zeros(len(sample_indices))
+        fp_thr[f'{prefix}@{thr}'] = np.zeros(len(sample_indices))
 
     for d, sample_idx in enumerate(sample_indices):
         iou_max = -np.inf
         num_gts = len(gt_anno_list[sample_idx]['gt_bboxes_3d'])
-        ref_type = ref_types[d]
         cur_iou = ious[d]
         if num_gts > 0:
             for j in range(num_gts):
@@ -127,41 +115,71 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
             if iou_max >= thr:
                 if not gt_matched_records[sample_idx][jmax]:
                     gt_matched_records[sample_idx][jmax] = True
-                    tp_thr[f'{ref_type}@{thr}'][ref_type_indices[ref_type].index(d)] = 1.0
-                    tp_thr[f'overall@{thr}'][d] = 1.0
+                    tp_thr[f'{prefix}@{thr}'][d] = 1.0
                 else:
-                    fp_thr[f'{ref_type}@{thr}'][ref_type_indices[ref_type].index(d)] = 1.0
-                    fp_thr[f'overall@{thr}'][d] = 1.0
+                    fp_thr[f'{prefix}@{thr}'][d] = 1.0
             else:
-                fp_thr[f'{ref_type}@{thr}'][ref_type_indices[ref_type].index(d)] = 1.0
-                fp_thr[f'overall@{thr}'][d] = 1.0
+                fp_thr[f'{prefix}@{thr}'][d] = 1.0
 
-    # Compute the precision and recall for each iou threshold
-        # Compute the precision and recall for each iou threshold
-        header = ['Type']
-        header.extend(reference_options)
-        table_columns = [[] for _ in range(len(header))]
-        ret = {}
-        for t in iou_thr:
-            table_columns[0].append('AP  '+str(t))
-            table_columns[0].append('Rec '+str(t))            
-            for i, ref in enumerate(reference_options):
-                metric = ref + '@' + str(t)
-                fp = np.cumsum(fp_thr[metric])
-                tp = np.cumsum(tp_thr[metric])
-                recall = tp / float(total_pred_boxes)
-                precision = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
-                ap = average_precision(precision, recall)
-                ret[metric] = float(ap)
-                best_recall = recall[-1] if len(recall) > 0 else 0
-                table_columns[i+1].append(f'{float(ap):.4f}')
-                table_columns[i+1].append(f'{float(best_recall):.4f}')
+    ret = {}
+    for t in iou_thr:
+        metric = prefix + '@' + str(t)
+        fp = np.cumsum(fp_thr[metric])
+        tp = np.cumsum(tp_thr[metric])
+        recall = tp / float(total_pred_boxes)
+        precision = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
+        ap = average_precision(precision, recall)
+        ret[metric] = float(ap)
+        best_recall = recall[-1] if len(recall) > 0 else 0
+        ret[metric + '_rec'] = float(best_recall)
+    return ret
 
-        table_data = [header]
-        table_rows = list(zip(*table_columns))
-        table_data += table_rows
-        table = AsciiTable(table_data)
-        table.inner_footing_row_border = True
+def ground_eval(gt_anno_list, det_anno_list, logger=None):
+    """
+        det_anno_list: list of dictionaries with keys:
+            'bboxes_3d': (N, 9) or a (list, tuple) (center, size, rotmat): (N, 3), (N, 3), (N, 3, 3)
+            'target_scores_3d': (N, )
+        gt_anno_list: list of dictionaries with keys:
+            'gt_bboxes_3d': (M, 9) or a (list, tuple) (center, size, rotmat): (M, 3), (M, 3), (M, 3, 3)
+            'is_hard': bool
+            'direct': bool
+            'space': bool
+            'sub_class': str
+    """
+    iou_thr = [0.25, 0.5]
+    reference_options = [v for k, v in mapping.items()]
+    assert len(det_anno_list) == len(gt_anno_list)
+    results = {}
+    for ref in reference_options:
+        indices = [i for i, gt_anno in enumerate(gt_anno_list) if gt_anno.get('sub_class', 'other').strip('vg_') == ref]
+        sub_gt_annos = [gt_anno_list[i] for i in indices ]
+        sub_det_annos = [det_anno_list[i] for i in indices ]
+        ret = ground_eval_subset(sub_gt_annos, sub_det_annos, logger=logger, prefix=ref)
+        for k, v in ret.items():
+            results[k] = v
+    overall_ret = ground_eval_subset(gt_anno_list, det_anno_list, logger=logger, prefix='overall')
+    for k, v in overall_ret.items():
+        results[k] = v
+    
+    header = ['Type']
+    header.extend(reference_options)
+    table_columns = [[] for _ in range(len(header))]
+    ret = {}
+    for t in iou_thr:
+        table_columns[0].append('AP  '+str(t))
+        table_columns[0].append('Rec '+str(t))            
+        for i, ref in enumerate(reference_options):
+            metric = ref + '@' + str(t)
+            ap = results[metric]
+            best_recall = results[metric + '_rec']
+            table_columns[i+1].append(f'{float(ap):.4f}')
+            table_columns[i+1].append(f'{float(best_recall):.4f}')
+
+    table_data = [header]
+    table_rows = list(zip(*table_columns))
+    table_data += table_rows
+    table = AsciiTable(table_data)
+    table.inner_footing_row_border = True
     # print('\n' + table.table)
     if logger is not None:
         logger.info('\n' + table.table)
