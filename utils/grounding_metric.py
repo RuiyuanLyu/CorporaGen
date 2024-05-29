@@ -20,6 +20,29 @@ def to_cpu(x):
     else:
         return x
 
+def box_num(box):
+    if isinstance(box, (list, tuple)):
+        return box[0].shape[0]
+    else:
+        return box.shape[0]
+
+def index_box(boxes, indices):
+    if isinstance(boxes, (list, tuple)):
+        return [index_box(box, indices) for box in boxes]
+    else:
+        return boxes[indices]
+
+mapping = {
+    'direct_attribute_o_individual': 'dir_attr_indi',
+    'direct_attribute_o_common': 'dir_attr_com',
+    'direct_eq': 'dir_eq',
+    'indirect_or': 'indir_or',
+    'indirect_space_oo': 'indir_space',
+    'indirect_attribute_oo': 'indir_attr',
+    'other': 'other',
+    'overall': 'overall'
+}
+
 def ground_eval(gt_anno_list, det_anno_list, logger=None):
     """
         det_anno_list: list of dictionaries with keys:
@@ -33,118 +56,168 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
             'sub_class': str
     """
     assert len(det_anno_list) == len(gt_anno_list)
-    det_anno_list = to_cpu(det_anno_list)
-    gt_anno_list = to_cpu(gt_anno_list)
-    pred = {}
-    gt = {}
+    reference_options = [v for k, v in mapping.items()]
     iou_thr = [0.25, 0.5]
-    object_types = [
-        'Spacial', 'Attribute', 'Direct', 'Indirect', 'Hard', 'Easy',
-        'Single', 'Multi', 'Overall', 'Direct_Attribute_O_Individual', 'Direct_Attribute_O_Common', 'Direct_EQ',
-        'InDirect_OR', 'InDirect_Space_OO', 'InDirect_Attribute_OO'
-    ]
+    num_samples = len(gt_anno_list) # each sample contains multiple pred boxes
+    total_pred_boxes = 0
+    # these lists records for each sample, whether a gt box is matched or not
+    gt_matched_records = []
+    # these lists records for each pred box, NOT for each sample        
+    sample_indices = [] # each pred box belongs to which sample
+    ref_types = [] # each sample has a refercence type, string
+    confidences = [] # each pred box has a confidence score
+    ious = [] # each pred box has a ious, shape (num_gt) in the corresponding sample
+    # record the indices of each reference type
+    ref_type_indices = {ref:[] for ref in reference_options}
 
-    for t in iou_thr:
-        for object_type in object_types:
-            pred.update({object_type + '@' + str(t): 0})
-            gt.update({object_type + '@' + str(t): 1e-14})
 
-    need_warn = False
-    for sample_id in range(len(det_anno_list)):
-        det_anno = det_anno_list[sample_id]
-        gt_anno = gt_anno_list[sample_id]
+    for sample_idx in range(num_samples):
+        ref_type = gt_anno_list[sample_idx].get('sub_class', 'other').strip('vg_')     
+        ref_type = mapping[ref_type]       
+        det_anno = det_anno_list[sample_idx]
+        gt_anno = gt_anno_list[sample_idx]
+
         target_scores = det_anno['target_scores_3d']  # (num_query, )
-        if isinstance(gt_bboxes, (list, tuple)):
-            num_gts = gt_bboxes[0].shape[0]
-        else:
-            num_gts = gt_bboxes.shape[0]
-        if num_gts == 0:
-            continue
-        keep_inds = target_scores.argsort(dim=-1, descending=True)[:num_gts]
+        top_idxs =  np.argsort(-target_scores)[:20] #HACK: hard coded
+        target_scores = target_scores[top_idxs]
+        pred_bboxes = index_box(det_anno['bboxes_3d'], top_idxs)
+        gt_bboxes = gt_anno['gt_bboxes_3d']
 
-        if 'bboxes_3d' in det_anno:
-            bboxes = det_anno['bboxes_3d'] # (num_query, 9)
-            top_pred_bboxes = bboxes[keep_inds]
-        else:
-            pcds = det_anno['pcds'] # (num_query, pcd_size, 3)
-            pcds = pcds[keep_inds]
-            top_pred_bboxes = compute_bbox_from_points_list(pcds) # tuple of (center, size, rotmat)
-        # or a (list, tuple) (center, size, rotmat): (num_query, 3), (num_query, 3), (num_query, 3, 3)
-        gt_bboxes = gt_anno['gt_bboxes_3d'] # (num_gt, 9) 
+        num_preds = box_num(pred_bboxes)
+        total_pred_boxes += num_preds
+        num_gts = len(gt_bboxes)
+        gt_matched_records.append(np.zeros(num_gts, dtype=np.bool))
 
-        sub_class = gt_anno.get('sub_class', None)
-        if sub_class is not None:
-            sub_class = sub_class.strip("VG_") # remove VG_ prefix
-        hard = gt_anno.get('is_hard', None)
-        space = gt_anno.get('space', None)
-        direct = gt_anno.get('direct', None)
-        if (hard is None or space is None or direct is None) and sub_class is None:
-            need_warn = True
+        iou_mat = compute_ious(pred_boxes, gt_boxes)
+        for i, score in enumerate(target_scores):
+            sample_indices.append(sample_idx)
+            ref_types.append(ref_type)
+            confidences.append(score)
+            ious.append(iou_mat[i])
+    
+    for i, ref_type in enumerate(ref_types):
+        ref_type_indices[ref_type].append(i)
+        ref_type_indices['overall'].append(i)
 
-        pred_idices, gt_idices, costs = matcher(top_pred_bboxes, gt_bboxes, [iou_cost_fn])
-        iou = 1.0 - costs # warning: only applicable when iou_cost_fn is the only cost function used
+    confidences = np.array(confidences)
+    sorted_inds = np.argsort(-confidences)
+    sample_indices = [sample_indices[i] for i in sorted_inds]
+    ious = [ious[i] for i in sorted_inds]
 
+    tp_thr = {}
+    fp_thr = {}
+    for thr in iou_thr:
+        for ref in reference_options:
+            tp_thr[f'{ref}@{thr}'] = np.zeros(len(ref_type_indices[ref]))
+            fp_thr[f'{ref}@{thr}'] = np.zeros(len(ref_type_indices[ref]))
+
+    for d, sample_idx in enumerate(sample_indices):
+        iou_max = -np.inf
+        num_gts = len(gt_anno_list[sample_idx]['gt_bboxes_3d'])
+        ref_type = ref_types[d]
+        cur_iou = ious[d]
+        if num_gts > 0:
+            for j in range(num_gts):
+                iou = cur_iou[j]
+                if iou > iou_max:
+                    iou_max = iou
+                    jmax = j
+        
+        for iou_idx, thr in enumerate(iou_thr):
+            if iou_max >= thr:
+                if not gt_matched_records[sample_idx][jmax]:
+                    gt_matched_records[sample_idx][jmax] = True
+                    tp_thr[f'{ref_type}@{thr}'][ref_type_indices[ref_type].index(d)] = 1.0
+                    tp_thr[f'overall@{thr}'][d] = 1.0
+                else:
+                    fp_thr[f'{ref_type}@{thr}'][ref_type_indices[ref_type].index(d)] = 1.0
+                    fp_thr[f'overall@{thr}'][d] = 1.0
+            else:
+                fp_thr[f'{ref_type}@{thr}'][ref_type_indices[ref_type].index(d)] = 1.0
+                fp_thr[f'overall@{thr}'][d] = 1.0
+
+    # Compute the precision and recall for each iou threshold
+        # Compute the precision and recall for each iou threshold
+        header = ['Type']
+        header.extend(reference_options)
+        table_columns = [[] for _ in range(len(header))]
+        ret = {}
         for t in iou_thr:
-            threshold = iou > t
-            found = np.sum(threshold)
-            if space:
-                gt['Spacial@' + str(t)] += num_gts
-                pred['Spacial@' + str(t)] += found
-            else:
-                gt['Attribute@' + str(t)] += num_gts
-                pred['Attribute@' + str(t)] += found
-            if direct:
-                gt['Direct@' + str(t)] += num_gts
-                pred['Direct@' + str(t)] += found
-            else:
-                gt['Indirect@' + str(t)] += num_gts
-                pred['Indirect@' + str(t)] += found
-            if hard:
-                gt['Hard@' + str(t)] += num_gts
-                pred['Hard@' + str(t)] += found
-            else:
-                gt['Easy@' + str(t)] += num_gts
-                pred['Easy@' + str(t)] += found
-            if sub_class is not None:
-                gt[f'{sub_class}@' + str(t)] += num_gts
-                pred[f'{sub_class}@' + str(t)] += found
-            if num_gts <= 1:
-                gt['Single@' + str(t)] += num_gts
-                pred['Single@' + str(t)] += found
-            else:
-                gt['Multi@' + str(t)] += num_gts
-                pred['Multi@' + str(t)] += found
-
-            gt['Overall@' + str(t)] += num_gts
-            pred['Overall@' + str(t)] += found
-    if need_warn:
-        logging.warning('Some annotations are missing "is_hard", "space", or "direct" information.')
-    header = ['Type']
-    header.extend(object_types)
-    ret_dict = {}
-
-    for t in iou_thr:
-        table_columns = [['results']]
-        for object_type in object_types:
-            metric = object_type + '@' + str(t)
-            value = pred[metric] / max(gt[metric], 1)
-            ret_dict[metric] = value
-            table_columns.append([f'{value:.4f}'])
+            table_columns[0].append('AP  '+str(t))
+            table_columns[0].append('Rec '+str(t))            
+            for i, ref in enumerate(reference_options):
+                metric = ref + '@' + str(t)
+                fp = np.cumsum(fp_thr[metric])
+                tp = np.cumsum(tp_thr[metric])
+                recall = tp / float(total_pred_boxes)
+                precision = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
+                ap = average_precision(precision, recall)
+                ret[metric] = float(ap)
+                best_recall = recall[-1] if len(recall) > 0 else 0
+                table_columns[i+1].append(f'{float(ap):.4f}')
+                table_columns[i+1].append(f'{float(best_recall):.4f}')
 
         table_data = [header]
         table_rows = list(zip(*table_columns))
         table_data += table_rows
         table = AsciiTable(table_data)
         table.inner_footing_row_border = True
-        # print('\n' + table.table)
-        if logger is not None:
-            logger.info('\n' + table.table)
-        else:
-            print('\n' + table.table)
-    ret_dict['gt'] = gt
-    ret_dict['pred'] = pred
-    ret_dict['table'] = table
-    return ret_dict
+    # print('\n' + table.table)
+    if logger is not None:
+        logger.info('\n' + table.table)
+    else:
+        print('\n' + table.table)
+
+    return ret
+
+
+def average_precision(recalls, precisions, mode='area'):
+    """Calculate average precision (for single or multiple scales).
+
+    Args:
+        recalls (np.ndarray): Recalls with shape of (num_scales, num_dets)
+            or (num_dets, ).
+        precisions (np.ndarray): Precisions with shape of
+            (num_scales, num_dets) or (num_dets, ).
+        mode (str): 'area' or '11points', 'area' means calculating the area
+            under precision-recall curve, '11points' means calculating
+            the average precision of recalls at [0, 0.1, ..., 1]
+
+    Returns:
+        float or np.ndarray: Calculated average precision.
+    """
+    if recalls.ndim == 1:
+        recalls = recalls[np.newaxis, :]
+        precisions = precisions[np.newaxis, :]
+
+    assert recalls.shape == precisions.shape
+    assert recalls.ndim == 2
+
+    num_scales = recalls.shape[0]
+    ap = np.zeros(num_scales, dtype=np.float32)
+    if mode == 'area':
+        zeros = np.zeros((num_scales, 1), dtype=recalls.dtype)
+        ones = np.ones((num_scales, 1), dtype=recalls.dtype)
+        mrec = np.hstack((zeros, recalls, ones))
+        mpre = np.hstack((zeros, precisions, zeros))
+        for i in range(mpre.shape[1] - 1, 0, -1):
+            mpre[:, i - 1] = np.maximum(mpre[:, i - 1], mpre[:, i])
+        for i in range(num_scales):
+            ind = np.where(mrec[i, 1:] != mrec[i, :-1])[0]
+            ap[i] = np.sum(
+                (mrec[i, ind + 1] - mrec[i, ind]) * mpre[i, ind + 1])
+    elif mode == '11points':
+        for i in range(num_scales):
+            for thr in np.arange(0, 1 + 1e-3, 0.1):
+                precs = precisions[i, recalls[i, :] >= thr]
+                prec = precs.max() if precs.size > 0 else 0
+                ap[i] += prec
+            ap /= 11
+    else:
+        raise ValueError(
+            'Unrecognized mode, only "area" and "11points" are supported')
+    return ap
+
 
 
 def get_corners(box):
@@ -165,7 +238,7 @@ def compute_ious(boxes1, boxes2):
     """Compute the intersection over union one by one between two 3D bounding boxes.
     Boxes1: (N, 9) or a (list, tuple) (center, size, rotmat)
     Boxes2: (M, 9) or a (list, tuple) (center, size, rotmat)
-    Return: (N, M)
+    Return: (N, M) numpy array
     """
     from pytorch3d.ops import box3d_overlap
     import torch
