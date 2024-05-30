@@ -181,7 +181,93 @@ def euler_angles_to_matrix(euler_angles: np.ndarray, convention: str) -> np.ndar
         _axis_angle_rotation(c, e)
         for c, e in zip(convention, np.split(euler_angles, 3, axis=-1))
     ]
+    matrices = [x.squeeze(axis=-3) for x in matrices]
     return np.matmul(np.matmul(matrices[0], matrices[1]), matrices[2])
+
+def _angle_from_tan(
+    axis: str, other_axis: str, data, horizontal: bool, tait_bryan: bool
+) -> np.ndarray:
+    """
+    Extract the first or third Euler angle from the two members of
+    the matrix which are positive constant times its sine and cosine.
+
+    Args:
+        axis: Axis label "X" or "Y or "Z" for the angle we are finding.
+        other_axis: Axis label "X" or "Y or "Z" for the middle axis in the
+            convention.
+        data: Rotation matrices as tensor of shape (..., 3, 3).
+        horizontal: Whether we are looking for the angle for the third axis,
+            which means the relevant entries are in the same row of the
+            rotation matrix. If not, they are in the same column.
+        tait_bryan: Whether the first and third axes in the convention differ.
+
+    Returns:
+        Euler Angles in radians for each matrix in data as a tensor
+        of shape (...).
+    """
+
+    i1, i2 = {"X": (2, 1), "Y": (0, 2), "Z": (1, 0)}[axis]
+    if horizontal:
+        i2, i1 = i1, i2
+    even = (axis + other_axis) in ["XY", "YZ", "ZX"]
+    if horizontal == even:
+        return np.arctan2(data[..., i1], data[..., i2])
+    if tait_bryan:
+        return np.arctan2(-data[..., i2], data[..., i1])
+    return np.arctan2(data[..., i2], -data[..., i1])
+
+
+def _index_from_letter(letter: str) -> int:
+    if letter == "X":
+        return 0
+    if letter == "Y":
+        return 1
+    if letter == "Z":
+        return 2
+    raise ValueError("letter must be either X, Y or Z.")
+
+
+def matrix_to_euler_angles(matrix: np.ndarray, convention: str) -> np.ndarray:
+    """
+    Convert rotations given as rotation matrices to Euler angles in radians.
+
+    Args:
+        matrix: Rotation matrices as tensor of shape (..., 3, 3).
+        convention: Convention string of three uppercase letters.
+
+    Returns:
+        Euler angles in radians as tensor of shape (..., 3).
+    """
+    if len(convention) != 3:
+        raise ValueError("Convention must have 3 letters.")
+    if convention[1] in (convention[0], convention[2]):
+        raise ValueError(f"Invalid convention {convention}.")
+    for letter in convention:
+        if letter not in ("X", "Y", "Z"):
+            raise ValueError(f"Invalid letter {letter} in convention string.")
+    if matrix.shape[-1] != 3 or matrix.shape[-2] != 3:
+        raise ValueError(f"Invalid rotation matrix shape {matrix.shape}.")
+    i0 = _index_from_letter(convention[0])
+    i2 = _index_from_letter(convention[2])
+    tait_bryan = i0 != i2
+    if tait_bryan:
+        central_angle = np.arcsin(
+            matrix[..., i0, i2] * (-1.0 if i0 - i2 in [-1, 2] else 1.0)
+        )
+    else:
+        central_angle = np.arccos(matrix[..., i0, i0])
+
+    o = (
+        _angle_from_tan(
+            convention[0], convention[1], matrix[..., i2], False, tait_bryan
+        ),
+        central_angle,
+        _angle_from_tan(
+            convention[2], convention[1], matrix[..., i0, :], True, tait_bryan
+        ),
+    )
+    return np.stack(o, -1)
+
 
 box_corner_vertices = [
         [0, 0, 0],
@@ -340,62 +426,10 @@ def check_pcd_similarity(pcd1, pcd2):
 
 if __name__ == '__main__':
     from tqdm import tqdm
-    centers = np.random.rand(100, 3) * 10 - 5
-    sizes = np.random.rand(100, 3) * 1 + 1
-    angle_range = np.pi 
-    roll, pitch, yaw = np.random.rand(3) * angle_range * 2 - angle_range
-    rotation = euler_angles_to_matrix(np.array([yaw, pitch, roll]), "ZYX")
-    corners = cal_corners(centers, sizes, rotation)
-    for i in range(100):
-        center = centers[i]
-        size = sizes[i]
-        corners_i = corners[i]
-        assert check_pcd_similarity(corners_i, cal_corners_single(center, size, rotation))
-    exit()
-
-    for i in tqdm(range(10000)):
-        center = np.random.rand(3) * 10 - 5
-        size = np.random.rand(3) * 1 + 1
-        angle_range = np.pi 
-        roll, pitch, yaw = np.random.rand(3) * angle_range * 2 - angle_range
-        # center = np.array([0, 0, 0])
-        # size = np.array([1, 1, 1])
-        # roll, pitch, yaw = 0, 0, 1
-        rotation = euler_angles_to_matrix(np.array([yaw, pitch, roll]), "ZYX")
-        corners = cal_corners_single(center, size, rotation)
-        # print(points)
-        center2, size2, rotation2 = compute_bbox_from_points_open3d(corners)
-        corners2 = cal_corners_single(center2, size2, rotation2)
-        compare_dict = {"center": (center, center2),
-                        "size": (size, size2),
-                        "rotation": (rotation, rotation2),
-                        "corners": (corners, corners2)}
-        if not check_pcd_similarity(corners, corners2):
-            print(compare_dict)
-            exit()
-        center3, size3, rotation3 = compute_bbox_from_points(corners)
-        corners3 = cal_corners_single(center3, size3, rotation3)
-        compare_dict = {"center": (center, center3),
-                        "size": (size, size3),
-                        "rotation": (rotation, rotation3),
-                        "corners": (corners, corners3)}
-        if not check_pcd_similarity(corners, corners3):
-            for k,v in compare_dict.items():
-                print(k, v)
-            exit()
     for i in tqdm(range(1000)):
-        points = np.random.rand(100, 3) * 10 - 5
-        center, size, rotation = compute_bbox_from_points_open3d(points)
-        corners = cal_corners_single(center, size, rotation)
-        center2, size2, rotation2 = compute_bbox_from_points(points)
-        corners2 = cal_corners_single(center2, size2, rotation2)
-        vol1 = size[0] * size[1] * size[2]
-        vol2 = size2[0] * size2[1] * size2[2]
-        if not check_pcd_similarity(corners, corners2):
-            print(vol1, vol2)
-            print(f"vol1: {vol1}, vol2: {vol2}")
-            print(f"center: {center}, center2: {center2}")
-            print(f"size: {size}, size2: {size2}")
-            print(f"rotation: {rotation}, rotation2: {rotation2}")
-            print(f"corners: {corners}, corners2: {corners2}")
-            exit()
+        centers = np.random.rand(10, 3)
+        sizes = np.random.rand(10, 3)
+        eulers = np.random.rand(10, 3)
+        rotations = euler_angles_to_matrix(eulers, "ZXY")
+        eulers2 = matrix_to_euler_angles(rotations, "ZXY") # shape 10, 1, 3
+        assert np.allclose(eulers, eulers2), f"eulers and eulers2 should be close"
