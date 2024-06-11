@@ -32,16 +32,18 @@ def index_box(boxes, indices):
     else:
         return boxes[indices]
 
-mapping = {
-    'direct_attribute_o_individual': 'dir_attr_indi',
-    'direct_attribute_o_common': 'dir_attr_com',
-    'direct_eq': 'dir_eq',
-    'indirect_or': 'indir_or',
-    'indirect_space_oo': 'indir_space',
-    'indirect_attribute_oo': 'indir_attr',
-    'other': 'other',
-    'overall': 'overall'
-}
+def abbr(sub_class):
+    sub_class = sub_class.lower()
+    sub_class = sub_class.replace('single', 'sngl')
+    sub_class = sub_class.replace('inter', 'int')
+    sub_class = sub_class.replace('unique', 'uniq')
+    sub_class = sub_class.replace('common', 'cmn')
+    sub_class = sub_class.replace('attribute', 'attr')
+    if 'sngl' in sub_class and ('attr' in sub_class or 'eq' in sub_class):
+        sub_class = 'vg_sngl_attr'
+    return sub_class
+
+
 
 def ground_eval_subset(gt_anno_list, det_anno_list, logger=None, prefix=''):
     """
@@ -67,12 +69,12 @@ def ground_eval_subset(gt_anno_list, det_anno_list, logger=None, prefix=''):
     ious = [] # each pred box has a ious, shape (num_gt) in the corresponding sample
     # record the indices of each reference type
 
-    for sample_idx in range(num_samples):
+    for sample_idx in tqdm(range(num_samples)):
         det_anno = det_anno_list[sample_idx]
         gt_anno = gt_anno_list[sample_idx]
 
         target_scores = det_anno['target_scores_3d']  # (num_query, )
-        top_idxs =  np.argsort(-target_scores)[:20] #HACK: hard coded
+        top_idxs =  torch.argsort(-target_scores)
         target_scores = target_scores[top_idxs]
         pred_bboxes = index_box(det_anno['bboxes_3d'], top_idxs)
         gt_bboxes = gt_anno['gt_bboxes_3d']
@@ -83,15 +85,15 @@ def ground_eval_subset(gt_anno_list, det_anno_list, logger=None, prefix=''):
         for iou_idx, _ in enumerate(iou_thr):
             gt_matched_records[iou_idx].append(np.zeros(num_gts, dtype=bool))
 
-        iou_mat = compute_ious(pred_boxes, gt_boxes)
+        iou_mat = pred_bboxes.overlaps(pred_bboxes, gt_bboxes)  # (num_query, num_gt)
         for i, score in enumerate(target_scores):
             sample_indices.append(sample_idx)
             confidences.append(score)
             ious.append(iou_mat[i])
     
 
-    confidences = np.array(confidences)
-    sorted_inds = np.argsort(-confidences)
+    confidences = torch.tensor(confidences)
+    sorted_inds = torch.argsort(-confidences)
     sample_indices = [sample_indices[i] for i in sorted_inds]
     ious = [ious[i] for i in sorted_inds]
 
@@ -133,7 +135,9 @@ def ground_eval_subset(gt_anno_list, det_anno_list, logger=None, prefix=''):
         ret[metric] = float(ap)
         best_recall = recall[-1] if len(recall) > 0 else 0
         ret[metric + '_rec'] = float(best_recall)
+    ret[prefix + "_num_gt"] = total_gt_boxes
     return ret
+
 
 def ground_eval(gt_anno_list, det_anno_list, logger=None):
     """
@@ -148,11 +152,14 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
             'sub_class': str
     """
     iou_thr = [0.25, 0.5]
-    reference_options = [v for k, v in mapping.items()]
+    reference_options = [abbr(gt_anno.get('sub_class', 'other')) for gt_anno in gt_anno_list]
+    reference_options = list(set(reference_options))
+    reference_options.sort()
+    reference_options.append('overall')
     assert len(det_anno_list) == len(gt_anno_list)
     results = {}
     for ref in reference_options:
-        indices = [i for i, gt_anno in enumerate(gt_anno_list) if mapping[gt_anno.get('sub_class', 'other').lower().strip('vg_')] == ref]
+        indices = [i for i, gt_anno in enumerate(gt_anno_list) if abbr(gt_anno.get('sub_class', 'other')) == ref]
         sub_gt_annos = [gt_anno_list[i] for i in indices ]
         sub_det_annos = [det_anno_list[i] for i in indices ]
         ret = ground_eval_subset(sub_gt_annos, sub_det_annos, logger=logger, prefix=ref)
@@ -174,10 +181,15 @@ def ground_eval(gt_anno_list, det_anno_list, logger=None):
             best_recall = results[metric + '_rec']
             table_columns[i+1].append(f'{float(ap):.4f}')
             table_columns[i+1].append(f'{float(best_recall):.4f}')
+    table_columns[0].append('Num GT')            
+    for i, ref in enumerate(reference_options):
+        # add num_gt
+        table_columns[i+1].append(f'{int(results[ref + "_num_gt"])}')
 
     table_data = [header]
     table_rows = list(zip(*table_columns))
     table_data += table_rows
+    table_data = [list(row) for row in zip(*table_data)] # transpose the table
     table = AsciiTable(table_data)
     table.inner_footing_row_border = True
     # print('\n' + table.table)
@@ -301,6 +313,46 @@ def iou_cost_fn(pred_boxes, gt_boxes):
     return 1.0 - ious
 
 
+def nms_with_iou_matrix(iou_matrix, iou_thr, scores):
+    """
+    Non-maximum suppression algorithm that uses an IoU matrix to filter out
+    overlapping bounding boxes.
+
+    Parameters:
+    - iou_matrix: IoU matrix between predictions and ground truths (num_preds, num_preds)
+    - iou_thr: IoU threshold for filtering overlapping boxes
+    - scores: scores of each bounding box (num_preds)
+
+    Returns:
+    - keep_inds: indices of bounding boxes that are kept after NMS
+    """
+    # Sort the bounding boxes by their scores in descending order
+    sorted_inds = np.argsort(-scores)
+    iou_matrix = iou_matrix[sorted_inds, :]
+    iou_matrix = iou_matrix[:, sorted_inds]
+    scores = scores[sorted_inds]
+
+    # Perform non-maximum suppression
+    keep_inds = []
+    rmv_inds = []
+    for i in range(len(scores)):
+        if i in rmv_inds:
+            continue
+        keep_inds.append(i)
+        iou_row = iou_matrix[i, :]
+        rmv_inds += np.where(iou_row > iou_thr)[0].tolist()
+        rmv_inds = list(set(rmv_inds))
+    keep_inds = np.array(keep_inds)
+    keep_inds = sorted_inds[keep_inds]
+    return keep_inds
+
+def nms_fast(boxes, scores, iou_thr, top_k=None):
+    idxs = np.argsort(-scores)
+    boxes = boxes[idxs]
+    scores = scores[idxs]
+    pick = []
+
+    
 if __name__ == '__main__':
     
     centers = np.random.rand(10, 3)
