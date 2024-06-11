@@ -407,7 +407,7 @@ def scene_id_to_sample_idx(scene_id):
     elif is_mp3d:
         scene_id, region_id = scene_id.split("_region")
         raw_id = NUM2RAW_MP3D[scene_id]
-        sample_idx = f"mp3d/{raw_id}/region{region_id}"
+        sample_idx = f"matterport3d/{raw_id}/region{region_id}"
     return sample_idx
 
 def to_scene_id(name):
