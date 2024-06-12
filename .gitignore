@@ -6,6 +6,7 @@ data
 data/
 data_zip/
 region_annos/
+demo_scenes/
 datafixes/
 object_functions_in_region/
 splitted_sr3d_relations/

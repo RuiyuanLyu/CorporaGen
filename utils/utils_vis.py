@@ -11,6 +11,7 @@ from utils.utils_read import (
     read_annotation_pickles,
     EXCLUDED_OBJECTS,
 )
+from utils.utils_3d import cal_corners_single
 
 EPS = 1e-4
 ALPHA = 0.15
@@ -633,6 +634,27 @@ def annotate_images_with_visible_objects(img_ids):
                     out_img_path,
                 )
 
+# box_corner_vertices = [
+#         [0, 0, 0],
+#         [1, 0, 0],
+#         [1, 1, 0],
+#         [0, 1, 0],
+#         [0, 0, 1],
+#         [1, 0, 1],
+#         [1, 1, 1],
+#         [0, 1, 1],
+#     ]
+
+def create_box_mesh(center, size, rot_mat, color=[0, 1, 0]):
+    """
+    Create a box mesh with given center, size, and rotation matrix.
+    Returns a list of objects that can be added to the Open3D scene.
+    """
+    corners = cal_corners_single(center, size, rot_mat)
+    lines = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]]
+    colors = [color for i in range(len(lines))]
+    line_mesh = LineMesh(points=corners, lines=lines, colors=colors, radius=0.02)
+    return line_mesh.cylinder_segments
 
 if __name__ == "__main__":
     # img_ids = ["00860", "00970"]
