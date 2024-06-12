@@ -568,19 +568,19 @@ hashes = []
 def map_file_path(image_path):
     if 'mp3d' in image_path:
     # 'posed_images/1mp3d_0015_region0/0165_2_5.jpg'
-    # /mnt/petrelfs/share_data/maoxiaohan/transfer/matterport3d/scans/17DRP5sb8fy/matterport_color_images/b185432bf33645aca813ac2a961b4140_i2_3.jpg
-    # /mnt/petrelfs/share_data/maoxiaohan/transfer/matterport3d/scans/17DRP5sb8fy/matterport_depth_images/b185432bf33645aca813ac2a961b4140_d2_3.png
+    # /mnt/hwfile/OpenRobotLab/maoxiaohan/transfer/matterport3d/scans/17DRP5sb8fy/matterport_color_images/b185432bf33645aca813ac2a961b4140_i2_3.jpg
+    # /mnt/hwfile/OpenRobotLab/maoxiaohan/transfer/matterport3d/scans/17DRP5sb8fy/matterport_depth_images/b185432bf33645aca813ac2a961b4140_d2_3.png
         scene_id = image_path.split('/')[-2].split('_region')[0]
         view_id = image_path.split('/')[-1].split('.')[0]
         scene_hash = mapping_mp3d[scene_id]
         hashes.append(scene_hash)
         mapped_view_id = map_view_id(view_id, 'mp3d', scene_hash)
         mapped_view_id_for_depth = mapped_view_id[:-4]+'d'+mapped_view_id[-3:]
-        ret_color = f"/mnt/petrelfs/share_data/maoxiaohan/transfer/matterport3d/scans/{scene_hash}/matterport_color_images/{mapped_view_id}.jpg"
-        ret_depth = f"/mnt/petrelfs/share_data/maoxiaohan/transfer/matterport3d/scans/{scene_hash}/matterport_depth_images/{mapped_view_id_for_depth}.png"
+        ret_color = f"/mnt/hwfile/OpenRobotLab/maoxiaohan/transfer/matterport3d/scans/{scene_hash}/matterport_color_images/{mapped_view_id}.jpg"
+        ret_depth = f"/mnt/hwfile/OpenRobotLab/maoxiaohan/transfer/matterport3d/scans/{scene_hash}/matterport_depth_images/{mapped_view_id_for_depth}.png"
     # 'posed_images/3rscan0000/000442.jpg'
-    # /mnt/petrelfs/share_data/maoxiaohan/transfer/3rscan/raw_data/ffa41874-6f78-2040-85a8-8056ac60c764/sequence/frame-000137.color.jpg
-    # /mnt/petrelfs/share_data/maoxiaohan/transfer/3rscan/raw_data/ffa41874-6f78-2040-85a8-8056ac60c764/sequence/frame-000171.depth.pgm
+    # /mnt/hwfile/OpenRobotLab/maoxiaohan/transfer/3rscan/raw_data/ffa41874-6f78-2040-85a8-8056ac60c764/sequence/frame-000137.color.jpg
+    # /mnt/hwfile/OpenRobotLab/maoxiaohan/transfer/3rscan/raw_data/ffa41874-6f78-2040-85a8-8056ac60c764/sequence/frame-000171.depth.pgm
     elif '3rscan' in image_path:
         scene_id = image_path.split('/')[-2]
         view_id = image_path.split('/')[-1].split('.')[0]
@@ -588,16 +588,16 @@ def map_file_path(image_path):
         hashes.append(scene_hash)
         mapped_view_id = map_view_id(view_id, '3rscan')
         mapped_view_id_for_depth = mapped_view_id.replace('color', 'depth')
-        ret_color = f"/mnt/petrelfs/share_data/maoxiaohan/transfer/3rscan/raw_data/{scene_hash}/sequence/{mapped_view_id}.jpg"
-        ret_depth = f"/mnt/petrelfs/share_data/maoxiaohan/transfer/3rscan/raw_data/{scene_hash}/sequence/{mapped_view_id_for_depth}.pgm"
+        ret_color = f"/mnt/hwfile/OpenRobotLab/maoxiaohan/transfer/3rscan/raw_data/{scene_hash}/sequence/{mapped_view_id}.jpg"
+        ret_depth = f"/mnt/hwfile/OpenRobotLab/maoxiaohan/transfer/3rscan/raw_data/{scene_hash}/sequence/{mapped_view_id_for_depth}.pgm"
     elif 'scannet' in image_path:
     # 'scannet/posed_images/scene0701_01/01040.jpg'
-    # /mnt/petrelfs/share_data/maoxiaohan/transfer/ScanNet_v2/posed_images/scene0072_00/01040.jpg
-    # /mnt/petrelfs/share_data/maoxiaohan/transfer/ScanNet_v2/posed_images/scene0072_00/01040.png
+    # /mnt/hwfile/OpenRobotLab/maoxiaohan/transfer/ScanNet_v2/posed_images/scene0072_00/01040.jpg
+    # /mnt/hwfile/OpenRobotLab/maoxiaohan/transfer/ScanNet_v2/posed_images/scene0072_00/01040.png
         scene_id = image_path.split('/')[-2]
         view_id = image_path.split('/')[-1].split('.')[0]
-        ret_color = f"/mnt/petrelfs/share_data/maoxiaohan/transfer/ScanNet_v2/posed_images/{scene_id}/{view_id}.jpg"
-        ret_depth = f"/mnt/petrelfs/share_data/maoxiaohan/transfer/ScanNet_v2/posed_images/{scene_id}/{view_id}.png"
+        ret_color = f"/mnt/hwfile/OpenRobotLab/maoxiaohan/transfer/ScanNet_v2/posed_images/{scene_id}/{view_id}.jpg"
+        ret_depth = f"/mnt/hwfile/OpenRobotLab/maoxiaohan/transfer/ScanNet_v2/posed_images/{scene_id}/{view_id}.png"
     if not os.path.exists(ret_color):
         print(scene_hash)
     return ret_color, ret_depth
@@ -615,8 +615,8 @@ if __name__ == "__main__":
                     "embodiedscan_infos_val_full.pkl",
                     "3rscan_infos_test_MDJH_aligned_full_10_visible.pkl",
                     "matterport3d_infos_test_full_10_visible.pkl"][-1:]
-    data_real_dir = "/mnt/petrelfs/share_data/maoxiaohan/transfer"
-    out_real_dir = "/mnt/petrelfs/share_data/lvruiyuan"
+    data_real_dir = "/mnt/hwfile/OpenRobotLab/maoxiaohan/transfer"
+    out_real_dir = "/mnt/hwfile/OpenRobotLab/lvruiyuan"
     anno_dict = read_annotation_pickles(pickle_files)
     keys = sorted(list(anno_dict.keys()))
     pbar = tqdm(range(len(keys)))

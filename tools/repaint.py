@@ -20,10 +20,10 @@ scene_id_mapping = reverse_121_mapping(scene_id_mapping)
 def transform_img_path(img_path):
     # example input: 3rscan/posed_images/3rscan0001/000000.jpg
     # example input: posed_images/3rscan0001/000000.jpg
-    # exapnd the path to the real path, like /mnt/petrelfs/share_data/maoxiaohan/transfer/3rscan/raw_data/0a4b8ef6-a83a-21f2-8672-dce34dd0d7ca/sequence/frame-000000.color.jpg
+    # exapnd the path to the real path, like /mnt/hwfile/OpenRobotLab/maoxiaohan/transfer/3rscan/raw_data/0a4b8ef6-a83a-21f2-8672-dce34dd0d7ca/sequence/frame-000000.color.jpg
     _, scene_id, img_name = img_path.split(".")[0].split("/")
     scene_id = scene_id_mapping.get(scene_id, scene_id)
-    real_path = os.path.join("/mnt/petrelfs/share_data/maoxiaohan/transfer/3rscan/raw_data", scene_id, "sequence", f"frame-{img_name}.color.jpg")
+    real_path = os.path.join("/mnt/hwfile/OpenRobotLab/maoxiaohan/transfer/3rscan/raw_data", scene_id, "sequence", f"frame-{img_name}.color.jpg")
     return real_path
 
 def repaint_scene(scene_id):

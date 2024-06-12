@@ -215,10 +215,10 @@ def render_bev_scannet(scene_id):
     Render the bird's eye view for a given scene, specified by scene id
     scend-id_example: scene0000_00
     """
-    point_cloud_path = f"/mnt/petrelfs/share_data/maoxiaohan/ScanNet_v2/scans/{scene_id}/{scene_id}_vh_clean.ply"
+    point_cloud_path = f"/mnt/hwfile/OpenRobotLab/maoxiaohan/ScanNet_v2/scans/{scene_id}/{scene_id}_vh_clean.ply"
     output_path = "testing_scannet.png"
     axis_align_matrix = read_axis_align_matrix(
-        f"/mnt/petrelfs/share_data/maoxiaohan/ScanNet_v2/scans/{scene_id}/{scene_id}.txt", mode="scannet")
+        f"/mnt/hwfile/OpenRobotLab/maoxiaohan/ScanNet_v2/scans/{scene_id}/{scene_id}.txt", mode="scannet")
     _render_3d_bev(point_cloud_path, output_path, axis_align_matrix, resolution=80)
 
 
@@ -240,9 +240,9 @@ def render_bev_3rscan(scene_id):
     Render the bird's eye view for a given scene, specified by scene id
     scene_id example: 3rscan_0000
     """
-    point_cloud_path = f"/mnt/petrelfs/share_data/maoxiaohan/3rscan/data/{scene_id}/lidar/mesh.refined.v2.obj"
+    point_cloud_path = f"/mnt/hwfile/OpenRobotLab/maoxiaohan/3rscan/data/{scene_id}/lidar/mesh.refined.v2.obj"
     output_path = "testing_3rscan.png"
-    # axis_align_matrix = np.load(f"/mnt/petrelfs/share_data/maoxiaohan/matterport3d/matterport3d/data/{scene_id}/label/rot_matrix.npy")
+    # axis_align_matrix = np.load(f"/mnt/hwfile/OpenRobotLab/maoxiaohan/matterport3d/matterport3d/data/{scene_id}/label/rot_matrix.npy")
     _render_3d_bev(point_cloud_path, output_path, resolution=80)
 
 

@@ -42,7 +42,7 @@ def tar_folders(folders_to_tar, tar_name):
             if os.path.isdir(folder_path):
                 tarf.add(folder_path, arcname=os.path.basename(folder_path))
 
-src_dir = "/mnt/petrelfs/share_data/lvruiyuan/pcd_data"
+src_dir = "/mnt/hwfile/OpenRobotLab/lvruiyuan/pcd_data"
 for dataset in ["scannet", "matterport3d", "3rscan"]:
     tar_name = os.path.join(output_dir, f"{dataset}.tar.gz")
     folders_to_tar = [os.path.join(src_dir, dataset, d) for d in os.listdir(os.path.join(src_dir, dataset)) if os.path.isdir(os.path.join(src_dir, dataset, d))][:20]
