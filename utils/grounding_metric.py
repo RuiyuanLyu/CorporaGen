@@ -5,7 +5,7 @@ from terminaltables import AsciiTable
 import logging
 import numpy as np
 import torch
-from utils_3d import *
+from utils.utils_3d import *
 from scipy.optimize import linear_sum_assignment
 
 def to_cpu(x):
