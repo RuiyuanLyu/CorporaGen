@@ -50,7 +50,6 @@ def interpolate_bbox_points(bbox, granularity=0.2, return_size=False):
         return mapped_coords, (m1, m2, m3)
     return mapped_coords
 
-
 def check_bboxes_visibility(
     bboxes, depth_map, depth_intrinsic, extrinsic, corners_only=True, granularity=0.2
 ):
@@ -168,6 +167,7 @@ def euler_angles_to_matrix(euler_angles: np.ndarray, convention: str) -> np.ndar
     Returns:
         Rotation matrices as array of shape (..., 3, 3).
     """
+    assert isinstance(euler_angles, np.ndarray)
     if euler_angles.ndim == 0 or euler_angles.shape[-1] != 3:
         raise ValueError("Invalid input euler angles.")
     if len(convention) != 3:
@@ -334,8 +334,6 @@ def is_inside_box(points, center, size, rotation_mat):
     pcd_local = abs(pcd_local)
     return (pcd_local[:, 0] <= 1) & (pcd_local[:, 1] <= 1) & (pcd_local[:, 2] <= 1)
 
-
-
 def is_inside_box_open3d(points, center, size, rotation_mat):
     import open3d as o3d
     """
@@ -407,7 +405,33 @@ def compute_bbox_from_points_list(points_list):
         rotations.append(rotation)
     return np.array(centers), np.array(sizes), np.array(rotations)
 
-def check_pcd_similarity(pcd1, pcd2):
+def aabb_iou(boxes1, boxes2):
+    """
+    Compute the aabb IoU between two sets of boxes.
+    Args:
+        boxes1: numpy array of shape (n, 8, 3)
+        boxes2: numpy array of shape (m, 8, 3)
+    """
+    n = boxes1.shape[0]
+    m = boxes2.shape[0]
+    min_xyz1 = np.min(boxes1, axis=1).reshape(-1, 1, 3) # n, 1, 3
+    max_xyz1 = np.max(boxes1, axis=1).reshape(-1, 1, 3) # n, 1, 3
+    min_xyz2 = np.min(boxes2, axis=1).reshape(1, -1, 3) # 1, m, 3
+    max_xyz2 = np.max(boxes2, axis=1).reshape(1, -1, 3) # 1, m, 3
+    overlap_min = np.maximum(min_xyz1, min_xyz2) # n, m, 3
+    overlap_max = np.minimum(max_xyz1, max_xyz2) # n, m, 3
+    assert overlap_min.shape == (n, m, 3)
+    overlap_size = np.maximum(0, overlap_max - overlap_min) # n, m, 3
+    assert overlap_size.shape == (n, m, 3)
+    overlap_vol = np.prod(overlap_size, axis=-1) # n, m
+    assert overlap_vol.shape == (n, m)
+    vol1 = np.prod(max_xyz1 - min_xyz1, axis=-1).reshape(-1, 1) # n, 1
+    vol2 = np.prod(max_xyz2 - min_xyz2, axis=-1).reshape(1, -1) # 1, m
+    iou = overlap_vol / (vol1 + vol2 - overlap_vol) # n, m
+    assert iou.shape == (n, m)
+    return iou
+
+def check_pcd_similarity(pcd1, pcd2, ths=1e-2):
     """
     check whether two point clouds are close enough.
     There might be a permulatation issue, so we use a threshold to check.
@@ -421,15 +445,33 @@ def check_pcd_similarity(pcd1, pcd2):
     distances_mat = np.sqrt(np.sum((pcd1.reshape(1, -1, 3) - pcd2.reshape(-1, 1, 3))**2, axis=-1))
     distances_rowwise = np.min(distances_mat, axis=1)
     distances_colwise = np.min(distances_mat, axis=0)
-    threshold = 1e-2
-    return (distances_rowwise < threshold).all() and (distances_colwise < threshold).all()
+    return (distances_rowwise < ths).all() and (distances_colwise < ths).all()
+
+def corners_from_9dof(boxes):
+    """
+    Convert 9dof representation of boxes to corners.
+    box: shape (n, 9)
+    """
+    centers = boxes[:, :3]
+    sizes = boxes[:, 3:6]
+    eulers = boxes[:, 6:9]
+    rotmats = euler_angles_to_matrix(eulers, 'ZXY')
+    corners = cal_corners(centers, sizes, rotmats)
+    return corners
+
+def make_batch_boxes(num, center_bias=1.0, size_bias=1.0):
+    centers = np.random.rand(100, 3) * center_bias  
+    sizes = np.random.rand(100, 3) * size_bias
+    eulers = np.random.rand(100, 3) * np.pi - np.pi/2
+    rotmats = euler_angles_to_matrix(eulers, 'ZXY')
+    corners = cal_corners(centers, sizes, rotmats)
+    return corners
+
 
 if __name__ == '__main__':
     from tqdm import tqdm
     for i in tqdm(range(1000)):
-        centers = np.random.rand(10, 3)
-        sizes = np.random.rand(10, 3)
-        eulers = np.random.rand(10, 3)
-        rotations = euler_angles_to_matrix(eulers, "ZXY")
-        eulers2 = matrix_to_euler_angles(rotations, "ZXY") # shape 10, 1, 3
-        assert np.allclose(eulers, eulers2), f"eulers and eulers2 should be close"
+        corners1 = make_batch_boxes(1000)
+        corners2 = make_batch_boxes(5000)
+        ious = aabb_iou(corners1, corners2)
+        # print(ious)
