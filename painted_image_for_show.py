@@ -12,7 +12,7 @@ from utils.utils_3d import check_bboxes_visibility, check_point_visibility, inte
 import shutil
 import json
 from region_matching import get_data,process_data
-from utils.utils_vis import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop_box_from_img
+from utils.utils_vis import get_o3d_obb, draw_box3d_on_img, get_color_map, crop_box_from_img
 import matplotlib.pyplot as plt
 from object_view_select import get_local_maxima_indices, is_blurry, get_blurry_image_ids, _compute_area
 
@@ -41,7 +41,7 @@ def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    bboxes = get_9dof_boxes(np.array(bboxes), mode='zxy', colors=(0, 0, 192))
+    bboxes = get_o3d_obb(np.array(bboxes), mode='zxy', colors=(0, 0, 192))
     blurry_image_ids = get_blurry_image_ids(image_paths, save_path=blurry_image_ids_path, skip_existing=True)
     for image_id in blurry_image_ids:
         if image_id in visible_view_object_dict:
@@ -101,8 +101,6 @@ def get_best_view(o3d_bbox, extrinsics_c2w, depth_intrinsics, depth_maps,show=Fa
         if len(pts) <= 2:
             areas.append(0)
             centerness.append(0)
-
-
             continue
 
         areas.append(_compute_area(pts))
@@ -177,7 +175,6 @@ def _paint_object_pictures(bboxes, object_ids, object_types, visible_object_view
         selected_extrinsics_c2w = np.array(selected_extrinsics_c2w)
         selected_depth_intrinsics = np.array(selected_depth_intrinsics)
         selected_depth_maps = np.array(selected_depth_maps)
-
 
         best_view_index = get_best_view(bbox, selected_extrinsics_c2w, selected_depth_intrinsics, selected_depth_maps,show=(object_id==150))
         if best_view_index is None:

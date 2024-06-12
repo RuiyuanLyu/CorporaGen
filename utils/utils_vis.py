@@ -49,7 +49,7 @@ def annotate_image_with_single_3dbbox_path_mode(
     index = np.where(object_ids == object_id)[0][0]
     color_dict = get_color_map("color_map.txt")
     color = color_dict.get(object_types[index], (0, 0, 192))
-    bboxes = get_9dof_boxes(bboxes, "xyz", color)
+    bboxes = get_o3d_obb(bboxes, "xyz", color)
     label = str(object_ids[index]) + " " + object_types[index]
     img, occupency_map = draw_box3d_on_img(
         img, bboxes[index], color, label, extrinsic, intrinsic, occupency_map=None
@@ -84,7 +84,7 @@ def annotate_image_with_3dbboxes_path_mode(
     bboxes, object_ids, object_types = read_bboxes_json(
         object_json_path, return_id=True, return_type=True
     )
-    bboxes = get_9dof_boxes(bboxes, "xyz", (0, 0, 192))
+    bboxes = get_o3d_obb(bboxes, "xyz", (0, 0, 192))
     annotate_image_with_3dbboxes(
         img_path,
         bboxes,
@@ -113,7 +113,7 @@ def annotate_image_with_3dbboxes(
         img_path: path to the image to be annotated
         bboxes (List[o3d.geometry.OrientedBoundingBox]): N 3D bounding boxes.
         object_ids (numpy.ndarray): N object ids.
-        object_types (numpy.ndarray): N object types.
+        object_types List[str]: N object types.
         intrinsic (numpy.ndarray): 4x4 (extended) intrinsic.
         extrinsic_c2w (numpy.ndarray): 4x4 extrinsic, camera to world'.
         axis_align_matrix (numpy.ndarray): 4x4 extrinsic, world' to world.
@@ -534,7 +534,7 @@ def get_boxes_with_thickness(boxes, line_width=0.02):
     return results
 
 
-def get_9dof_boxes(bbox, mode, colors):
+def get_o3d_obb(bbox, mode, colors):
     """
     Get a list of open3d.geometry.OrientedBoundingBox objects from a (N, 9) array of bounding boxes.
     Args:
@@ -600,7 +600,7 @@ def annotate_images_with_visible_objects(img_ids):
             continue
         if scene_id != "scene0000_00":
             continue
-        bboxes = get_9dof_boxes(bboxes, "zxy", (0, 0, 192))
+        bboxes = get_o3d_obb(bboxes, "zxy", (0, 0, 192))
         view_ids = [
             image_path.split(".")[0].split("/")[-1] for image_path in image_paths
         ]

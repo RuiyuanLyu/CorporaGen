@@ -1,5 +1,5 @@
-from utils_vis import *
-from utils_read import *
+from utils.utils_vis import *
+from utils.utils_read import *
 import numpy as np
 import os
 import shutil
@@ -59,7 +59,7 @@ def repaint_scene(scene_id):
             img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
             box = scene_id_info["bboxes"][index]
             box = np.array(box).reshape(1, 9)
-            box = get_9dof_boxes(box, mode="zxy", colors=(0, 255, 0))[0]
+            box = get_o3d_obb(box, mode="zxy", colors=(0, 255, 0))[0]
             color = color_dict[object_type]
             label = str(object_id) + " " + object_type
             new_img, _ = draw_box3d_on_img(img=img, box=box, color=color, label=label, extrinsic_c2w=extrinsic_c2w, intrinsic=intrinsic, ignore_outside=False)

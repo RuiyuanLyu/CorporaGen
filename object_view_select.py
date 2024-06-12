@@ -26,7 +26,7 @@ from utils.utils_3d import (
     interpolate_bbox_points,
 )
 from utils.utils_vis import (
-    get_9dof_boxes,
+    get_o3d_obb,
     draw_box3d_on_img,
     get_color_map,
     crop_box_from_img,
@@ -68,7 +68,7 @@ def paint_object_pictures(bboxes, object_ids, object_types, visible_view_object_
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    bboxes = get_9dof_boxes(np.array(bboxes), mode="zxy", colors=(0, 0, 192))
+    bboxes = get_o3d_obb(np.array(bboxes), mode="zxy", colors=(0, 0, 192))
     blurry_image_ids = get_blurry_image_ids(
         image_paths, save_path=blurry_image_ids_path, skip_existing=False
     )
@@ -106,7 +106,7 @@ def paint_object_pictures_path(object_json_path, visibility_json_path, extrinsic
     bboxes, object_ids, object_types = read_bboxes_json(
         object_json_path, return_id=True, return_type=True
     )
-    bboxes = get_9dof_boxes(bboxes, "xyz", (0, 0, 192)
+    bboxes = get_o3d_obb(bboxes, "xyz", (0, 0, 192)
                             )  # convert to o3d format
     visible_view_object_dict = get_visible_objects_dict(
         object_json_path,
@@ -259,7 +259,7 @@ def get_visible_objects_dict(object_json_path, extrinsic_dir, axis_align_matrix_
     bboxes, object_ids, object_types = read_bboxes_json(
         object_json_path, return_id=True, return_type=True
     )
-    bboxes = get_9dof_boxes(bboxes, "xyz", (0, 0, 192)
+    bboxes = get_o3d_obb(bboxes, "xyz", (0, 0, 192)
                             )  # convert to o3d format
     extrinsics_c2w, view_ids = read_extrinsic_dir(
         extrinsic_dir)  # c2w', shape N, 4, 4

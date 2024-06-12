@@ -12,7 +12,7 @@ from utils.utils_read import read_annotation_pickle
 import shutil
 import json
 from region_matching import get_data, process_data
-from utils.utils_vis import get_9dof_boxes, draw_box3d_on_img, get_color_map, crop_box_from_img
+from utils.utils_vis import get_o3d_obb, draw_box3d_on_img, get_color_map, crop_box_from_img
 import matplotlib.pyplot as plt
 from object_view_select import get_local_maxima_indices, is_blurry, get_blurry_image_ids, _compute_area
 
@@ -24,7 +24,7 @@ def paint_group_pictures(group_dict, bboxes, object_ids, object_types, visible_v
     '''given object_ids list, return fewer views possible to contain all of them and show on the images'''
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    bboxes = get_9dof_boxes(np.array(bboxes), mode='zxy', colors=(0, 0, 192))
+    bboxes = get_o3d_obb(np.array(bboxes), mode='zxy', colors=(0, 0, 192))
     blurry_image_ids = get_blurry_image_ids(
         image_paths, save_path=blurry_image_ids_path, skip_existing=True)
     for image_id in blurry_image_ids:
