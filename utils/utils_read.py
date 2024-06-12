@@ -451,6 +451,7 @@ def read_es_info(path, show_progress=True, count_type_from_zero=False):
             "object_ids": object_ids,
             "object_types": object_types,
             "object_type_ints": object_types_int,
+            "axis_align_matrix": data.get("axis_align_matrix", None),
         }
     return output_data
 
