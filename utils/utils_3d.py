@@ -431,7 +431,7 @@ def aabb_iou(boxes1, boxes2):
     assert iou.shape == (n, m)
     return iou
 
-def check_pcd_similarity(pcd1, pcd2, ths=1e-2):
+def check_pcd_similarity(pcd1, pcd2, ths=1e-2, min_close_num=None):
     """
     check whether two point clouds are close enough.
     There might be a permulatation issue, so we use a threshold to check.
@@ -439,13 +439,19 @@ def check_pcd_similarity(pcd1, pcd2, ths=1e-2):
         pcd1: np.array of shape (n, 3)
         pcd2: np.array of shape (n, 3)
     """
-    assert pcd1.shape == pcd2.shape, f"pcd1 and pcd2 should have the same shape, but got {pcd1.shape} and {pcd2.shape}"
+    if min_close_num is None:
+        assert pcd1.shape == pcd2.shape, f"pcd1 and pcd2 should have the same shape, but got {pcd1.shape} and {pcd2.shape}"
     pcd1 = pcd1.astype(np.float64)
     pcd2 = pcd2.astype(np.float64)
     distances_mat = np.sqrt(np.sum((pcd1.reshape(1, -1, 3) - pcd2.reshape(-1, 1, 3))**2, axis=-1))
     distances_rowwise = np.min(distances_mat, axis=1)
     distances_colwise = np.min(distances_mat, axis=0)
-    return (distances_rowwise < ths).all() and (distances_colwise < ths).all()
+    if min_close_num is None:
+        return (distances_rowwise < ths).all() and (distances_colwise < ths).all()
+    else:
+        row_wise_close_num = (distances_rowwise < ths).sum()
+        col_wise_close_num = (distances_colwise < ths).sum()
+        return row_wise_close_num >= min_close_num and col_wise_close_num >= min_close_num
 
 def corners_from_9dof(boxes):
     """

@@ -13,6 +13,8 @@ from utils.utils_read import (
 )
 from utils.utils_3d import cal_corners_single
 
+O3D_VERSION = o3d.__version__.split(".")[1]
+print("open3d version: {}".format(O3D_VERSION))
 EPS = 1e-4
 ALPHA = 0.15
 
@@ -142,7 +144,8 @@ def annotate_image_with_3dbboxes(
                 )
             )
             continue
-        color = color_dict.get(object_types[i], (0, 0, 192))
+        # color = color_dict.get(object_types[i], (0, 0, 192))
+        color = (0, 140, 255)
         label = str(object_ids[i]) + " " + object_types[i]
         img, occupency_map = draw_box3d_on_img(
             img,
@@ -567,6 +570,103 @@ def get_o3d_obb(bbox, mode, colors):
         geo_list.append(geo)
     return geo_list
 
+def get_cross_prod_mat(pVec_Arr):
+    # pVec_Arr shape (3)
+    qCross_prod_mat = np.array([
+        [0, -pVec_Arr[2], pVec_Arr[1]],
+        [pVec_Arr[2], 0, -pVec_Arr[0]],
+        [-pVec_Arr[1], pVec_Arr[0], 0],
+    ])
+    return qCross_prod_mat
+ 
+ 
+def caculate_align_mat(pVec_Arr):
+    scale = np.linalg.norm(pVec_Arr)
+    pVec_Arr = pVec_Arr / scale
+    # must ensure pVec_Arr is also a unit vec.
+    z_unit_Arr = np.array([0, 0, 1])
+    z_mat = get_cross_prod_mat(z_unit_Arr)
+ 
+    z_c_vec = np.matmul(z_mat, pVec_Arr)
+    z_c_vec_mat = get_cross_prod_mat(z_c_vec)
+ 
+    if np.dot(z_unit_Arr, pVec_Arr) == -1:
+        qTrans_Mat = -np.eye(3, 3)
+    elif np.dot(z_unit_Arr, pVec_Arr) == 1:
+        qTrans_Mat = np.eye(3, 3)
+    else:
+        qTrans_Mat = np.eye(3, 3) + z_c_vec_mat + np.matmul(z_c_vec_mat,
+                                                            z_c_vec_mat) / (1 + np.dot(z_unit_Arr, pVec_Arr))
+ 
+    qTrans_Mat *= scale
+    return qTrans_Mat
+ 
+
+def get_arrow(begin=[0,0,0],vec=[0,0,1]):
+    z_unit_Arr = np.array([0, 0, 1])
+    begin = begin
+    end = np.add(begin,vec)
+    vec_Arr = np.array(end) - np.array(begin)
+    vec_len = np.linalg.norm(vec_Arr)
+    sphere_size = vec_len / 10
+    mesh_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=60, origin=[0, 0, 0])
+ 
+    mesh_arrow = o3d.geometry.TriangleMesh.create_arrow(
+        cone_height=0.2 * 1 ,
+        cone_radius=0.06 * 1,
+        cylinder_height=0.8 * 1,
+        cylinder_radius=0.04 * 1
+    )
+    mesh_arrow.paint_uniform_color([0, 1, 0])
+    mesh_arrow.compute_vertex_normals()
+ 
+    mesh_sphere_begin = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_size, resolution=20)
+    mesh_sphere_begin.translate(begin)
+    mesh_sphere_begin.paint_uniform_color([0, 1, 1])
+    mesh_sphere_begin.compute_vertex_normals()
+    mesh_sphere_end = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_size, resolution=20)
+    mesh_sphere_end.translate(end)
+    mesh_sphere_end.paint_uniform_color([0, 1, 1])
+    mesh_sphere_end.compute_vertex_normals()
+ 
+    rot_mat = caculate_align_mat(vec_Arr)
+    if O3D_VERSION == "9":
+        mesh_arrow.rotate(rot_mat, center=False)
+    else:
+        mesh_arrow.rotate(rot_mat)
+    mesh_arrow.translate(np.array(begin))  # 0.5*(np.array(end) - np.array(begin))
+    return mesh_frame, mesh_arrow, mesh_sphere_begin, mesh_sphere_end
+
+def visualize_camera_extrinsics(background, camera_extrinsics, add_coordinate_frame=True):
+    """
+        background: o3d.geometry.TriangleMesh / o3d.geometry.PointCloud
+        camera_extrinsics: list of 4*4 numpy.ndarray, world coordinate -> camera coordinate
+        add_coordinate_frame: whether to add the coordinate frame
+        return: None, just visualize
+    """
+    vis = o3d.visualization.Visualizer()
+    vis.create_window()
+    if not isinstance(background, list):
+        background = [background]
+    vis.add_geometry(*background)
+    for i in range(len(camera_extrinsics)):
+        extrinsic = camera_extrinsics[i]
+        coord, look_at = extrinsic_to_coord_and_lookat(extrinsic)
+        _, mesh_arrow, _, _ = get_arrow(coord, look_at-coord)
+        vis.add_geometry(mesh_arrow)
+    if add_coordinate_frame:
+        vis.add_geometry(o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5))
+    vis.run()
+
+def extrinsic_to_coord_and_lookat(extrinsic):
+    """
+        extrinsic: 4*4 numpy array, world coord -> camera coord
+        return: camera_coords, lookat_point
+    """
+    camera_direction_normalized = extrinsic[2, :3]
+    camera_coords = - extrinsic[:3, :3].T @ extrinsic[:3, 3]
+    lookat_point = camera_coords + camera_direction_normalized
+    return camera_coords, lookat_point
 
 def visualize_distribution_hist(data, num_bins=20):
     import matplotlib.pyplot as plt
